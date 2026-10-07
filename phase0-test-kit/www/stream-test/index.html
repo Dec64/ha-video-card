@@ -1,0 +1,295 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stream Test</title>
+<style>
+  :root { --bg:#f6f7f9; --fg:#1b1f24; --muted:#5b6470; --card:#fff; --line:#d9dde3; --ok:#1a7f37; --bad:#c62828; --warn:#9a6700; --accent:#2f6fde; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14171b; --fg:#e8ebef; --muted:#9aa4b1; --card:#1d2127; --line:#323840; --ok:#56d364; --bad:#ff7b72; --warn:#e3b341; --accent:#6ea8ff; } }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--fg); font:15px/1.4 system-ui, sans-serif; }
+  h1 { font-size:20px; margin:0 0 12px; }
+  h2 { font-size:16px; margin:0 0 8px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:12px; }
+  input[type=text] { width:100%; padding:10px; font-size:15px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--fg); }
+  .row { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  button { padding:10px 14px; font-size:15px; border-radius:8px; border:1px solid var(--line); background:var(--bg); color:var(--fg); }
+  button.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+  video, #yt { width:100%; aspect-ratio:16/9; background:#000; border-radius:8px; display:block; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  td { padding:3px 6px; border-bottom:1px solid var(--line); vertical-align:top; word-break:break-all; }
+  td:first-child { color:var(--muted); width:45%; }
+  .ok { color:var(--ok); font-weight:600; } .bad { color:var(--bad); font-weight:600; } .warn { color:var(--warn); font-weight:600; }
+  #log { font:12px/1.35 ui-monospace, monospace; white-space:pre-wrap; max-height:260px; overflow:auto; background:var(--bg); padding:8px; border-radius:8px; }
+  #stats { font:12px ui-monospace, monospace; color:var(--muted); margin-top:6px; min-height:1.4em; }
+</style>
+</head>
+<body>
+<h1>Stream Test (Phase 0)</h1>
+
+<section>
+  <h2>1. Channel</h2>
+  <input id="url" type="text" placeholder="https://your-dispatcharr-host/proxy/ts/stream/<uuid>" autocomplete="off">
+  <div class="row">
+    <button class="primary" data-engine="mpegts">Play: mpegts.js</button>
+    <button data-engine="native">Play: native &lt;video&gt;</button>
+    <button data-engine="hls">Play: hls.js (only for .m3u8)</button>
+    <button id="stop">Stop &amp; release</button>
+    <button id="unmute">Unmute</button>
+  </div>
+  <div style="margin-top:10px"><video id="video" playsinline controls muted></video></div>
+  <div id="stats"></div>
+</section>
+
+<section>
+  <h2>2. What the stream contains</h2>
+  <table id="media"><tr><td>Press a Play button</td><td></td></tr></table>
+</section>
+
+<section>
+  <h2>3. What this device supports</h2>
+  <table id="caps"></table>
+</section>
+
+<section>
+  <h2>4. YouTube (Premium / ads check)</h2>
+  <input id="yturl" type="text" placeholder="YouTube URL or video ID" autocomplete="off">
+  <div class="row">
+    <button id="ytplay" class="primary">Load YouTube</button>
+    <button id="ytstop">Remove player</button>
+  </div>
+  <div style="margin-top:10px"><div id="yt"></div></div>
+</section>
+
+<section>
+  <h2>5. Log</h2>
+  <div class="row" style="margin:0 0 8px"><button id="copy">Copy everything</button><button id="clear">Clear log</button></div>
+  <div id="log"></div>
+</section>
+
+<script>
+(() => {
+  const MPEGTS_SRC = 'https://cdn.jsdelivr.net/npm/mpegts.js@1.8.0/dist/mpegts.js';
+  const HLS_SRC = 'https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js';
+  const $ = (id) => document.getElementById(id);
+  const video = $('video');
+  const logEl = $('log');
+  const lines = [];
+  let player = null, engine = null, statsTimer = null, ytPlayer = null;
+
+  const log = (msg, cls) => {
+    const line = `${new Date().toISOString().slice(11, 23)}  ${msg}`;
+    lines.push(line);
+    const div = document.createElement('div');
+    if (cls) div.className = cls;
+    div.textContent = line;
+    logEl.appendChild(div);
+    logEl.scrollTop = logEl.scrollHeight;
+  };
+
+  const store = {
+    get: (k) => { try { return localStorage.getItem(k) || ''; } catch { return ''; } },
+    set: (k, v) => { try { localStorage.setItem(k, v); } catch {} },
+  };
+  const params = new URLSearchParams(location.search);
+  $('url').value = params.get('url') || store.get('streamTest.url');
+  $('yturl').value = store.get('streamTest.yt');
+
+  const loadScript = (src) => new Promise((res, rej) => {
+    if (document.querySelector(`script[src="${src}"]`)) return res();
+    const s = document.createElement('script');
+    s.src = src; s.onload = res; s.onerror = () => rej(new Error('failed to load ' + src));
+    document.head.appendChild(s);
+  });
+
+  // ---------- capabilities ----------
+  function caps() {
+    const MS = window.MediaSource || window.WebKitMediaSource;
+    const MMS = window.ManagedMediaSource;
+    const isType = (t) => {
+      try { return (MS && MS.isTypeSupported(t)) || (MMS && MMS.isTypeSupported(t)) ? 'yes' : 'no'; } catch { return 'error'; }
+    };
+    const cp = (t) => video.canPlayType(t) || 'no';
+    return [
+      ['User agent', navigator.userAgent],
+      ['Page origin', location.origin],
+      ['Fully Kiosk JS API', typeof window.fully !== 'undefined' ? 'yes' : 'no'],
+      ['MediaSource', MS ? 'yes' : 'no'],
+      ['ManagedMediaSource (iOS 17.1+)', MMS ? 'yes' : 'no'],
+      ['MSE: H.264 high', isType('video/mp4; codecs="avc1.640028"')],
+      ['MSE: H.265/HEVC', isType('video/mp4; codecs="hvc1.1.6.L120.90"')],
+      ['MSE: AAC', isType('audio/mp4; codecs="mp4a.40.2"')],
+      ['MSE: MP3', isType('audio/mp4; codecs="mp4a.40.34"')],
+      ['MSE: AC-3', isType('audio/mp4; codecs="ac-3"')],
+      ['MSE: E-AC-3', isType('audio/mp4; codecs="ec-3"')],
+      ['Native HLS (canPlayType)', cp('application/vnd.apple.mpegurl')],
+      ['Native MPEG-TS (canPlayType)', cp('video/mp2t')],
+      ['Autoplay policy (if exposed)', navigator.getAutoplayPolicy ? navigator.getAutoplayPolicy('mediaelement') : 'not exposed'],
+    ];
+  }
+  function renderTable(el, rows) {
+    el.innerHTML = '';
+    for (const [k, v] of rows) {
+      const tr = el.insertRow();
+      tr.insertCell().textContent = k;
+      const td = tr.insertCell();
+      td.textContent = v;
+      if (v === 'yes' || v === 'probably') td.className = 'ok';
+      else if (v === 'no') td.className = 'bad';
+      else if (v === 'maybe') td.className = 'warn';
+    }
+  }
+  renderTable($('caps'), caps());
+
+  // ---------- playback ----------
+  async function tryPlay() {
+    video.muted = false;
+    try { await video.play(); log('play() with sound: OK', 'ok'); }
+    catch (e) {
+      if (!engine) return; // stopped meanwhile
+      log(`play() with sound refused (${e.name}); retrying muted`, 'warn');
+      video.muted = true;
+      try { await video.play(); log('play() muted: OK. Press Unmute to test audio.', 'warn'); }
+      catch (e2) { log(`play() muted also failed: ${e2.name} ${e2.message}`, 'bad'); }
+    }
+  }
+
+  function stop(reason) {
+    if (!engine) return;
+    log(`stop (${reason}): releasing ${engine}`);
+    clearInterval(statsTimer); statsTimer = null;
+    try {
+      if (engine === 'mpegts' && player) { player.pause(); player.unload(); player.detachMediaElement(); player.destroy(); }
+      if (engine === 'hls' && player) { player.stopLoad(); player.detachMedia(); player.destroy(); }
+    } catch (e) { log('teardown error: ' + e.message, 'bad'); }
+    video.pause();
+    video.removeAttribute('src');
+    video.load();
+    player = null; engine = null;
+    $('stats').textContent = 'stopped';
+    log('released. Check Dispatcharr: the client should disappear within a few seconds.');
+  }
+
+  async function play(kind) {
+    const url = $('url').value.trim();
+    if (!url) { log('enter a channel URL first', 'bad'); return; }
+    store.set('streamTest.url', url);
+    stop('switching');
+    renderTable($('media'), [['Engine', kind], ['Status', 'loading…']]);
+    video.disableRemotePlayback = true; // required for ManagedMediaSource on iOS
+    const t0 = performance.now();
+    video.addEventListener('playing', () => log(`first frame after ${Math.round(performance.now() - t0)} ms`, 'ok'), { once: true });
+
+    try {
+      if (kind === 'mpegts') {
+        await loadScript(MPEGTS_SRC);
+        const m = window.mpegts;
+        log(`mpegts.js ${m.version || ''} loaded; isSupported=${m.isSupported()} features=${JSON.stringify(m.getFeatureList())}`);
+        if (!m.isSupported()) { log('mpegts.js says this device has no usable MSE', 'bad'); return; }
+        player = m.createPlayer({ type: 'mpegts', isLive: true, url }, {
+          enableWorker: true, lazyLoad: false, liveBufferLatencyChasing: true,
+          liveBufferLatencyMaxLatency: 6, liveBufferLatencyMinRemain: 1.5, autoCleanupSourceBuffer: true,
+        });
+        player.on(m.Events.MEDIA_INFO, (mi) => {
+          log('media info: ' + JSON.stringify({ mimeType: mi.mimeType, videoCodec: mi.videoCodec, audioCodec: mi.audioCodec, width: mi.width, height: mi.height, fps: mi.fps, audioSampleRate: mi.audioSampleRate }));
+          renderTable($('media'), [
+            ['Engine', 'mpegts.js'], ['MIME', mi.mimeType || '?'],
+            ['Video codec', mi.videoCodec || 'none'], ['Audio codec', mi.audioCodec || 'none (or unsupported)'],
+            ['Resolution', `${mi.width || '?'}×${mi.height || '?'} @ ${mi.fps || '?'} fps`],
+            ['Audio sample rate', String(mi.audioSampleRate || '?')],
+          ]);
+        });
+        player.on(m.Events.ERROR, (type, detail, info) => log(`mpegts error: ${type} / ${detail} ${JSON.stringify(info || {})}`, 'bad'));
+        player.on(m.Events.STATISTICS_INFO, (s) => { $('stats').textContent = `speed ${Math.round(s.speed)} KB/s · decoded ${s.decodedFrames} · dropped ${s.droppedFrames}`; });
+        player.attachMediaElement(video);
+        player.load();
+        engine = 'mpegts';
+      } else if (kind === 'hls') {
+        await loadScript(HLS_SRC);
+        const H = window.Hls;
+        if (!H.isSupported()) { log('hls.js not supported here; try native', 'bad'); return; }
+        player = new H({ enableWorker: true, backBufferLength: 15 });
+        player.on(H.Events.ERROR, (_, d) => log(`hls error: ${d.type} / ${d.details} fatal=${d.fatal}`, d.fatal ? 'bad' : 'warn'));
+        player.on(H.Events.MANIFEST_PARSED, (_, d) => log(`hls manifest: ${d.levels.length} level(s) ${d.levels.map(l => l.codecSet || l.attrs?.CODECS).join(', ')}`));
+        player.loadSource(url);
+        player.attachMedia(video);
+        engine = 'hls';
+        renderTable($('media'), [['Engine', 'hls.js'], ['Details', 'see log']]);
+      } else {
+        video.src = url;
+        engine = 'native';
+        renderTable($('media'), [['Engine', 'native <video>'], ['Details', 'codec info not available with native playback']]);
+      }
+      log(`started ${engine}: ${url}`);
+      statsTimer = setInterval(() => {
+        const b = video.buffered;
+        const ahead = b.length ? (b.end(b.length - 1) - video.currentTime).toFixed(1) : '0';
+        const q = video.getVideoPlaybackQuality ? video.getVideoPlaybackQuality() : null;
+        const mem = performance.memory ? ` · JS heap ${Math.round(performance.memory.usedJSHeapSize / 1048576)} MB` : '';
+        if (engine !== 'mpegts') $('stats').textContent = `buffer ahead ${ahead}s · dropped ${q ? q.droppedVideoFrames : '?'}${mem}`;
+        else $('stats').textContent = $('stats').textContent.split(' · buffer')[0] + ` · buffer ahead ${ahead}s${mem}`;
+      }, 1000);
+      await tryPlay();
+    } catch (e) {
+      log(`failed: ${e.name || ''} ${e.message}`, 'bad');
+    }
+  }
+
+  video.addEventListener('error', () => { const e = video.error; if (e) log(`video element error code ${e.code}: ${e.message || ''}`, 'bad'); });
+  video.addEventListener('waiting', () => log('waiting (buffering)', 'warn'));
+  video.addEventListener('stalled', () => log('stalled', 'warn'));
+  video.addEventListener('volumechange', () => log(`muted=${video.muted}`));
+  document.querySelectorAll('button[data-engine]').forEach((b) => b.addEventListener('click', () => play(b.dataset.engine)));
+  $('stop').addEventListener('click', () => stop('Stop button'));
+  $('unmute').addEventListener('click', () => { video.muted = false; video.play().catch(() => {}); });
+  document.addEventListener('visibilitychange', () => { log(`visibility: ${document.visibilityState}`); if (document.visibilityState === 'hidden') stop('page hidden'); });
+  window.addEventListener('pagehide', () => stop('pagehide'));
+
+  // ---------- YouTube ----------
+  function ytId(s) {
+    s = s.trim();
+    if (/^[\w-]{11}$/.test(s)) return s;
+    try {
+      const u = new URL(s);
+      if (u.hostname.includes('youtu.be')) return u.pathname.slice(1, 12);
+      if (u.searchParams.get('v')) return u.searchParams.get('v');
+      const m = u.pathname.match(/\/(?:embed|live|shorts)\/([\w-]{11})/);
+      if (m) return m[1];
+    } catch {}
+    return null;
+  }
+  $('ytplay').addEventListener('click', async () => {
+    const id = ytId($('yturl').value);
+    if (!id) { log('could not find a YouTube video ID in that input', 'bad'); return; }
+    store.set('streamTest.yt', $('yturl').value.trim());
+    if (ytPlayer) { ytPlayer.destroy(); ytPlayer = null; }
+    if (!window.YT || !window.YT.Player) {
+      await new Promise((res) => { window.onYouTubeIframeAPIReady = res; loadScript('https://www.youtube.com/iframe_api'); });
+    }
+    const box = $('yt'); box.innerHTML = '<div id="ytinner"></div>';
+    ytPlayer = new YT.Player('ytinner', {
+      width: '100%', height: '100%', videoId: id,
+      playerVars: { autoplay: 1, playsinline: 1, rel: 0, origin: location.origin },
+      events: {
+        onReady: () => log('YouTube ready'),
+        onStateChange: (e) => log(`YouTube state ${e.data} (−1 unstarted, 0 ended, 1 playing, 2 paused, 3 buffering, 5 cued)`),
+        onError: (e) => log(`YouTube error ${e.data} (2 bad id, 5 html5, 100 not found, 101/150 embed blocked, 152/153 referrer/identity)`, 'bad'),
+      },
+    });
+    log(`YouTube loading ${id}. Watch for a pre-roll ad and note it in the results.`);
+  });
+  $('ytstop').addEventListener('click', () => { if (ytPlayer) { ytPlayer.destroy(); ytPlayer = null; log('YouTube player removed'); } });
+
+  // ---------- log tools ----------
+  $('clear').addEventListener('click', () => { lines.length = 0; logEl.innerHTML = ''; });
+  $('copy').addEventListener('click', async () => {
+    const text = ['# Device capabilities', ...caps().map(([k, v]) => `${k}: ${v}`), '', '# Stream', ...[...$('media').rows].map(r => `${r.cells[0].textContent}: ${r.cells[1].textContent}`), '', '# Log', ...lines].join('\n');
+    try { await navigator.clipboard.writeText(text); log('copied to clipboard', 'ok'); }
+    catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); log('copied (fallback)', 'ok'); }
+  });
+  log('ready');
+})();
+</script>
+</body>
+</html>

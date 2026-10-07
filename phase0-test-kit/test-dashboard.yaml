@@ -1,0 +1,76 @@
+# Phase 0 test dashboard for ha-stream-card
+# Create a new dashboard (Settings → Dashboards → Add dashboard → "New dashboard from scratch"),
+# open it, ⋮ → Edit → ⋮ → Raw configuration editor, and paste this in.
+# Replace CHANNEL_URL_1 / CHANNEL_URL_2 with two real Dispatcharr channel URLs.
+
+title: Stream Test
+views:
+  # View 1: Bubble pop-up lifecycle test (S2), run on the Fire tablet, a phone and desktop
+  - title: Pop-up test
+    path: popup
+    type: sections
+    max_columns: 2
+    sections:
+      - type: grid
+        cards:
+          - type: custom:bubble-card
+            card_type: button
+            button_type: name
+            name: Play channel 1 in pop-up
+            icon: mdi:television-play
+            card_layout: large
+            button_action:
+              tap_action:
+                action: fire-dom-event
+                stream_probe:
+                  target: popup
+                  url: CHANNEL_URL_1
+                  open: "#stream-test"
+          - type: custom:bubble-card
+            card_type: button
+            button_type: name
+            name: Play channel 2 in pop-up
+            icon: mdi:television-play
+            card_layout: large
+            button_action:
+              tap_action:
+                action: fire-dom-event
+                stream_probe:
+                  target: popup
+                  url: CHANNEL_URL_2
+                  open: "#stream-test"
+          # Same thing with HA's own button card, in case the Bubble button doesn't pass fire-dom-event through
+          - type: button
+            name: Play channel 1 (HA button)
+            icon: mdi:play
+            tap_action:
+              action: fire-dom-event
+              stream_probe:
+                target: popup
+                url: CHANNEL_URL_1
+                open: "#stream-test"
+          # Log viewer that stays on the page, so you can read what happened after the pop-up closes
+          - type: custom:stream-probe-card
+            target: log-viewer
+            autoplay: false
+    cards:
+      - type: custom:bubble-card
+        card_type: pop-up
+        hash: "#stream-test"
+        name: Stream test
+        icon: mdi:television
+        width_desktop: "720px"
+        cards:
+          - type: custom:stream-probe-card
+            target: popup
+            teardown: all        # set to "none" once, to see what a leak looks like in Dispatcharr
+
+  # View 2: HA Cast test (S3). Cast this view to the TV; it starts playing on its own.
+  - title: Cast test
+    path: cast
+    type: panel
+    cards:
+      - type: custom:stream-probe-card
+        target: cast
+        url: CHANNEL_URL_1
+        autoplay: true
