@@ -30,7 +30,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 | 2026-10-06 | Automations target a screen through a companion integration (one media_player per screen) |
 | 2026-10-06 | "Cast to TV" means HA Cast of a dashboard with the card on it; the video plays in the card on the TV |
 | 2026-10-06 | iPhones are first-class; HLS fallback via go2rtc if the HA iOS app can't run mpegts.js |
-| 2026-10-07 | Keep code in project files and `C:\Users\Declan\Projects\HA Video Card` for now, no GitHub repo yet |
+| 2026-10-07 | Code and docs live in the private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card); `C:\Users\Declan\Projects\HA Video Card` is a clone and project files keep a mirror |
 
 ## Open questions
 - Card element name (`stream-card` is a placeholder; avoid the `ha-` prefix).
@@ -42,7 +42,8 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
-- **2026-10-07:** Organized files into `docs/` and `phase0-test-kit/`, added this handover and a README, copied everything to Declan's PC.
+- **2026-10-07:** Created the private repo Dec64/ha-video-card and linked the PC folder to it (the direct folder copy wasn't working).
+- **2026-10-07:** Organized files into `docs/` and `phase0-test-kit/`, added this handover and a README.
 - **2026-10-07:** Built the Phase 0 test kit (test page, probe card, test dashboard, results sheet). Checked in headless Chromium against a fake TS server: the stream connection opens and closes correctly on pop-up removal, hide and re-show. Fixed a double-start and a stuck-resume bug found by that check.
 - **2026-10-06:** Declan answered follow-ups (Cloudflare fine, companion media_player, HA Cast, iPhones). Plan updated.
 - **2026-10-06:** Wrote the development plan from Declan's answers.

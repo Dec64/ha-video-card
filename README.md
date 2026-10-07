@@ -25,7 +25,8 @@ HA Video Card/
 The real card's source code will get its own `card/` folder (and later an `integration/` folder for the companion integration) once Phase 0 results are in.
 
 ## Where the files live
-- **Your PC:** `C:\Users\Declan\Projects\HA Video Card`
-- **Project files** (what Claude works from): `ha-stream-card/` in this project's shared files.
+- **GitHub (source of truth):** private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card), branch `main`.
+- **Your PC:** `C:\Users\Declan\Projects\HA Video Card` is a clone of that repo. Run `git pull` to get the latest.
+- **Project files:** `ha-stream-card/` in this project's shared files, kept as a mirror for the project chat.
 
-Both copies use the same layout. Claude updates both when anything changes.
+Claude pushes every change (code, docs and HANDOVER.md updates) to the repo.
