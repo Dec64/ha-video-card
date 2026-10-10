@@ -90,11 +90,12 @@ test('dashboard edit mode stops playback and the card editor preview never conne
   const before = (await stats(page, 'ok--ha-c')).total;
   await page.getByRole('button', { name: /edit dashboard/i }).click();
   await expectOpen(page, 'ok--ha-c', 0, 8000);
-  const options = page
-    .locator('hui-card-options')
+  // Sections views wrap each card in hui-card-edit-mode: clicking the card opens its editor.
+  await page
+    .locator('hui-card-edit-mode')
     .filter({ has: page.locator('stream-card') })
-    .first();
-  await options.getByRole('button', { name: /edit/i }).first().click();
+    .first()
+    .click();
   await expect(page.getByText('Stream card configuration')).toBeVisible();
   await expect(
     page.locator('hui-card-preview stream-card, ha-dialog stream-card').first(),

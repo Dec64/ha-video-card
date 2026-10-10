@@ -126,7 +126,7 @@ button_action:
 (The `&bbc1` / `*bbc1` YAML anchor saves repeating the block; Home Assistant expands it when the dashboard is saved.)
 
 ### In a Bubble Card pop-up
-Put the stream card inside the pop-up and give the pop-up's buttons `open:` with its hash. Bubble Card removes closed pop-ups from the page; the card keeps the request until the pop-up opens, plays, and releases the stream when it closes. Reopening the pop-up resumes the last channel at the live edge.
+Put the stream card inside the pop-up and give the pop-up's buttons `open:` with its hash. In a **sections** view, give the pop-up card **its own section**: Home Assistant 2026.10 doesn't render view-level `cards:` in a sections view, so a pop-up placed there never opens. A closed pop-up takes no space in its section. Bubble Card removes closed pop-ups from the page; the card keeps the request until the pop-up opens, plays, and releases the stream when it closes. Reopening the pop-up resumes the last channel at the live edge.
 
 ```yaml
 type: custom:bubble-card

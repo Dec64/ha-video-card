@@ -52,6 +52,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
+- **2026-10-10:** Real-HA suite now uses a sections view. Found that HA 2026.10 doesn't render view-level `cards:` in sections views, so Bubble pop-ups must sit in their own section (README updated). Dispatcharr profile 3 ("Stream Card (AAC)") created by Declan and verified: H.264 + AAC only; the card plays BBC One through it.
 - **2026-10-10:** mpegts.js now ships as its unmodified upstream file (`mpegts-1.8.2.js`) next to the card instead of being bundled; the card's own code is 69 KB. Fixed a teardown race that made mpegts.js throw after codec errors. Installed the HA-MCP File & YAML Tools on Declan's HA (one restart, approved) so Claude can install and update the card.
 - **2026-10-10:** Added the real Home Assistant test suite (`card/test/ha`, `npm run e2e:ha`, CI job). Found that Bubble Card buttons only run `tap_action` from the icon; the body needs `button_action` (README updated). Hid the debug overlay in preview/empty states. Element name `stream-card` confirmed.
 - **2026-10-10:** Built v1 (T0–T9): card, controller, lifecycle, session, engines, fake Dispatcharr, MSE shim, unit/e2e/live tests, CI, README, acceptance checklist. Found and worked around an mpegts.js bug that left stalled connections open on Chrome. Live tests against BBC One confirmed profile 2 is broken (`-map 0`) and the recommended profile works.

@@ -18,67 +18,90 @@ const play = (target, channel, title, open) => ({
   stream_card: { target, channel, title, ...(open ? { open } : {}) },
 });
 
+// A sections view, as recommended for new dashboards. HA's sections view does not render
+// view-level cards, so the Bubble pop-up gets its own section; Bubble hides it until the hash
+// opens it. The "Other" view is used to test view switching.
+const popupCard = {
+  type: 'custom:stream-card',
+  target: 'tv_test',
+  dispatcharr_url: FAKE,
+  output_profile: 2,
+  debug: true,
+};
+
 export const DASHBOARD = {
   views: [
     {
       title: 'Main',
       path: 'main',
-      type: 'masonry',
-      cards: [
+      type: 'sections',
+      max_columns: 3,
+      sections: [
         {
-          type: 'button',
-          name: 'HA button: play A in pop-up',
-          icon: 'mdi:television',
-          show_state: false,
-          tap_action: play('tv_test', 'ok--ha-a', 'Channel A', '#tv-test'),
+          type: 'grid',
+          cards: [
+            { type: 'heading', heading: 'Buttons' },
+            {
+              type: 'button',
+              name: 'HA button: play A in pop-up',
+              icon: 'mdi:television',
+              show_state: false,
+              tap_action: play('tv_test', 'ok--ha-a', 'Channel A', '#tv-test'),
+            },
+            {
+              // Bubble buttons: tap_action is the icon, button_action the body.
+              type: 'custom:bubble-card',
+              card_type: 'button',
+              button_type: 'name',
+              name: 'Bubble button: play B in pop-up',
+              icon: 'mdi:television-play',
+              card_layout: 'large',
+              tap_action: play('tv_test', 'ok--ha-b', 'Channel B', '#tv-test'),
+              button_action: { tap_action: play('tv_test', 'ok--ha-b', 'Channel B', '#tv-test') },
+            },
+            {
+              type: 'button',
+              name: 'Stop pop-up',
+              icon: 'mdi:stop',
+              show_state: false,
+              tap_action: {
+                action: 'fire-dom-event',
+                stream_card: { target: 'tv_test', action: 'stop' },
+              },
+            },
+            {
+              type: 'button',
+              name: 'Play C on page card',
+              icon: 'mdi:play',
+              show_state: false,
+              tap_action: play('page', 'ok--ha-c', 'Channel C'),
+            },
+          ],
         },
         {
-          // Bubble buttons: tap_action is the icon, button_action the body.
-          type: 'custom:bubble-card',
-          card_type: 'button',
-          button_type: 'name',
-          name: 'Bubble button: play B in pop-up',
-          icon: 'mdi:television-play',
-          tap_action: play('tv_test', 'ok--ha-b', 'Channel B', '#tv-test'),
-          button_action: { tap_action: play('tv_test', 'ok--ha-b', 'Channel B', '#tv-test') },
-        },
-        {
-          type: 'button',
-          name: 'Stop pop-up',
-          icon: 'mdi:stop',
-          show_state: false,
-          tap_action: {
-            action: 'fire-dom-event',
-            stream_card: { target: 'tv_test', action: 'stop' },
-          },
-        },
-        {
-          type: 'button',
-          name: 'Play C on page card',
-          icon: 'mdi:play',
-          show_state: false,
-          tap_action: play('page', 'ok--ha-c', 'Channel C'),
-        },
-        {
-          type: 'custom:stream-card',
-          target: 'page',
-          dispatcharr_url: FAKE,
-          output_profile: 2,
-          debug: true,
-        },
-        {
-          type: 'custom:bubble-card',
-          card_type: 'pop-up',
-          hash: '#tv-test',
-          name: 'TV',
-          icon: 'mdi:television',
+          type: 'grid',
+          column_span: 2,
           cards: [
             {
               type: 'custom:stream-card',
-              target: 'tv_test',
+              target: 'page',
               dispatcharr_url: FAKE,
               output_profile: 2,
               debug: true,
+            },
+          ],
+        },
+        {
+          type: 'grid',
+          cards: [
+            {
+              type: 'custom:bubble-card',
+              card_type: 'pop-up',
+              hash: '#tv-test',
+              name: 'TV',
+              icon: 'mdi:television',
+              width_desktop: '900px',
+              cards: [popupCard],
             },
           ],
         },
@@ -87,8 +110,8 @@ export const DASHBOARD = {
     {
       title: 'Other',
       path: 'other',
-      type: 'masonry',
-      cards: [{ type: 'markdown', content: 'Another view' }],
+      type: 'sections',
+      sections: [{ type: 'grid', cards: [{ type: 'markdown', content: 'Another view' }] }],
     },
   ],
 };
