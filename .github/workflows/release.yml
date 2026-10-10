@@ -27,5 +27,10 @@ jobs:
       - run: cd dist && zip -r ../stream-card.zip . -i '*.js' '*.txt'
       - uses: softprops/action-gh-release@v2
         with:
-          files: card/stream-card.zip
+          # The zip is for HACS; the individual files let Home Assistant's Downloader fetch them.
+          files: |
+            card/stream-card.zip
+            card/dist/*.js
+            card/dist/*.txt
+          prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true

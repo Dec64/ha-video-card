@@ -8,7 +8,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 **What's verified:** 56 unit tests and 38 end-to-end tests (fake Dispatcharr + MSE shim; three `@real` tests run in Google Chrome in CI), plus 8 tests in a real, disposable Home Assistant 2026.10 with Bubble Card 3.4.1 (HA and Bubble buttons, pop-up close/back/forward, stop, view switching, edit mode, card editor preview, state churn). Live-tested here against the real BBC One channel: the raw channel gets a named AC-3 error, profile 2 as it stands gets the timeout error, and the recommended profile (applied by a local relay) plays H.264 High 1080p25 + AAC for a minute with no reconnects and releases on close. Real decoding on the actual devices is not verified yet.
 
 **Next action (Declan):**
-1. Fix output profile 2 in Dispatcharr: replace `-map 0` and the probe settings with the parameters in the [README](README.md#output-profile) and switch it **Active**. As it stands it fails on BBC One ("Encoder not found" on the teletext/data tracks) and Dispatcharr never answers.
+1. Add a **new** output profile in Dispatcharr with the parameters in the [README](README.md#output-profile) (profile 2 is a locked built-in and can't be edited). Its `-map 0` fails on BBC One ("Encoder not found" on the teletext/data tracks).
 2. Install the card (README section 2) and run the [acceptance checklist](docs/acceptance-v1.md) on each device.
 
 **Next action (Claude):** fix anything T10 finds; tag v0.1.0 when it passes; then Phase 2 (Fire hardening) or the iPhone fallback if the HA iOS app needs it.
@@ -36,6 +36,8 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 | 2026-10-10 | v1 = card only, IPTV only. Companion integration, Cast and YouTube come after |
 | 2026-10-10 | mpegts.js runs with our own fetch loader (`ImmediateAbortLoader`): its stock loader leaves a stalled connection open on Chrome |
 | 2026-10-10 | v1 installs manually from the CI artifact; HACS packaging is prepared but waits for Phase 6 |
+| 2026-10-10 | Output profile: a new profile (not the locked built-in 2) with the parameters in the README; final version drops `+nobuffer` and adds `aresample=async=1` (workflow-verified against Dispatcharr source and an ffmpeg matrix) |
+| 2026-10-10 | Repo made public by Declan so HA can download release files |
 | 2026-10-10 | Card element name is `stream-card` (YAML `type: custom:stream-card`) |
 | 2026-10-07 | Code and docs live in the private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card); `C:\Users\Declan\Projects\HA Video Card` is a clone and project files keep a mirror |
 

@@ -12,15 +12,24 @@ Status: **v1 built, awaiting real-device acceptance** ([checklist](docs/acceptan
 ## 1. Dispatcharr setup (once)
 
 ### Output profile
-Browsers can't play the AC-3 or MP2 audio many channels carry. Create an output profile in Dispatcharr that converts audio to AAC and drops subtitle, teletext and data tracks. Command `ffmpeg`, parameters:
+Browsers can't play the AC-3 or MP2 audio many channels carry. Add an output profile that converts audio to AAC and drops subtitle, teletext and data tracks: Dispatcharr → Settings → Output Profiles → **Add**.
+
+| Field | Value |
+|---|---|
+| Name | `Stream Card (AAC)` (any unique name) |
+| Command | **FFmpeg** |
+| Parameters | see below |
+| Is Active | ticked |
 
 ```
--fflags +discardcorrupt+genpts+nobuffer -probesize 1M -analyzeduration 1M -i pipe:0 -map 0:v:0? -map 0:a:0? -sn -dn -c:v copy -c:a aac -b:a 192k -ac 2 -ar 48000 -max_muxing_queue_size 4096 -flush_packets 1 -mpegts_flags +pat_pmt_at_frames+resend_headers+initial_discontinuity -f mpegts pipe:1
+-fflags +discardcorrupt+genpts -probesize 1M -analyzeduration 1M -i pipe:0 -map 0:v:0? -map 0:a:0? -sn -dn -c:v copy -c:a aac -b:a 192k -ac 2 -ar 48000 -af aresample=async=1:min_hard_comp=0.03 -max_muxing_queue_size 4096 -flush_packets 1 -mpegts_flags +pat_pmt_at_frames+resend_headers+initial_discontinuity -f mpegts pipe:1
 ```
 
-- Switch the profile to **Active**. Dispatcharr ignores an inactive or unknown profile and silently sends the original stream.
-- Note its numeric ID; it goes in the card's `output_profile`. The card requests it with `?output_profile=<id>` on every stream URL.
-- Don't use `-map 0`: on channels with teletext or data tracks (BBC One, for example) ffmpeg exits with "Encoder not found" and Dispatcharr never answers.
+- **Add a new profile; don't edit "Web Player (AAC Audio)".** That one is a locked built-in (its fields are greyed out), and its `-map 0` breaks on channels with teletext, subtitle or data tracks such as BBC One: ffmpeg exits with "Encoder not found" and Dispatcharr sends nothing for about 50 s.
+- **Find the new profile's ID:** the Output Profiles table doesn't show it. On the Channels page, open the M3U URL popover and pick the profile under "Output Profile"; the generated URL ends in `?output_profile=<id>`. It's usually `3`. Put it in the card's `output_profile`.
+- **Check it works:** `ffprobe -v error -show_entries stream=codec_name -of csv=p=0 "https://<dispatcharr>/proxy/ts/stream/<uuid>?output_profile=<id>"` should list only `h264` and `aac`. If it lists `ac3` or `mp2`, the ID is wrong or the profile isn't Active: Dispatcharr silently falls back to the original stream.
+- What it does: video is copied untouched; only audio is converted (about 4% of one CPU core per channel, shared by every viewer of that channel); only the first audio track is kept; `aresample=async=1` keeps lip-sync after small audio drop-outs from the provider.
+- **MPEG-2 channels** (some SD channels) still show no picture, because the video is copied. They need a second profile that converts video, which costs much more CPU: replace `-c:v copy` with `-vf yadif=mode=send_frame:deint=interlaced -c:v libx264 -preset veryfast -tune zerolatency -profile:v high -pix_fmt yuv420p -crf 23 -maxrate 5M -bufsize 10M -g 50`.
 
 ### CORS
 Dispatcharr already allows every origin. Check that nothing in front of it (a reverse proxy, Cloudflare) strips the header:

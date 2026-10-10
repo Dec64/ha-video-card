@@ -24,12 +24,12 @@ The Phase 0 test kit stays in the repo as an optional diagnostic tool, not a gat
 
 ## 2. Stream profile (Declan, before T10)
 
-Your "Web Player (AAC Audio)" profile is the right idea. Suggested changes:
+Your "Web Player (AAC Audio)" profile is the right idea, but it is a locked built-in, so **add a new profile** with these parameters (final version, verified 2026-10-10 against the Dispatcharr source and an ffmpeg test matrix; see the README for the field-by-field settings):
 
 ```
--fflags +discardcorrupt+genpts+nobuffer -probesize 1M -analyzeduration 1M -i pipe:0
+-fflags +discardcorrupt+genpts -probesize 1M -analyzeduration 1M -i pipe:0
 -map 0:v:0? -map 0:a:0? -sn -dn
--c:v copy -c:a aac -b:a 192k -ac 2 -ar 48000
+-c:v copy -c:a aac -b:a 192k -ac 2 -ar 48000 -af aresample=async=1:min_hard_comp=0.03
 -max_muxing_queue_size 4096 -flush_packets 1
 -mpegts_flags +pat_pmt_at_frames+resend_headers+initial_discontinuity -f mpegts pipe:1
 ```
@@ -39,6 +39,8 @@ Your "Web Player (AAC Audio)" profile is the right idea. Suggested changes:
 | `-map 0` → `-map 0:v:0? -map 0:a:0? -sn -dn` | `-map 0` takes every stream. Channels with teletext/DVB subtitles or data streams can make ffmpeg fail to start, and channels with several audio tracks (e.g. audio description) transcode all of them. mpegts.js only plays one audio track. The `?` keeps radio-only or video-only channels working. |
 | `-analyzeduration 0` → `1M`, `-probesize 512K` → `1M` | With zero analysis ffmpeg can start before it has seen the audio stream and drop it, or fail with "could not find codec parameters". Costs about 1 s of start-up. If start-up feels slow, try `500K` later. |
 | add `-ar 48000` | Fixed sample rate; avoids odd rates some sources carry. |
+| drop `+nobuffer` | It made ffmpeg discard the ~1.5 s it reads while probing, so output started two keyframes late, with no latency gain in a pipe-to-pipe setup. |
+| add `-af aresample=async=1:min_hard_comp=0.03` | Without it, small audio drop-outs leave timestamp gaps that mpegts.js closes by pulling audio earlier, which drifts lip-sync. |
 
 ### How the card asks for the profile (decided 2026-10-10: URL parameter)
 Dispatcharr's stream proxy reads `?output_profile=<id>` on `/proxy/ts/stream/<uuid>` (`_resolve_output_profile` in `apps/proxy/live_proxy/views.py`). The card config takes the profile's numeric ID once and appends it to every stream URL. The ID is in the profile's edit dialog, or from `GET /api/core/output-profiles/` if the UI doesn't show it.
