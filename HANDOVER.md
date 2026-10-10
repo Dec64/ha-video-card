@@ -2,15 +2,15 @@
 
 Living document. Newest status at the top; the change log at the bottom keeps the history. Anyone (or any Claude session) picking this up should read this first, then [docs/development-plan.md](docs/development-plan.md).
 
-## Current status (2026-10-07)
-**Phase:** 0, early tests. The test kit is built and checked against a fake stream; **waiting on Declan to run it on real devices.**
+## Current status (2026-10-10)
+**Phase:** v1 build plan drafted ([docs/build-plan-v1.md](docs/build-plan-v1.md)). Phase 0 dropped: a Dispatcharr output profile fixes the stream format, and the remaining device questions become v1 acceptance checks.
 
 **Next action (Declan):**
-1. Add the CORS header on Dispatcharr's hostname in Cloudflare (exact rule in [phase0-test-kit/README.md](phase0-test-kit/README.md), setup step 3).
-2. Copy `phase0-test-kit/www/stream-test/` to HA's `/config/www/stream-test/`, add the probe card resource, and create the test dashboard.
-3. Run tests 1–4 and paste the test page's "Copy everything" output into the thread, or fill in [phase0-test-kit/results.md](phase0-test-kit/results.md).
+1. Review the build plan, especially §2 (suggested changes to the "Web Player (AAC Audio)" profile, and switch it to Active).
+2. Answer: how does a client get that profile in Dispatcharr (per channel, per user, default, or URL parameter)?
+3. Add the CORS header on Dispatcharr's hostname in Cloudflare (rule in [phase0-test-kit/README.md](phase0-test-kit/README.md), setup step 3).
 
-**Next action (Claude), once results are in:** fill in results.md, pick the engine per device, confirm the teardown signals, update the plan, then start Phase 1 (the real card) in a `card/` folder.
+**Next action (Claude), once the plan is approved:** T0 (scaffold, CLAUDE.md, CI) then T1 (test harness), per the build plan.
 
 ## Key facts
 - HA is reached remotely through Cloudflare at `hayden-family.net`. Dispatcharr is on its own HTTPS hostname, also via Cloudflare.
@@ -30,18 +30,22 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 | 2026-10-06 | Automations target a screen through a companion integration (one media_player per screen) |
 | 2026-10-06 | "Cast to TV" means HA Cast of a dashboard with the card on it; the video plays in the card on the TV |
 | 2026-10-06 | iPhones are first-class; HLS fallback via go2rtc if the HA iOS app can't run mpegts.js |
+| 2026-10-10 | Skip Phase 0. Dispatcharr output profile (AAC audio, MPEG-TS) defines the stream; device checks move to v1 acceptance (T10) |
+| 2026-10-10 | v1 = card only, IPTV only. Companion integration, Cast and YouTube come after |
 | 2026-10-07 | Code and docs live in the private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card); `C:\Users\Declan\Projects\HA Video Card` is a clone and project files keep a mirror |
 
 ## Open questions
 - Card element name (`stream-card` is a placeholder; avoid the `ha-` prefix).
-- Everything Phase 0 is designed to answer: audio codecs per channel, iPhone HA app support, HA Cast behaviour, YouTube ads per device.
+- How a client selects the Dispatcharr output profile (decides the default `url_template`).
+- iPhone HA app support for mpegts.js, HA Cast behaviour, YouTube ads per device (checked in T10 and later phases instead of Phase 0).
 
 ## Known risks
-- Channels with AC-3/MP2 audio may play silently on Fire/Android until a Dispatcharr ffmpeg profile converts audio to AAC.
+- The profile copies video, so any HEVC or MPEG-2 channel will still fail on Fire tablets; the card will name the codec, and a video-transcode profile fixes those channels.
 - The HA iOS app may not support the feature mpegts.js needs (Managed Media Source); fallback planned.
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
+- **2026-10-10:** Reviewed the approach after Declan's point about output profiles. Dropped Phase 0, wrote [docs/build-plan-v1.md](docs/build-plan-v1.md) (agentic task breakdown, contracts, test harness). Found that headless Chromium here can't decode H.264/AAC, so e2e uses an MSE shim locally and real Chrome in CI.
 - **2026-10-07:** Created the private repo Dec64/ha-video-card and linked the PC folder to it (the direct folder copy wasn't working).
 - **2026-10-07:** Organized files into `docs/` and `phase0-test-kit/`, added this handover and a README.
 - **2026-10-07:** Built the Phase 0 test kit (test page, probe card, test dashboard, results sheet). Checked in headless Chromium against a fake TS server: the stream connection opens and closes correctly on pop-up removal, hide and re-show. Fixed a double-start and a stuck-resume bug found by that check.

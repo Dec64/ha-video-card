@@ -12,8 +12,9 @@ HA Video Card/
 ├── HANDOVER.md               ← status, decisions, next steps, change log (kept up to date)
 ├── docs/
 │   ├── rfc-001-review.md     ← critique of the original RFC-001
-│   └── development-plan.md   ← the agreed plan (requirements, architecture, phases)
-└── phase0-test-kit/          ← throwaway tests to run before building the real card
+│   ├── development-plan.md   ← the agreed plan (requirements, architecture, phases)
+│   └── build-plan-v1.md      ← task-by-task plan for building v1 with coding agents
+└── phase0-test-kit/          ← optional diagnostic tools (Phase 0 itself was dropped)
     ├── README.md             ← setup + the four tests
     ├── results.md            ← fill in test results here
     ├── test-dashboard.yaml   ← paste into a new HA dashboard
@@ -22,7 +23,7 @@ HA Video Card/
         └── stream-probe-card.js  ← lifecycle probe card (HA resource)
 ```
 
-The real card's source code will get its own `card/` folder (and later an `integration/` folder for the companion integration) once Phase 0 results are in.
+The real card's source code will get its own `card/` folder (and later an `integration/` folder for the companion integration) starting with task T0 in the build plan.
 
 ## Where the files live
 - **GitHub (source of truth):** private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card), branch `main`.
