@@ -3,15 +3,21 @@
 Living document. Newest status at the top; the change log at the bottom keeps the history. Anyone (or any Claude session) picking this up should read this first, then [docs/development-plan.md](docs/development-plan.md).
 
 ## Current status (2026-10-10)
-**Phase:** v1 built (T0–T9 of [docs/build-plan-v1.md](docs/build-plan-v1.md)) in `card/`. Waiting on real-device acceptance (T10).
+**Phase:** v1 built and **installed on Declan's HA as 0.1.0-beta.1**. Waiting on real-device acceptance (T10).
 
-**What's verified:** 56 unit tests and 38 end-to-end tests (fake Dispatcharr + MSE shim; three `@real` tests run in Google Chrome in CI), plus 8 tests in a real, disposable Home Assistant 2026.10 with Bubble Card 3.4.1 (HA and Bubble buttons, pop-up close/back/forward, stop, view switching, edit mode, card editor preview, state churn). Live-tested here against the real BBC One channel: the raw channel gets a named AC-3 error, profile 2 as it stands gets the timeout error, and the recommended profile (applied by a local relay) plays H.264 High 1080p25 + AAC for a minute with no reconnects and releases on close. Real decoding on the actual devices is not verified yet.
+**Installed on Declan's HA:**
+- Files in `/config/www/stream-card/` (`stream-card.js`, two chunks, `mpegts-1.8.2.js`), byte-identical to the build; resource `/local/stream-card/stream-card.js?v=0.1.0-beta.1`.
+- Dashboard **Stream Card Test** (`/stream-card-test/tv`): BBC One Bubble button + HA button open pop-up `#tv-test` (card target `tv_test`), stop button, and a page card (target `page_test`). Uses Dispatcharr `https://<dispatcharr>` with `output_profile: 3`, `debug: true`.
+- Dispatcharr profile **3 "Stream Card (AAC)"** (added by Declan), verified: H.264 + AAC only.
+- Added to HA for installs: HACS "HA-MCP Custom Component" with the **HA-MCP File & YAML Tools** entry (one approved restart), and the built-in **Downloader** integration (`download_dir: www`).
 
-**Next action (Declan):**
-1. Add a **new** output profile in Dispatcharr with the parameters in the [README](README.md#output-profile) (profile 2 is a locked built-in and can't be edited). Its `-map 0` fails on BBC One ("Encoder not found" on the teletext/data tracks).
-2. Install the card (README section 2) and run the [acceptance checklist](docs/acceptance-v1.md) on each device.
+**How to update the card on that HA:** build, commit the dist files temporarily on the working branch, `downloader.download_file` each from `raw.githubusercontent.com/Dec64/ha-video-card/<commit>/...` into subdir `stream-card` (mpegts from `cdn.jsdelivr.net/npm/mpegts.js@<ver>/dist/mpegts.js`), check sizes with the file tools, remove the files in the next commit, then bump `?v=` on the resource. (This session can't push tags, so releases aren't usable yet.)
 
-**Next action (Claude):** fix anything T10 finds; tag v0.1.0 when it passes; then Phase 2 (Fire hardening) or the iPhone fallback if the HA iOS app needs it.
+**What's verified:** 56 unit, 38 e2e (fake Dispatcharr + MSE shim; `@real` tests in Google Chrome in CI), 8 real-HA tests (HA 2026.10 + Bubble 3.4.1, sections view), and live tests against the real channel through profile 3 (plays H.264 1080p25 + AAC). Not yet verified: decoding and Fully/HA-app behaviour on the actual devices.
+
+**Next action (Declan):** open Stream Card Test on each device and run the [acceptance checklist](docs/acceptance-v1.md).
+
+**Next action (Claude):** fix anything T10 finds; then tag v0.1.0 and move to Phase 2 or the iPhone fallback.
 
 ## Key facts
 - HA is reached remotely through Cloudflare at `hayden-family.net`. Dispatcharr is on its own HTTPS hostname, also via Cloudflare.
@@ -52,6 +58,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
+- **2026-10-10:** Installed 0.1.0-beta.1 on Declan's HA (files via Downloader from a pinned commit, resource, Stream Card Test dashboard with profile 3). Repo made public by Declan.
 - **2026-10-10:** Real-HA suite now uses a sections view. Found that HA 2026.10 doesn't render view-level `cards:` in sections views, so Bubble pop-ups must sit in their own section (README updated). Dispatcharr profile 3 ("Stream Card (AAC)") created by Declan and verified: H.264 + AAC only; the card plays BBC One through it.
 - **2026-10-10:** mpegts.js now ships as its unmodified upstream file (`mpegts-1.8.2.js`) next to the card instead of being bundled; the card's own code is 69 KB. Fixed a teardown race that made mpegts.js throw after codec errors. Installed the HA-MCP File & YAML Tools on Declan's HA (one restart, approved) so Claude can install and update the card.
 - **2026-10-10:** Added the real Home Assistant test suite (`card/test/ha`, `npm run e2e:ha`, CI job). Found that Bubble Card buttons only run `tap_action` from the icon; the body needs `button_action` (README updated). Hid the debug overlay in preview/empty states. Element name `stream-card` confirmed.
