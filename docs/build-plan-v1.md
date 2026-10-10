@@ -8,7 +8,7 @@ Phase 0 was there to find out what the stream looks like on each device before w
 
 | Phase 0 question | Now answered by |
 |---|---|
-| Audio codec per channel (AC-3/MP2 silence on Fire/Android) | Output profile transcodes all audio to AAC stereo |
+| Audio codec per channel (AC-3/MP2 silence on Fire/Android) | Output profile transcodes all audio to AAC stereo; the card requests it with `?output_profile=<id>` |
 | Container / engine | Profile always outputs MPEG-TS → mpegts.js everywhere it runs |
 | Which teardown signals fire in Bubble pop-ups | The card listens to **all** of them anyway; automated tests prove the connection closes on each |
 | Video codec | Card reads the codec from the stream and shows a clear "unsupported codec" error instead of a black screen (see §5) |
@@ -16,7 +16,7 @@ Phase 0 was there to find out what the stream looks like on each device before w
 What a profile **cannot** settle is device capability, so these move from "test first" to "v1 acceptance on real devices" (task T10):
 - **iPhone HA app:** whether its WebView has Managed Media Source (mpegts.js needs it). If not, iPhones get a fallback in v1.1. v1 shows a clear "not supported on this device" message rather than failing silently.
 - **Video passthrough:** the profile copies video. An HEVC or MPEG-2 channel would still fail on Fire tablets. The card's codec check will name it, and a second profile can transcode just those channels.
-- **CORS:** still needed (Cloudflare header on Dispatcharr's hostname). The card reports a CORS failure by name.
+- **CORS:** Dispatcharr already allows every origin (`CORS_ALLOW_ALL_ORIGINS = True` with django-cors-headers), so the Cloudflare rule is probably unnecessary. One `curl` confirms it (§2). The card reports a CORS failure by name if something in front strips the header.
 
 The Phase 0 test kit stays in the repo as an optional diagnostic tool, not a gate.
 
@@ -38,9 +38,16 @@ Your "Web Player (AAC Audio)" profile is the right idea. Suggested changes:
 | `-analyzeduration 0` → `1M`, `-probesize 512K` → `1M` | With zero analysis ffmpeg can start before it has seen the audio stream and drop it, or fail with "could not find codec parameters". Costs about 1 s of start-up. If start-up feels slow, try `500K` later. |
 | add `-ar 48000` | Fixed sample rate; avoids odd rates some sources carry. |
 
-Also: the screenshot shows the profile's **Active** toggle off. It needs to be on.
+### How the card asks for the profile (decided 2026-10-10: URL parameter)
+Dispatcharr's stream proxy reads `?output_profile=<id>` on `/proxy/ts/stream/<uuid>` (`_resolve_output_profile` in `apps/proxy/live_proxy/views.py`). The card config takes the profile's numeric ID once and appends it to every stream URL. The ID is in the profile's edit dialog, or from `GET /api/core/output-profiles/` if the UI doesn't show it.
 
-**Open question for you:** how does a client get this profile in your Dispatcharr version: set per channel, per user, as the default, or via a URL parameter? The card builds URLs from a template (§4), so any of these works; I need to know which to put in the README and example config.
+**Watch out:** if the ID is wrong or the profile isn't **Active**, Dispatcharr silently serves the original stream with no conversion, rather than an error. The screenshot shows the Active toggle off, so switch it on. The card's codec check (T6) catches the silent case: an AC-3 or MP2 track shows "audio codec not supported, check the output profile" instead of silent video.
+
+### CORS check (replaces the Cloudflare rule)
+```
+curl -sI -H "Origin: https://hayden-family.net" "https://<dispatcharr-host>/proxy/ts/stream/<uuid>?output_profile=<id>" --max-time 3 | grep -i access-control
+```
+If that prints `access-control-allow-origin: *`, nothing else is needed. If you add a Cloudflare rule anyway, use **Set** (replace), not Add: two `Access-Control-Allow-Origin` values make the browser reject the response.
 
 ## 3. How the agents work
 
@@ -67,7 +74,8 @@ Playwright's bundled Chromium (and the cloud container's) **cannot decode H.264 
 type: custom:stream-card            # element name still a placeholder
 target: kitchen_popup               # mailbox key; required to receive button requests
 dispatcharr_url: https://dispatcharr.example
-url_template: "{base}/proxy/ts/stream/{channel}"   # default; add a profile param here if Dispatcharr needs one
+output_profile: 3                   # Dispatcharr output profile ID, sent as ?output_profile=3; omit for none
+url_template: "{base}/proxy/ts/stream/{channel}"   # default; rarely changed
 channel: <uuid>                     # optional default channel
 title: Optional default title
 autoplay: true                      # play pending/default channel when shown
@@ -132,6 +140,7 @@ type EngineEvent =
 
 ### T1: Test harness
 - `card/test/fake-dispatcharr/`: Node server that spawns ffmpeg (`testsrc2` + `sine`) producing endless H.264 + AAC TS shaped like the profile output, served at `/proxy/ts/stream/:id` with CORS.
+- Records the `output_profile` query on each request so tests can assert the card sent it.
 - `GET /__stats` returns open stream connections; `POST /__fault` switches modes: `stall` (stop sending, keep socket), `drop` (close socket), `404`, `no-cors`, `slow-start`, `codec:hevc`, `codec:mpeg2`, `audio:ac3`.
 - Playwright fixtures: a test page that loads the built card with a fake `hass`, a fake Bubble pop-up (host element added on hash `#popup`, **removed** on close, as in Bubble ≥ 3.2.4), a fake Lovelace edit mode, and the MSE shim.
 - **Done when:** a smoke e2e test fetches a stream, sees `/__stats` = 1, aborts, sees 0 within 2 s. Fault modes have their own tests.
@@ -152,9 +161,9 @@ type EngineEvent =
 ### T4: Card shell ∥
 - Lit element, `setConfig` validation with readable errors, `getCardSize`, `getGridOptions`.
 - Creates `<video>` once, imperatively; `hass` updates never touch it (test asserts the same element survives 100 `hass` updates).
-- Builds the URL from `url_template`.
+- Builds the URL from `url_template`, then adds `output_profile` as a query parameter (keeping any query already in the template or in a button's `url:`). Button `url:` overrides are used as given.
 - **Never plays in edit mode or the card-picker preview.**
-- **Done when:** unit tests for config and URL building; e2e: editor preview opens zero connections.
+- **Done when:** unit tests for config and URL building (with/without profile, template with an existing query); e2e: editor preview opens zero connections.
 
 ### T5: Lifecycle manager
 Release (full destroy) on: `disconnectedCallback`, IntersectionObserver not visible, `visibilitychange` hidden, `pagehide`, Fully Kiosk `screenOff` / `onScreensaverStart` (when `window.fully` exists), pop-up hash change away, idle timeout, `stop` from the controller. Re-show rebuilds at the live edge.
@@ -177,7 +186,7 @@ Release (full destroy) on: `disconnectedCallback`, IntersectionObserver not visi
 - **Done when:** a release build loads from a `/local/` path and from a `/hacsfiles/`-style path in e2e (chunk loading works from both).
 
 ### T9: README
-- Install (manual `/local/` now, HACS later), Dispatcharr profile (§2), Cloudflare CORS rule, Bubble pop-up example, Fully settings (autoplay, hardware acceleration), troubleshooting by symptom using the card's error messages.
+- Install (manual `/local/` now, HACS later), Dispatcharr profile and how to find its ID (§2), the CORS `curl` check, Bubble pop-up example, Fully settings (autoplay, hardware acceleration), troubleshooting by symptom using the card's error messages.
 - **Done when:** every error message the card can show is listed with its fix (checked by a script that greps the message table against the source).
 
 ### T10: Real-device acceptance (Declan)
