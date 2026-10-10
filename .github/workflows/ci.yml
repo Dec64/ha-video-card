@@ -72,3 +72,27 @@ jobs:
         with:
           name: playwright-report-chrome
           path: card/playwright-report/
+
+  e2e-ha:
+    name: E2E (real Home Assistant + Bubble Card)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: card/package-lock.json
+      - uses: astral-sh/setup-uv@v6
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run e2e:ha
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report-ha
+          path: |
+            card/playwright-report/
+            card/.ha-test/hass.log

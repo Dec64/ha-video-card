@@ -419,7 +419,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       failures: this.status?.failures ?? 0,
       mutedByPolicy: this.status?.mutedByPolicy ?? false,
       needsGesture: this.status?.needsGesture ?? false,
-      muted: this.video.muted,
+      muted: this.effectiveMuted,
       mediaInfo: this.status?.mediaInfo,
       notice: this.status?.notice,
       error: this.error,
@@ -451,7 +451,11 @@ export class StreamCard extends LitElement implements ControllerCard {
               : nothing
           }
           ${this.renderControls(ui, controlsHidden)}
-          ${this.config?.debug ? html`<div class="debug">${this.debugText()}</div>` : nothing}
+          ${
+            this.config?.debug && ui !== 'preview' && ui !== 'empty'
+              ? html`<div class="debug">${this.debugText()}</div>`
+              : nothing
+          }
         </div>
       </ha-card>
     `;

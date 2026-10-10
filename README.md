@@ -70,7 +70,7 @@ The card never plays in the dashboard editor or while the dashboard is in edit m
 
 ## 4. Buttons
 
-Any card with a `tap_action` (tile, button, Mushroom, Bubble Card buttons) can play a channel:
+Any card with a `tap_action` (tile, button, Mushroom) can play a channel:
 
 ```yaml
 tap_action:
@@ -93,6 +93,28 @@ tap_action:
 ```
 
 `stream_card` fields: `target`, `channel` or `url`, `title`, `open` (a pop-up hash like `#tv`, or a dashboard path), `action` (`play` or `stop`).
+
+### Bubble Card buttons
+On a Bubble Card button, `tap_action` only covers the **icon**. The rest of the button runs `button_action`, so set both:
+
+```yaml
+type: custom:bubble-card
+card_type: button
+button_type: name
+name: BBC One HD
+icon: mdi:television
+tap_action: &bbc1
+  action: fire-dom-event
+  stream_card:
+    target: kitchen_tv
+    channel: 3f2b9c1e-7a4d-4e8b-9c2f-1d5e6a7b8c9d
+    title: BBC One HD
+    open: "#kitchen-tv"
+button_action:
+  tap_action: *bbc1
+```
+
+(The `&bbc1` / `*bbc1` YAML anchor saves repeating the block; Home Assistant expands it when the dashboard is saved.)
 
 ### In a Bubble Card pop-up
 Put the stream card inside the pop-up and give the pop-up's buttons `open:` with its hash. Bubble Card removes closed pop-ups from the page; the card keeps the request until the pop-up opens, plays, and releases the stream when it closes. Reopening the pop-up resumes the last channel at the live edge.
@@ -144,6 +166,7 @@ card/
 ├── test/unit/               Vitest
 ├── test/e2e/                Playwright against a fake Dispatcharr (ffmpeg) + MSE shim
 ├── test/fake-dispatcharr/   the fake server
+├── test/ha/                 real Home Assistant + Bubble Card integration tests (npm run e2e:ha)
 └── test/live/               optional tests against a real Dispatcharr channel
 docs/                        review, plans, acceptance checklist
 phase0-test-kit/             earlier diagnostic tools (Phase 0 was dropped)

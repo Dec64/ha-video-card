@@ -6,6 +6,7 @@ A Home Assistant Lovelace card (`custom:stream-card`) that plays Dispatcharr MPE
 - `npm ci`: install
 - `npm run check`: lint + Prettier + typecheck + unit tests + build + size budget + README message check. Must pass before every push.
 - `npm run e2e`: Playwright against the fake Dispatcharr. Needs `ffmpeg` with libx264/libx265 on PATH. Run `npm run build` first; the tests load `dist/`.
+- `npm run e2e:ha`: the card in a real, disposable Home Assistant (pinned version, installed with uv into `card/.ha-test/`) with Bubble Card: HA and Bubble buttons, pop-up open/close, view switching, edit mode and the card editor. Needs `uv`. Starts and stops HA itself.
 - `REAL_CODECS=1 npm run e2e`: the `@real` tests in Google Chrome (real H.264/AAC decode, used in CI).
 - `LIVE=1 LIVE_STREAM_URL=https://<dispatcharr>/proxy/ts/stream/<uuid> [LIVE_OUTPUT_PROFILE=<id>] npm run e2e`: tests against a real channel (never in CI; never commit the URL).
 - `node test/fake-dispatcharr/server.mjs`: fake Dispatcharr on :8930 and test pages on :8931 for manual poking.
@@ -33,4 +34,5 @@ A Home Assistant Lovelace card (`custom:stream-card`) that plays Dispatcharr MPE
 ## Testing notes
 - Playwright's Chromium (and cloud containers) can't decode H.264/AAC. `test/e2e/mse-shim.js` replaces MediaSource so mpegts.js still fetches, demuxes and remuxes real TS while playback time is simulated. Knobs: `window.__mseShimCodecs`, `window.__mseShimBlockUnmuted`.
 - The fake server picks behaviour from the channel ID (`stall-3--x`, `hang--x`, `status-404--x`, `ac3--x`, ...); see the header of `test/fake-dispatcharr/server.mjs`. `Harness.channel(mode)` makes IDs unique per test.
+- `test/ha/` runs against real HA 2026.10 + Bubble Card 3.4.1; prefer adding a case there when a behaviour depends on HA or Bubble internals. Bubble buttons: `tap_action` is the icon only, `button_action` the body.
 - `test/e2e/pages/harness.js` fakes HA buttons (`ll-custom`) and Bubble Card ≥ 3.2.4 pop-ups (shell detached while closed, same element re-attached on open).

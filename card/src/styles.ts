@@ -208,6 +208,8 @@ export const styles = css`
     top: 8px;
     right: 8px;
     max-width: 60%;
+    max-height: 45%;
+    overflow: hidden;
     padding: 6px 8px;
     border-radius: 6px;
     background: rgba(0, 0, 0, 0.7);

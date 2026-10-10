@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-10 · **Replaces:** Phase 0 and Phase 1 of [development-plan.md](development-plan.md) · **Scope:** card only, Dispatcharr/IPTV only.
 
-> **Status (2026-10-10):** T0–T9 built in `card/` (56 unit tests, 38 e2e tests, live-tested against a real BBC One channel). T10 (real devices) is next: [acceptance-v1.md](acceptance-v1.md). Changes from this plan made during the build are listed in §7.
+> **Status (2026-10-10):** T0–T9 built in `card/` (56 unit tests, 38 e2e tests, 8 tests in a real Home Assistant with Bubble Card, live-tested against a real BBC One channel). T10 (real devices) is next: [acceptance-v1.md](acceptance-v1.md). Changes from this plan made during the build are listed in §7.
 
 ## 1. Why Phase 0 is dropped
 
@@ -73,7 +73,7 @@ Playwright's bundled Chromium (and the cloud container's) **cannot decode H.264 
 
 ### Card config
 ```yaml
-type: custom:stream-card            # element name still a placeholder
+type: custom:stream-card
 target: kitchen_popup               # mailbox key; required to receive button requests
 dispatcharr_url: https://dispatcharr.example
 output_profile: 3                   # Dispatcharr output profile ID, sent as ?output_profile=3; omit for none
@@ -216,4 +216,5 @@ Unchanged from [development-plan.md](development-plan.md): Fire hardening and so
 - **`start_timeout` option added.** A broken output profile makes Dispatcharr accept the request and never answer. The card reports this as a timeout that points at the output profile.
 - **Screenshot tests attach images instead of comparing pixels.** Fonts differ between the dev container and CI, so pixel baselines would flap. States are asserted through the DOM; screenshots are attached to the report for review.
 - **HACS:** `hacs.json` and a release workflow (zip of `dist/`) are in place but untested until Phase 6. v1 installs manually from the CI artifact.
-- **Element name:** still `stream-card` (open question in HANDOVER.md).
+- **Element name:** `stream-card`, confirmed by Declan on 2026-10-10.
+- **Real Home Assistant tests added** (`card/test/ha`): a pinned HA + Bubble Card installed with uv, onboarded over the API, dashboard created over the websocket API. Not in the original plan; they caught the Bubble `button_action` detail that the fake harness couldn't.
