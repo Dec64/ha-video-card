@@ -116,6 +116,13 @@ describe('ChannelList', () => {
     expect(new ChannelList([]).neighbour(U1, 1)).toBeUndefined();
   });
 
+  it('knows the unfiltered size and every group', () => {
+    const l = new ChannelList(all, { groups: ['Nope'] });
+    expect(l.size).toBe(0);
+    expect(l.total).toBe(4);
+    expect(l.allGroups).toEqual(['Films', 'News, UK', 'Other']);
+  });
+
   it('searches by name or number within a group', () => {
     const l = new ChannelList(all);
     expect(l.filter('ALP', '').map((c) => c.name)).toEqual(['Alpha, the first']);
@@ -145,6 +152,29 @@ describe('loadChannels', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     await loadChannels('https://d.example/output/m3u', { force: true });
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('gives up on a playlist that never answers', async () => {
+    vi.useFakeTimers();
+    try {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          (_url: string, init: RequestInit) =>
+            new Promise((_resolve, reject) =>
+              init.signal?.addEventListener('abort', () =>
+                reject(new DOMException('aborted', 'AbortError')),
+              ),
+            ),
+        ),
+      );
+      const p = loadChannels('https://d.example/slow');
+      const check = expect(p).rejects.toThrow('no answer in 15 s');
+      await vi.advanceTimersByTimeAsync(15_000);
+      await check;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('reports HTTP and network errors and does not cache them', async () => {

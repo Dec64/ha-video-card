@@ -38,6 +38,7 @@ export class StreamController {
   readonly version = VERSION;
   readonly power: PowerState = { screenOn: true, screensaver: false };
   private pending = new Map<string, Pending>();
+  private stops = new Map<string, number>();
   private last = new Map<string, StreamRequest>();
   private cards = new Set<ControllerCard>();
   private installed = false;
@@ -108,9 +109,15 @@ export class StreamController {
     return this.last.get(target);
   }
 
+  /** How many stops a target has had; a card that was off the page compares it on return. */
+  stopCount(target: string): number {
+    return this.stops.get(target) ?? 0;
+  }
+
   stop(target: string): void {
     this.pending.delete(target);
     this.last.delete(target);
+    this.stops.set(target, this.stopCount(target) + 1);
     rememberStopped(target);
     for (const card of this.cards) if (card.target === target) card.stopFromController();
   }

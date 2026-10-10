@@ -112,6 +112,16 @@ export class ChannelList {
     return this.channels.length;
   }
 
+  /** Channels in the playlist before the group filter. */
+  get total(): number {
+    return this.all.length;
+  }
+
+  /** Every group in the playlist, in playlist order, ignoring the group filter. */
+  get allGroups(): string[] {
+    return [...new Set(this.all.map((c) => c.group).filter((g): g is string => !!g))];
+  }
+
   /** Finds a channel by ID/UUID, channel number or name (case-insensitive), across all groups. */
   find(ref: string | undefined): Channel | undefined {
     if (!ref) return undefined;
@@ -158,6 +168,8 @@ interface CacheEntry {
 
 const cache = new Map<string, CacheEntry>();
 const TTL_MS = 10 * 60_000;
+/** A Dispatcharr that accepts the request but never answers must not leave the picker loading. */
+const TIMEOUT_MS = 15_000;
 
 export class ChannelListError extends Error {
   override name = 'ChannelListError';
@@ -168,14 +180,19 @@ export function loadChannels(url: string, { force = false } = {}): Promise<Chann
   const hit = cache.get(url);
   if (hit && !force && Date.now() - hit.at < TTL_MS) return hit.promise;
   const promise = (async () => {
-    let res: Response;
+    const ac = new AbortController();
+    const timer = setTimeout(() => ac.abort(), TIMEOUT_MS);
     try {
-      res = await fetch(url, { cache: 'no-store' });
+      const res = await fetch(url, { cache: 'no-store', signal: ac.signal });
+      if (!res.ok) throw new ChannelListError(`HTTP ${res.status}`);
+      return parseM3u(await res.text());
     } catch (err) {
+      if (err instanceof ChannelListError) throw err;
+      if (ac.signal.aborted) throw new ChannelListError(`no answer in ${TIMEOUT_MS / 1000} s`);
       throw new ChannelListError(`network error: ${err instanceof Error ? err.message : err}`);
+    } finally {
+      clearTimeout(timer);
     }
-    if (!res.ok) throw new ChannelListError(`HTTP ${res.status}`);
-    return parseM3u(await res.text());
   })();
   cache.set(url, { at: Date.now(), promise });
   promise.catch(() => {

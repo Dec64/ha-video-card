@@ -46,7 +46,7 @@ export const DASHBOARD = {
               name: 'HA button: play A in pop-up',
               icon: 'mdi:television',
               show_state: false,
-              tap_action: play('tv_test', 'ok--ha-a', 'Channel A', '#tv-test'),
+              tap_action: play('tv_test', 'ok--m3u-4', 'Channel A', '#tv-test'),
             },
             {
               // Bubble buttons: tap_action is the icon, button_action the body.
@@ -56,8 +56,8 @@ export const DASHBOARD = {
               name: 'Bubble button: play B in pop-up',
               icon: 'mdi:television-play',
               card_layout: 'large',
-              tap_action: play('tv_test', 'ok--ha-b', 'Channel B', '#tv-test'),
-              button_action: { tap_action: play('tv_test', 'ok--ha-b', 'Channel B', '#tv-test') },
+              tap_action: play('tv_test', 'ok--m3u-5', 'Channel B', '#tv-test'),
+              button_action: { tap_action: play('tv_test', 'ok--m3u-5', 'Channel B', '#tv-test') },
             },
             {
               // Channel by name, looked up in the pop-up card's channel list.
@@ -86,7 +86,7 @@ export const DASHBOARD = {
               name: 'Play C on page card',
               icon: 'mdi:play',
               show_state: false,
-              tap_action: play('page', 'ok--ha-c', 'Channel C'),
+              tap_action: play('page', 'ok--m3u-6', 'Channel C'),
             },
           ],
         },

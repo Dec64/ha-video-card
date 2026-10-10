@@ -1,4 +1,5 @@
 import AxeBuilder from '@axe-core/playwright';
+import type { Locator } from '@playwright/test';
 import { expect, STREAM, test, type Harness } from './fixtures';
 
 /**
@@ -29,6 +30,15 @@ async function ctl(h: Harness, cls: string) {
     await h.frame().click({ position: { x: 50, y: 50 } });
   }
   await h.frame().locator(`button.${cls}`).click();
+}
+
+/** ctl() for a card other than the first. */
+async function ctlIn(h: Harness, sel: string, cls: string) {
+  const controls = h.frame(sel).locator('.controls');
+  if (await controls.evaluate((el) => el.classList.contains('hidden'))) {
+    await h.frame(sel).click({ position: { x: 50, y: 50 } });
+  }
+  await h.frame(sel).locator(`button.${cls}`).click();
 }
 
 async function shot(h: Harness, name: string) {
@@ -104,10 +114,8 @@ test('switching from the picker and channel up/down never holds two connections'
   let sampling = true;
   const sampler = (async () => {
     while (sampling) {
-      let sum = 0;
-      for (const id of ids) sum += (await h.stats(id)).open;
-      samples.push(sum);
-      await h.page.waitForTimeout(100);
+      samples.push(await h.openSum(ids));
+      await h.page.waitForTimeout(50);
     }
   })();
 
@@ -267,4 +275,244 @@ test('in full screen the picker opens over the picture', async ({ h }) => {
   await overlay.getByRole('button', { name: '102 Movies Plus', exact: true }).click();
   await h.expectOpen(pl.id(2), 1);
   await expect(overlay).toHaveCount(0);
+});
+
+test('a name or number set while in edit mode is looked up when edit mode ends', async ({ h }) => {
+  await h.load();
+  const pl = playlist(h);
+  for (const [id, channel] of [
+    ['num', '102'],
+    ['name', 'Kids Time'],
+  ]) {
+    await h.page.evaluate(
+      ([url, base, cid, ch]) => {
+        const card = document.createElement('stream-card') as HTMLElement & {
+          editMode: boolean;
+          setConfig(c: unknown): void;
+        };
+        card.id = cid;
+        card.editMode = true;
+        card.setConfig({
+          type: 'custom:stream-card',
+          dispatcharr_url: base,
+          m3u_url: url,
+          channel: ch,
+        });
+        document.getElementById('view')!.appendChild(card);
+      },
+      [pl.m3u_url, STREAM, id, channel] as const,
+    );
+    await h.expectUi('preview', `#${id}`);
+  }
+  await h.page.waitForTimeout(500);
+  expect((await h.stats(pl.statsKey)).total).toBe(0);
+  await h.page.evaluate(() =>
+    document
+      .querySelectorAll('stream-card')
+      .forEach((c) => ((c as HTMLElement & { editMode: boolean }).editMode = false)),
+  );
+  await h.expectOpen(pl.id(2), 1);
+  await h.expectOpen(pl.id(5), 1);
+  // Never the raw reference as a stream ID.
+  expect((await h.stats('102')).total).toBe(0);
+  expect((await h.stats('Kids Time')).total).toBe(0);
+});
+
+test('a stop while a channel name is still being looked up wins', async ({ h }) => {
+  await h.load();
+  const pl = playlist(h, { delay: 1500 });
+  await h.mount({ m3u_url: pl.m3u_url, target: 'tv', remember_channel: true });
+  await (await h.button('Kids', { target: 'tv', channel: 'Kids Time' })).click();
+  // While the list loads the card says it's connecting, not "choose a channel".
+  await h.expectUi('connecting');
+  await expect(picker(h)).toHaveCount(0);
+  await (await h.button('Stop', { target: 'tv', action: 'stop' })).click();
+  await expect.poll(async () => (await h.info()).ui).toBe('ready');
+  await expect(picker(h).locator('.tile')).toHaveCount(0);
+  await h.page.waitForTimeout(2500);
+  expect((await h.stats(pl.id(5))).total).toBe(0);
+  const saved = await h.page.evaluate(() => localStorage.getItem('stream-card:last:tv'));
+  expect(JSON.parse(saved ?? '{}').playing).toBe(false);
+});
+
+test('HA re-sending the config during a lookup keeps autoplay', async ({ h }) => {
+  await h.load();
+  const pl = playlist(h, { delay: 1200 });
+  const cfg = {
+    type: 'custom:stream-card',
+    dispatcharr_url: STREAM,
+    m3u_url: pl.m3u_url,
+    channel: 'Kids Time',
+  };
+  await h.mount(cfg);
+  await h.expectUi('connecting');
+  await h.page.evaluate(
+    (c) =>
+      (
+        document.querySelector('stream-card') as HTMLElement & { setConfig(c: unknown): void }
+      ).setConfig(c),
+    cfg,
+  );
+  await h.expectOpen(pl.id(5), 1);
+});
+
+test('a recreated card resumes the picked channel, and stays stopped after Stop', async ({ h }) => {
+  await h.load();
+  const pl = playlist(h);
+  const cfg = { m3u_url: pl.m3u_url, target: 'tv' };
+  await h.mount(cfg, { id: 'one' });
+  await (await h.button('Button 1', { target: 'tv', channel: pl.id(1) })).click();
+  await h.expectOpen(pl.id(1), 1);
+  await ctlIn(h, '#one', 'ctl-channels');
+  await tile(h, '103 Sports Live HD', '#one').click();
+  await h.expectOpen(pl.id(3), 1);
+  await h.page.evaluate(() => document.getElementById('one')!.remove());
+  await h.expectOpen(pl.id(3), 0, 2000);
+  await h.mount(cfg, { id: 'two' });
+  await h.expectOpen(pl.id(3), 1);
+  expect((await h.stats(pl.id(1))).open).toBe(0);
+
+  await ctlIn(h, '#two', 'ctl-stop');
+  await h.expectOpen(pl.id(3), 0, 2000);
+  const before = (await h.stats(pl.id(3))).total;
+  await h.page.evaluate(() => document.getElementById('two')!.remove());
+  await h.mount(cfg, { id: 'three' });
+  await h.expectUi('ready', '#three');
+  await h.page.waitForTimeout(1000);
+  expect((await h.stats(pl.id(3))).total).toBe(before);
+});
+
+test('a stop button pressed while the pop-up is closed still applies when it reopens', async ({
+  h,
+}) => {
+  await h.load();
+  const pl = playlist(h);
+  await h.mount({ m3u_url: pl.m3u_url, target: 'pop' }, { where: '#pop', id: 'pop' });
+  await (await h.button('Play', { target: 'pop', channel: 'News Two', open: '#pop' })).click();
+  await h.expectOpen(pl.id(4), 1);
+  await h.page.evaluate(() => window.harness.closePopup());
+  await h.expectOpen(pl.id(4), 0, 2000);
+  await (await h.button('Stop', { target: 'pop', action: 'stop' })).click();
+  const before = (await h.stats(pl.id(4))).total;
+  await h.page.evaluate(() => window.harness.openHash('#pop'));
+  await expect(h.page.locator('#pop')).toBeAttached();
+  await h.expectUi('ready', '#pop');
+  await h.page.waitForTimeout(1500);
+  expect((await h.stats(pl.id(4))).total).toBe(before);
+});
+
+test('unknown names say so, even one-word names', async ({ h }) => {
+  await h.load();
+  const pl = playlist(h);
+  await h.mount({ m3u_url: pl.m3u_url, target: 'tv' });
+  await expect(picker(h).locator('.tile')).toHaveCount(6);
+  await (await h.button('Typo', { target: 'tv', channel: 'Kidz' })).click();
+  await h.expectUi('error');
+  await expect(h.frame().locator('[role=alert]')).toContainText('No channel called "Kidz"');
+  expect((await h.stats('Kidz')).total).toBe(0);
+  // The error offers the channel list.
+  await h.frame().locator('button.channels').click();
+  await tile(h, '101 News One HD').click();
+  await h.expectOpen(pl.id(1), 1);
+});
+
+test('channel_groups that match nothing name the real groups', async ({ h }) => {
+  await h.load();
+  const pl = playlist(h);
+  await h.mount({ m3u_url: pl.m3u_url, channel_groups: ['Sports'] });
+  await expect(picker(h)).toContainText(
+    'None of the channel_groups match a Dispatcharr group. Groups in Dispatcharr: News, Entertainment, Sport.',
+  );
+});
+
+test('logos stay visible as tiles are filtered; Escape clears the search, not the pop-up', async ({
+  h,
+}) => {
+  await h.load();
+  const pl = playlist(h);
+  await h.mount({ m3u_url: pl.m3u_url });
+  const p = picker(h);
+  await p.locator('.chip', { hasText: 'Sport' }).click();
+  await expect(p.locator('.tile .name').first()).toHaveText('Sports Live HD');
+  await p.locator('.chip', { hasText: 'News' }).click();
+  const logo = tile(h, '101 News One HD').locator('img.logo');
+  await expect(logo).toBeVisible();
+  await expect(logo).not.toHaveClass(/missing/);
+
+  await h.page.evaluate(() => {
+    (window as unknown as { escapes: number }).escapes = 0;
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') (window as unknown as { escapes: number }).escapes++;
+    });
+  });
+  const search = p.getByRole('searchbox');
+  await search.fill('news');
+  await search.press('Escape');
+  await expect(search).toHaveValue('');
+  await expect(p.locator('.tile')).toHaveCount(2); // the News group is still selected
+  expect(await h.page.evaluate(() => (window as unknown as { escapes: number }).escapes)).toBe(0);
+});
+
+test('focus moves to the Channels button after picking from the keyboard', async ({ h }) => {
+  await h.load();
+  const pl = playlist(h);
+  await h.mount({ m3u_url: pl.m3u_url });
+  await tile(h, '102 Movies Plus').focus();
+  await h.page.keyboard.press('Enter');
+  await h.expectOpen(pl.id(2), 1);
+  await expect
+    .poll(() =>
+      h.page.evaluate(
+        () => document.querySelector('stream-card')!.shadowRoot!.activeElement?.className,
+      ),
+    )
+    .toContain('ctl-channels');
+});
+
+test('entering full screen closes an open channel panel', async ({ h }) => {
+  await h.load();
+  const pl = playlist(h);
+  await h.mount({ m3u_url: pl.m3u_url, channel: '101' });
+  await h.expectUi('playing');
+  await ctl(h, 'ctl-channels');
+  await expect(picker(h)).toBeVisible();
+  await ctl(h, 'ctl-fullscreen');
+  await expect(h.frame().locator('button.ctl-fullscreen')).toHaveAttribute(
+    'aria-label',
+    'Exit full screen',
+  );
+  await expect(picker(h)).toHaveCount(0);
+});
+
+test.describe('at phone width', () => {
+  test.use({ viewport: { width: 360, height: 740 } });
+
+  /** Whether taps across the lower part of a button reach it, not something drawn over it. */
+  function reachable(el: Locator): Promise<boolean> {
+    return el.evaluate((node) => {
+      const r = node.getBoundingClientRect();
+      const root = node.getRootNode() as ShadowRoot;
+      return [0.2, 0.5, 0.8].every((f) => {
+        const hit = root.elementFromPoint(r.left + r.width * f, r.top + r.height * 0.75);
+        return !!hit && (hit === node || node.contains(hit));
+      });
+    });
+  }
+
+  test('Retry and Tap to unmute are not covered by the control row', async ({ h }) => {
+    await h.page.evaluate(() => (window.__mseShimBlockUnmuted = true));
+    await h.load();
+    const pl = playlist(h, { modes: 'status-404,ok' });
+    await h.mount({ m3u_url: pl.m3u_url, channel: '101', target: 'a' }, { id: 'a' });
+    await h.expectUi('error', '#a');
+    await expect(h.frame('#a').locator('button.channels')).toBeVisible();
+    expect(await reachable(h.frame('#a').locator('button.retry'))).toBe(true);
+    await h.page.evaluate(() => document.getElementById('a')!.remove());
+
+    await h.mount({ m3u_url: pl.m3u_url, channel: '102', target: 'b' }, { id: 'b' });
+    await h.expectUi('playing', '#b');
+    await expect(h.frame('#b').locator('.controls')).not.toHaveClass(/hidden/);
+    await expect(h.frame('#b').locator('.controls button')).toHaveCount(6);
+    expect(await reachable(h.frame('#b').locator('button.unmute'))).toBe(true);
+  });
 });

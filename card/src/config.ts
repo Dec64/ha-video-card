@@ -157,6 +157,9 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     favourites: optionalStringList(raw, 'favourites'),
     rememberChannel: optionalBool(raw, 'remember_channel', true),
   };
+  if (resolved.channelList && !resolved.m3uUrl) {
+    throw new ConfigError('"channel_list" needs "dispatcharr_url" or "m3u_url"');
+  }
   // Names and numbers are looked up in the channel list later; IDs are checked now.
   const ch = defaultRequest?.channel;
   if (defaultRequest && ch && !(resolved.channelList && !isUuid(ch))) {

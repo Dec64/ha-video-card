@@ -131,10 +131,10 @@ interface EngineError {
 ```
 
 ### Controller (one per page, on `window.__streamCard`)
-`request(req)`, `take(target)`, `lastFor(target)`, `stop(target)`, `register(card)`, `unregister(card)`, `onFullyEvent(name)`. Pending requests expire after 30 s. `lastFor` lets a recreated card resume its target's last channel. Requests without a target go to `default`.
+`request(req)`, `take(target)`, `lastFor(target)`, `stop(target)`, `stopCount(target)`, `register(card)`, `unregister(card)`, `onFullyEvent(name)`. Pending requests expire after 30 s. `lastFor` lets a recreated card resume its target's last channel. Requests without a target go to `default`. `stop` also marks the target stopped in each device's channel memory, and `stopCount` lets a card that was off the page (a closed Bubble pop-up) notice a stop it missed. The card's own channel picks and up/down go through `request`, and its Stop button and idle timeout through `stop`, so `lastFor` and the memory always follow the latest choice.
 
 ### Channel list (added in 1.0)
-`card/src/channels.ts`: `loadChannels(m3uUrl)` fetches and parses Dispatcharr's M3U once per page (10-minute cache); `ChannelList` filters by group, orders by channel number and finds a channel by UUID, number or name (case-insensitive). The card resolves names and numbers to the stream UUID before building the URL, so playback, the mailbox and the release rules are unchanged. Order on connect: pending button request, then the controller's `lastFor`, then the remembered channel (`localStorage['stream-card:last:<target>']`), then `channel`.
+`card/src/channels.ts`: `loadChannels(m3uUrl)` fetches and parses Dispatcharr's M3U once per page (10-minute cache); `ChannelList` filters by group, orders by channel number and finds a channel by UUID, number or name (case-insensitive). The card resolves names and numbers to the stream UUID before building the URL, so playback, the mailbox and the release rules are unchanged. With the list loaded, a name that isn't in it is an error (never guessed as a stream ID); in edit mode the lookup waits until edit mode ends. The playlist download times out after 15 s. Order on connect: pending button request, then the controller's `lastFor`, then the remembered channel (`localStorage['stream-card:last:<target>']`), then `channel`.
 
 ## 5. Tasks
 

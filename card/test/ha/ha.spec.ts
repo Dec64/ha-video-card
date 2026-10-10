@@ -12,25 +12,25 @@ test("an HA button opens the Bubble pop-up and plays; Bubble's close button rele
   await page.goto(DASH);
   await page.getByText('HA button: play A in pop-up').click();
   await expect(page).toHaveURL(/#tv-test/);
-  await expectOpen(page, 'ok--ha-a', 1, 15_000);
-  expect((await stats(page, 'ok--ha-a')).queries.at(-1)).toEqual({ output_profile: '2' });
+  await expectOpen(page, 'ok--m3u-4', 1, 15_000);
+  expect((await stats(page, 'ok--m3u-4')).queries.at(-1)).toEqual({ output_profile: '2' });
   await expect
     .poll(async () => (await cardInfo(page.locator('stream-card').last())).ui)
     .toBe('playing');
   await page.locator('.bubble-close-button').first().click();
-  await expectOpen(page, 'ok--ha-a', 0);
+  await expectOpen(page, 'ok--m3u-4', 0);
 });
 
 test('back closes the pop-up and releases; forward reopens and resumes', async ({ page }) => {
   await page.goto(DASH);
   await page.getByText('HA button: play A in pop-up').click();
-  await expectOpen(page, 'ok--ha-a', 1, 15_000);
+  await expectOpen(page, 'ok--m3u-4', 1, 15_000);
   await page.goBack();
-  await expectOpen(page, 'ok--ha-a', 0);
+  await expectOpen(page, 'ok--m3u-4', 0);
   await page.goForward();
-  await expectOpen(page, 'ok--ha-a', 1, 15_000);
+  await expectOpen(page, 'ok--m3u-4', 1, 15_000);
   await page.goBack();
-  await expectOpen(page, 'ok--ha-a', 0);
+  await expectOpen(page, 'ok--m3u-4', 0);
 });
 
 test('a Bubble button (body and icon) plays a different channel in the pop-up', async ({
@@ -38,47 +38,52 @@ test('a Bubble button (body and icon) plays a different channel in the pop-up', 
 }) => {
   await page.goto(DASH);
   await page.getByText('HA button: play A in pop-up').click();
-  await expectOpen(page, 'ok--ha-a', 1, 15_000);
+  await expectOpen(page, 'ok--m3u-4', 1, 15_000);
   await page.locator('.bubble-close-button').first().click();
-  await expectOpen(page, 'ok--ha-a', 0);
+  await expectOpen(page, 'ok--m3u-4', 0);
   const bubbleBtn = page
     .locator('bubble-card')
     .filter({ hasText: 'Bubble button: play B in pop-up' });
   await bubbleBtn.locator('.bubble-button-background').click();
-  await expectOpen(page, 'ok--ha-b', 1, 15_000);
-  expect((await stats(page, 'ok--ha-a')).open).toBe(0);
+  await expectOpen(page, 'ok--m3u-5', 1, 15_000);
+  expect((await stats(page, 'ok--m3u-4')).open).toBe(0);
   await page.locator('.bubble-close-button').first().click();
-  await expectOpen(page, 'ok--ha-b', 0);
+  await expectOpen(page, 'ok--m3u-5', 0);
   await bubbleBtn.locator('.bubble-icon-container').click();
-  await expectOpen(page, 'ok--ha-b', 1, 15_000);
+  await expectOpen(page, 'ok--m3u-5', 1, 15_000);
   await page.locator('.bubble-close-button').first().click();
-  await expectOpen(page, 'ok--ha-b', 0);
+  await expectOpen(page, 'ok--m3u-5', 0);
 });
 
 test('a stop button clears the target, so reopening the pop-up stays stopped', async ({ page }) => {
   await page.goto(DASH);
   await page.getByText('HA button: play A in pop-up').click();
-  await expectOpen(page, 'ok--ha-a', 1, 15_000);
+  await expectOpen(page, 'ok--m3u-4', 1, 15_000);
   await page.locator('.bubble-close-button').first().click();
-  await expectOpen(page, 'ok--ha-a', 0);
+  await expectOpen(page, 'ok--m3u-4', 0);
   await page.getByText('Stop pop-up').click();
-  const before = (await stats(page, 'ok--ha-a')).total;
+  const before = (await stats(page, 'ok--m3u-4')).total;
   await page.evaluate(() => {
     history.pushState(null, '', location.href.split('#')[0] + '#tv-test');
     window.dispatchEvent(new CustomEvent('location-changed'));
   });
+  // The pop-up really is open again, with the same card, and it stays stopped.
+  const card = page.locator('stream-card').last();
+  await expect.poll(async () => (await cardInfo(card))?.target).toBe('tv_test');
+  await expect.poll(async () => (await cardInfo(card)).ui).toBe('ready');
   await page.waitForTimeout(3000);
-  expect((await stats(page, 'ok--ha-a')).total).toBe(before);
+  expect((await stats(page, 'ok--m3u-4')).total).toBe(before);
+  await page.locator('.bubble-close-button').first().click();
 });
 
 test('switching dashboard view releases the page card; coming back resumes', async ({ page }) => {
   await page.goto(DASH);
   await page.getByText('Play C on page card').click();
-  await expectOpen(page, 'ok--ha-c', 1, 15_000);
+  await expectOpen(page, 'ok--m3u-6', 1, 15_000);
   await page.getByRole('tab', { name: 'Other' }).click();
-  await expectOpen(page, 'ok--ha-c', 0);
+  await expectOpen(page, 'ok--m3u-6', 0);
   await page.getByRole('tab', { name: 'Main' }).click();
-  await expectOpen(page, 'ok--ha-c', 1, 15_000);
+  await expectOpen(page, 'ok--m3u-6', 1, 15_000);
 });
 
 test('dashboard edit mode stops playback and the card editor preview never connects', async ({
@@ -86,10 +91,10 @@ test('dashboard edit mode stops playback and the card editor preview never conne
 }) => {
   await page.goto(DASH);
   await page.getByText('Play C on page card').click();
-  await expectOpen(page, 'ok--ha-c', 1, 15_000);
-  const before = (await stats(page, 'ok--ha-c')).total;
+  await expectOpen(page, 'ok--m3u-6', 1, 15_000);
+  const before = (await stats(page, 'ok--m3u-6')).total;
   await page.getByRole('button', { name: /edit dashboard/i }).click();
-  await expectOpen(page, 'ok--ha-c', 0, 8000);
+  await expectOpen(page, 'ok--m3u-6', 0, 8000);
   // Sections views wrap each card in hui-card-edit-mode: clicking the card opens its editor.
   await page
     .locator('hui-card-edit-mode')
@@ -101,8 +106,8 @@ test('dashboard edit mode stops playback and the card editor preview never conne
     page.locator('hui-card-preview stream-card, ha-dialog stream-card').first(),
   ).toContainText('playback is off while editing');
   await page.waitForTimeout(3000);
-  expect((await stats(page, 'ok--ha-c')).open).toBe(0);
-  expect((await stats(page, 'ok--ha-c')).total).toBe(before);
+  expect((await stats(page, 'ok--m3u-6')).open).toBe(0);
+  expect((await stats(page, 'ok--m3u-6')).total).toBe(before);
 });
 
 test('the visual editor shows the card options as a form', async ({ page }) => {
@@ -160,8 +165,8 @@ test('a Bubble button plays a channel by name in the pop-up', async ({ page }) =
 test('constant HA state changes never restart playback', async ({ page }) => {
   await page.goto(DASH);
   await page.getByText('Play C on page card').click();
-  await expectOpen(page, 'ok--ha-c', 1, 15_000);
-  const before = (await stats(page, 'ok--ha-c')).total;
+  await expectOpen(page, 'ok--m3u-6', 1, 15_000);
+  const before = (await stats(page, 'ok--m3u-6')).total;
   for (let i = 0; i < 60; i++) {
     await page.request.post('http://127.0.0.1:8123/api/states/sensor.churn', {
       headers: { authorization: `Bearer ${tokens().access_token}` },
@@ -169,8 +174,8 @@ test('constant HA state changes never restart playback', async ({ page }) => {
     });
   }
   await page.waitForTimeout(2000);
-  expect((await stats(page, 'ok--ha-c')).total).toBe(before);
-  expect((await stats(page, 'ok--ha-c')).open).toBe(1);
+  expect((await stats(page, 'ok--m3u-6')).total).toBe(before);
+  expect((await stats(page, 'ok--m3u-6')).open).toBe(1);
 });
 
 test('the card is offered in the card picker', async ({ page }) => {

@@ -56,6 +56,18 @@ export const styles = css`
   .layer.dim {
     background: rgba(0, 0, 0, 0.55);
   }
+  /* Keep centred content clear of the control row along the bottom. */
+  .frame[data-state='ready'] .layer,
+  .frame[data-state='connecting'] .layer,
+  .frame[data-state='reconnecting'] .layer {
+    padding-bottom: 60px;
+  }
+  .actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+  }
   .message {
     max-width: 36em;
     font-size: 14px;
@@ -177,7 +189,8 @@ export const styles = css`
   .unmute {
     position: absolute;
     left: 10px;
-    bottom: 10px;
+    /* Above the control row, which can reach across a narrow card. */
+    bottom: 60px;
   }
   .notice {
     position: absolute;

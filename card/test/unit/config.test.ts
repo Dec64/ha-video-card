@@ -191,6 +191,13 @@ describe('channel list options', () => {
 
   it('rejects bad values', () => {
     expect(() => normalizeConfig({ ...base, m3u_url: 'not a url' })).toThrow(ConfigError);
+    expect(() =>
+      normalizeConfig({
+        type: 'custom:stream-card',
+        channel_list: true,
+        url_template: 'http://x.example/{channel}',
+      }),
+    ).toThrow('"channel_list" needs "dispatcharr_url" or "m3u_url"');
     expect(() => normalizeConfig({ ...base, favourites: [{ a: 1 }] })).toThrow(ConfigError);
   });
 

@@ -43,12 +43,17 @@ export class Harness {
     await this.page.evaluate((p) => window.harness.load(p), opts.path);
   }
 
+  /**
+   * Mounts a card. Tests that don't set channel_list or m3u_url get channel_list: false, so
+   * their made-up channel IDs take the direct path that real Dispatcharr UUIDs take.
+   */
   async mount(config: Record<string, unknown>, opts: { where?: string; id?: string } = {}) {
+    const list = 'channel_list' in config || 'm3u_url' in config ? {} : { channel_list: false };
     await this.page.evaluate(
       ([c, o]) => {
         window.harness.mount(c, o);
       },
-      [{ dispatcharr_url: STREAM, ...config }, opts] as const,
+      [{ dispatcharr_url: STREAM, ...list, ...config }, opts] as const,
     );
   }
 
@@ -63,6 +68,13 @@ export class Harness {
   async stats(ch: string): Promise<ChannelStats> {
     const r = await this.page.request.get(`${STREAM}/__stats?channel=${encodeURIComponent(ch)}`);
     return r.json();
+  }
+
+  /** Open connections across these channels, from one snapshot of the server's counters. */
+  async openSum(chs: string[]): Promise<number> {
+    const r = await this.page.request.get(`${STREAM}/__stats`);
+    const all = (await r.json()) as Record<string, ChannelStats>;
+    return chs.reduce((n, ch) => n + (all[ch]?.open ?? 0), 0);
   }
 
   async expectOpen(ch: string, n: number, timeout = 5000): Promise<void> {

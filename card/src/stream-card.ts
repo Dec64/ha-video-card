@@ -4,7 +4,6 @@ import { ConfigError, isUuid, needsLookup, normalizeConfig, resolveSource } from
 import { VERSION } from './const';
 import { getController, type ControllerCard, type StreamController } from './controller';
 import { format, type PlaybackError } from './errors';
-import { configForm } from './editor-form';
 import { icon } from './icons';
 import { readRemembered, writeRemembered } from './memory';
 import type { PickerState } from './picker';
@@ -73,6 +72,12 @@ export class StreamCard extends LitElement implements ControllerCard {
   private channelsKey?: string;
   private pickerOpen = false;
   private requestSeq = 0;
+  /** A channel name or number is waiting for the channel list. */
+  private lookupPending = false;
+  /** Whether that pending channel should play once found; a stop clears it. */
+  private lookupPlay = false;
+  /** The controller's stop count for this target when this card last took a request or stop. */
+  private stopGen?: number;
 
   constructor() {
     super();
@@ -114,13 +119,15 @@ export class StreamCard extends LitElement implements ControllerCard {
       this.channelsKey = key;
       if (this.isConnected) this.ensureChannels();
     }
-    if (this.request) this.applyRequest(this.request, this.wantPlaying);
-    else if (this.isConnected) this.pickInitialRequest();
+    if (this.request) {
+      this.applyRequest(this.request, this.lookupPending ? this.lookupPlay : this.wantPlaying);
+    } else if (this.isConnected) this.pickInitialRequest();
     this.refresh();
   }
 
-  static getConfigForm() {
-    return configForm;
+  /** HA's visual editor form; loaded only when the editor opens. */
+  static async getConfigForm() {
+    return (await import('./editor-form')).configForm;
   }
 
   set hass(_hass: unknown) {
@@ -155,6 +162,8 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   stopFromController(): void {
     this.wantPlaying = false;
+    this.lookupPlay = false;
+    this.stopGen = this.controller.stopCount(this.target);
     this.remember();
     this.evaluate();
   }
@@ -173,6 +182,10 @@ export class StreamCard extends LitElement implements ControllerCard {
     document.addEventListener('fullscreenchange', this.onFullscreenChange);
     document.addEventListener('webkitfullscreenchange', this.onFullscreenChange);
     this.pickInitialRequest();
+    // A stop button pressed while this card was off the page (a closed pop-up) still counts.
+    if (this.stopGen !== undefined && this.stopGen !== this.controller.stopCount(this.target)) {
+      this.stopFromController();
+    }
     this.ensureChannels();
     if (this.config?.debug) this.debugTimer = setInterval(() => this.refresh(), 1000);
     this.evaluate();
@@ -195,6 +208,10 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   protected override updated(changed: PropertyValues): void {
     if (changed.has('preview') || changed.has('editMode')) {
+      // A name or number that arrived during edit mode is looked up now.
+      if (!this.isPreview && this.lookupPending && this.request) {
+        this.applyRequest(this.request, this.lookupPlay);
+      }
       this.ensureChannels();
       this.evaluate();
     }
@@ -222,7 +239,11 @@ export class StreamCard extends LitElement implements ControllerCard {
         if (key !== this.channelListKey()) return undefined;
         this.channels = new ChannelList(all, { groups: c.channelGroups, favourites: c.favourites });
         this.channelState = 'ready';
-        this.channelMessage = this.channels.size ? undefined : format('noChannels');
+        this.channelMessage = this.channels.size
+          ? undefined
+          : this.channels.total
+            ? format('noGroupMatch', { groups: this.channels.allGroups.join(', ') })
+            : format('noChannels');
         this.refresh();
         return this.channels;
       },
@@ -283,28 +304,35 @@ export class StreamCard extends LitElement implements ControllerCard {
   private applyRequest(req: StreamRequest, play: boolean): void {
     if (!this.config) return;
     const seq = ++this.requestSeq;
+    this.stopGen = this.controller.stopCount(this.target);
     const ref = req.channel;
-    if (ref && !req.url && !isUuid(ref) && this.config.channelList && !this.isPreview) {
-      // A channel name or number: find its stream ID in the channel list first.
+    this.lookupPending = false;
+    if (ref && !req.url && !isUuid(ref) && this.config.channelList) {
+      // A channel name or number: find its stream ID in the channel list first. In edit mode
+      // the list isn't loaded, so the lookup waits until edit mode ends (see updated()).
       this.request = req;
       this.idleStopped = false;
+      this.lookupPending = true;
+      this.lookupPlay = play;
+      this.refresh();
+      if (this.isPreview) return;
       void this.ensureChannels().then((list) => {
         if (seq !== this.requestSeq) return;
+        this.lookupPending = false;
+        const go = this.lookupPlay;
         const ch = list?.find(ref);
-        if (ch) this.applyResolved(this.requestFor(ch, req), play);
-        // Not in the list but shaped like a stream ID: try it as one.
-        else if (!needsLookup(ref)) this.applyResolved(req, play);
-        else
-          this.showRequestError(
-            list ? format('channelNotFound', { name: ref }) : this.channelMessage,
-          );
+        if (ch) this.applyResolved(this.requestFor(ch, req), go);
+        else if (list) this.showRequestError(format('channelNotFound', { name: ref }));
+        // No list to look in: something shaped like a stream ID is tried as one.
+        else if (!needsLookup(ref)) this.applyResolved(req, go);
+        else this.showRequestError(this.channelMessage ?? format('channelNotFound', { name: ref }));
       });
       return;
     }
     this.applyResolved(req, play);
   }
 
-  private showRequestError(message = format('channelNotFound', { name: '' })): void {
+  private showRequestError(message: string): void {
     this.stopSession('config');
     this.source = undefined;
     this.error = { kind: 'config', message, detail: message };
@@ -413,11 +441,11 @@ export class StreamCard extends LitElement implements ControllerCard {
   }
 
   private onIdle(): void {
-    this.wantPlaying = false;
-    this.remember();
+    // Like a stop button: a recreated card or a reload doesn't restart it either.
+    this.controller.stop(this.target);
     this.idleStopped = true;
-    this.evaluate();
     this.lastRelease = 'idle';
+    this.refresh();
   }
 
   // ---- user actions ----
@@ -430,6 +458,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     }
     this.error = undefined;
     this.idleStopped = false;
+    this.stopGen = this.controller.stopCount(this.target);
     if (this.request && !this.source) this.applyRequest(this.request, true);
     this.wantPlaying = true;
     this.remember();
@@ -439,9 +468,30 @@ export class StreamCard extends LitElement implements ControllerCard {
   private onPick = (e: Event): void => {
     e.stopPropagation();
     const ch = (e as CustomEvent<Channel>).detail;
+    const hadFocus = this.pickerHasFocus();
     this.pickerOpen = false;
-    this.applyRequest(this.requestFor(ch, { target: this.target }), true);
+    this.playChannel(ch);
+    if (hadFocus) this.restoreFocus();
   };
+
+  /** Plays a channel the way a button would, so the target's last channel follows it. */
+  private playChannel(ch: Channel): void {
+    this.controller.request(this.requestFor(ch, { target: this.target }));
+  }
+
+  private pickerHasFocus(): boolean {
+    return (this.renderRoot as ShadowRoot).activeElement?.tagName === 'STREAM-CARD-PICKER';
+  }
+
+  /** The picker is about to disappear while focused: move focus to the Channels button. */
+  private restoreFocus(): void {
+    void this.updateComplete.then(() => {
+      const target =
+        this.renderRoot.querySelector<HTMLElement>('.ctl-channels') ??
+        this.renderRoot.querySelector<HTMLElement>('.frame');
+      target?.focus();
+    });
+  }
 
   private togglePicker = (e?: Event): void => {
     e?.stopPropagation();
@@ -452,8 +502,10 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   private closePicker = (e?: Event): void => {
     e?.stopPropagation();
+    const hadFocus = this.pickerHasFocus();
     this.pickerOpen = false;
     this.refresh();
+    if (hadFocus) this.restoreFocus();
   };
 
   private retryChannels = (e?: Event): void => {
@@ -463,7 +515,7 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   private channelStep(delta: 1 | -1): void {
     const ch = this.channels?.neighbour(this.currentChannel?.id, delta);
-    if (ch) this.applyRequest(this.requestFor(ch, { target: this.target }), true);
+    if (ch) this.playChannel(ch);
     this.showControls();
   }
 
@@ -477,11 +529,10 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.channelStep(-1);
   };
 
+  /** Stops the target like a stop button, so a recreated card or a reload stays stopped. */
   private stop = (e?: Event): void => {
     e?.stopPropagation();
-    this.wantPlaying = false;
-    this.remember();
-    this.evaluate();
+    this.controller.stop(this.target);
   };
 
   /** What the mute button shows: the video's state while playing, else what the next play will use. */
@@ -566,7 +617,10 @@ export class StreamCard extends LitElement implements ControllerCard {
   private onFullscreenChange = (): void => {
     const root = this.renderRoot as ShadowRoot;
     const doc = document as Document & { webkitFullscreenElement?: Element };
+    const was = this.fullscreen;
     this.fullscreen = !!root.fullscreenElement || (doc.webkitFullscreenElement ?? null) === this;
+    // Full screen is for the picture: an open channel panel doesn't follow it in.
+    if (this.fullscreen && !was) this.pickerOpen = false;
     this.refresh();
   };
 
@@ -580,6 +634,7 @@ export class StreamCard extends LitElement implements ControllerCard {
         ? 'ready'
         : this.status.state;
     }
+    if (!this.source && this.lookupPending) return this.lookupPlay ? 'connecting' : 'ready';
     return this.source ? 'ready' : 'empty';
   }
 
@@ -703,13 +758,26 @@ export class StreamCard extends LitElement implements ControllerCard {
               ? html`<div class="message detail">${this.error.detail}</div>`
               : nothing
           }
-          ${
-            this.source || this.request
-              ? html`<button class="pill primary retry" @click=${this.play}>
-                  ${icon('refresh')} Retry
-                </button>`
-              : nothing
-          }
+          <div class="actions">
+            ${
+              this.source || this.request
+                ? html`<button class="pill primary retry" @click=${this.play}>
+                    ${icon('refresh')} Retry
+                  </button>`
+                : nothing
+            }
+            ${
+              this.config?.channelList
+                ? html`<button
+                    class="pill channels"
+                    @click=${this.togglePicker}
+                    aria-expanded=${this.pickerOpen ? 'true' : 'false'}
+                  >
+                    ${icon('list')} Channels
+                  </button>`
+                : nothing
+            }
+          </div>
         </div>`;
       case 'connecting':
       case 'reconnecting': {
@@ -744,7 +812,8 @@ export class StreamCard extends LitElement implements ControllerCard {
   }
 
   private renderControls(ui: UiState, hidden: boolean) {
-    if (ui === 'preview' || ui === 'empty') return nothing;
+    // The error layer has its own Retry and Channels buttons in the middle.
+    if (ui === 'preview' || ui === 'empty' || ui === 'error') return nothing;
     const active = ui === 'playing' || ui === 'connecting' || ui === 'reconnecting';
     const canStep = this.channelState === 'ready' && (this.channels?.size ?? 0) > 1;
     return html`<div class="controls ${hidden ? 'hidden' : ''}">

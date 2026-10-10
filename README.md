@@ -70,15 +70,17 @@ With `dispatcharr_url` set, the card loads Dispatcharr's channel list (`<dispatc
 - **Channel up/down** (⌃ ⌄) steps through the card's channels in channel-number order, wrapping round.
 - **By name or number** in `channel:` and in buttons, e.g. `channel: BBC One HD` or `channel: "101"` (case doesn't matter). UUIDs still work.
 
-Each device remembers the last channel per `target` and starts there next time (`remember_channel: false` always starts on `channel`). Channels open with the card's `output_profile`. If the list is long, narrow it with `channel_groups`:
+Each device remembers the last channel per `target` and whether it was left playing. Next time the card starts on that channel: playing if it was playing, stopped (with a play button) if it was stopped with the Stop button, a stop button or `idle_timeout`. `remember_channel: false` always starts on `channel`. Channels open with the card's `output_profile`. If something goes wrong, the error shows **Retry** and **Channels** buttons.
+
+If the list is long, narrow it with `channel_groups`. Quote names that contain `: ` (as many Dispatcharr group names do), or YAML reads them as something else:
 
 ```yaml
 type: custom:stream-card
 target: living_room
 dispatcharr_url: https://dispatcharr.example
 output_profile: 3
-channel_groups: [UK Entertainment, UK News]   # Dispatcharr group names, in this order
-favourites: [BBC One HD, ITV1 HD, "101"]
+channel_groups: ["UK: Entertainment", "UK: News"]   # Dispatcharr group names, in this order
+favourites: ["BBC One HD", "ITV1 HD", "101"]
 channel: BBC One HD                           # first-time default
 ```
 
@@ -90,15 +92,15 @@ channel: BBC One HD                           # first-time default
 | `channel` | none | Channel to play when the card appears (if `autoplay`): name, number or UUID |
 | `url` | none | A full stream URL instead of a channel (MPEG-TS, or MP4/HLS on browsers that play them natively) |
 | `title` | none | Title for the default channel (default: its name from the channel list) |
-| `channel_list` | `true` with `dispatcharr_url` | Load Dispatcharr's channel list for the picker, channel up/down and names |
+| `channel_list` | `true` with `dispatcharr_url` or `m3u_url` | Load Dispatcharr's channel list for the picker, channel up/down and names |
 | `channel_groups` | all | Only these Dispatcharr groups, in this order |
 | `favourites` | none | Channel names, numbers or UUIDs shown first under ★ Favourites |
-| `remember_channel` | `true` | Start on the channel this device watched last (per `target`) |
-| `m3u_url` | `<dispatcharr_url>/output/m3u` | Another M3U playlist for the channel list |
-| `autoplay` | `true` | Play the default or last channel when the card appears |
+| `remember_channel` | `true` | Start on the channel this device watched last (per `target`), playing or stopped as it was left |
+| `m3u_url` | `<dispatcharr_url>/output/m3u` | Another playlist for the channel list. Playing a Dispatcharr channel from it still needs `dispatcharr_url` |
+| `autoplay` | `true` | Play the default or last channel when the card appears, unless this device left it stopped |
 | `muted` | `false` | Start muted. If a browser blocks sound, the card starts muted anyway and shows "Tap to unmute" |
 | `aspect_ratio` | `16:9` | Card shape |
-| `idle_timeout` | `0` | Minutes without any touch or key press before playback stops. `0` = never |
+| `idle_timeout` | `0` | Minutes without any touch or key press before playback stops (like pressing Stop, so it stays stopped after a reload). `0` = never |
 | `start_timeout` | `20` | Seconds to wait for the first data before showing an error |
 | `reconnect.max_attempts` | `5` | Reconnects after stalls or drops before giving up (backoff 1, 2, 4, 8, 15 s) |
 | `url_template` | `{base}/proxy/ts/stream/{channel}` | How channel URLs are built |
@@ -119,7 +121,7 @@ tap_action:
     open: "#kitchen-tv"          # optional: opens this Bubble pop-up
 ```
 
-Names and numbers are looked up in the receiving card's channel list, so that card needs `dispatcharr_url` (the default list) or `m3u_url`.
+Names and numbers are looked up in the receiving card's channel list (which `dispatcharr_url` provides), so that card needs `channel_list` on, the default. A name that isn't in the list shows "No channel called …" rather than guessing.
 
 A stop button:
 
@@ -189,6 +191,7 @@ Turn on `debug: true` to see codecs, buffer, dropped frames and the last error o
 | Couldn't load the channel list from Dispatcharr ({detail}). Check dispatcharr_url, or m3u_url if you set one. | Open `<dispatcharr_url>/output/m3u` on this device. HTTP 403 means Dispatcharr's network access settings block M3U/EPG for this device's IP. Press Try again after fixing it. |
 | No channel called "{name}" in the channel list. | Check the spelling against the picker, or use the channel number. A `channel_groups` filter doesn't hide channels from names. |
 | The channel list is empty. | Dispatcharr returned a playlist with no channels: check that channels are enabled and assigned to a channel profile. |
+| None of the channel_groups match a Dispatcharr group. Groups in Dispatcharr: {groups}. | A typo in `channel_groups`: copy the names exactly as listed (case doesn't matter; dashes and colons do), and quote names that contain `: `. |
 | Dispatcharr refused the stream ({status}). Check Dispatcharr's network access settings for streams. | Dispatcharr's network access rules block this device's IP. |
 | Dispatcharr returned an error ({status}). | Dispatcharr is having trouble (often 503 when the provider's connection limit is reached). The card retries 5xx errors on its own. |
 | Dispatcharr blocked this page's request (CORS). Check that nothing in front of Dispatcharr removes its Access-Control-Allow-Origin header. | Run the `curl` check in section 1. |

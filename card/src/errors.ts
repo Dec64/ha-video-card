@@ -28,6 +28,8 @@ export const MESSAGES = {
     "Couldn't load the channel list from Dispatcharr ({detail}). Check dispatcharr_url, or m3u_url if you set one.",
   channelNotFound: 'No channel called "{name}" in the channel list.',
   noChannels: 'The channel list is empty.',
+  noGroupMatch:
+    'None of the channel_groups match a Dispatcharr group. Groups in Dispatcharr: {groups}.',
 } as const;
 
 export type MessageKey = keyof typeof MESSAGES;

@@ -135,7 +135,7 @@ test('switching channel never holds two connections', async ({ h }) => {
   const samples: number[] = [];
   const sampling = (async () => {
     for (let i = 0; i < 20; i++) {
-      samples.push((await h.stats(a)).open + (await h.stats(b)).open);
+      samples.push(await h.openSum([a, b]));
       await h.page.waitForTimeout(100);
     }
   })();

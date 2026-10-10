@@ -53,6 +53,18 @@ export class StreamCardPicker extends LitElement {
     this._group = '';
   }
 
+  /** Logo URLs that failed to load. Tiles are reused as the filter changes, so this is kept
+   * per URL rather than as a class on whichever <img> happened to fail. */
+  private readonly failedLogos = new Set<string>();
+
+  private onLogoError = (e: Event) => {
+    const src = (e.target as HTMLImageElement).getAttribute('src');
+    if (src && !this.failedLogos.has(src)) {
+      this.failedLogos.add(src);
+      this.requestUpdate();
+    }
+  };
+
   static override styles = css`
     :host {
       display: flex;
@@ -61,7 +73,8 @@ export class StreamCardPicker extends LitElement {
       padding: 10px 12px 12px;
       box-sizing: border-box;
       color: var(--primary-text-color, #212121);
-      background: var(--card-background-color, var(--ha-card-background, #fff));
+      /* Same order as ha-card, so the panel matches the rest of the card under any theme. */
+      background: var(--ha-card-background, var(--card-background-color, #fff));
       font-family: var(--ha-font-family-body, var(--paper-font-body1_-_font-family, sans-serif));
       min-height: 0;
     }
@@ -132,6 +145,17 @@ export class StreamCardPicker extends LitElement {
     }
     .chips::-webkit-scrollbar {
       display: none;
+    }
+    /* A mouse wheel can't scroll sideways, so mouse users get a thin scrollbar. */
+    @media (hover: hover) and (pointer: fine) {
+      .chips {
+        scrollbar-width: thin;
+        padding-bottom: 6px;
+      }
+      .chips::-webkit-scrollbar {
+        display: block;
+        height: 6px;
+      }
     }
     .chip {
       flex: none;
@@ -242,6 +266,13 @@ export class StreamCardPicker extends LitElement {
   };
 
   private onSearchKey = (e: KeyboardEvent) => {
+    // Escape clears the search first; only an empty box lets it through (Bubble closes on it).
+    if (e.key === 'Escape' && this._query) {
+      e.stopPropagation();
+      this._query = '';
+      (e.target as HTMLInputElement).value = '';
+      return;
+    }
     if (e.key !== 'Enter' || !this.list) return;
     const first = this.list.filter(this._query, this._group)[0];
     if (first) this.pick(first);
@@ -331,12 +362,12 @@ export class StreamCardPicker extends LitElement {
                     ${
                       c.logo
                         ? html`<img
-                            class="logo"
+                            class=${this.failedLogos.has(c.logo) ? 'logo missing' : 'logo'}
                             src=${c.logo}
                             alt=""
                             loading="lazy"
                             decoding="async"
-                            @error=${(e: Event) => (e.target as HTMLElement).classList.add('missing')}
+                            @error=${this.onLogoError}
                           />`
                         : nothing
                     }
