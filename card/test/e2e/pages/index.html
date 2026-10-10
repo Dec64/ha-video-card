@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>stream-card test harness</title>
+    <style>
+      body {
+        margin: 0;
+        font-family: sans-serif;
+        background: #111;
+        color: #eee;
+      }
+      #view {
+        display: grid;
+        gap: 12px;
+        padding: 12px;
+        max-width: 720px;
+      }
+      #popups > .popup {
+        position: fixed;
+        inset: 10% 5%;
+        background: #222;
+        padding: 12px;
+      }
+      button.action {
+        padding: 8px 12px;
+      }
+    </style>
+    <script src="/harness.js"></script>
+  </head>
+  <body>
+    <div id="buttons"></div>
+    <main id="view"></main>
+    <div id="popups"></div>
+  </body>
+</html>
