@@ -12,9 +12,10 @@ A Home Assistant Lovelace card (`custom:stream-card`) that plays Dispatcharr MPE
 - `node test/fake-dispatcharr/server.mjs`: fake Dispatcharr on :8930 and test pages on :8931 for manual poking.
 
 ## Layout
-- `src/index.ts`: entry; installs the page controller, defines the element.
+- `src/index.ts`: entry; installs the page controller, defines the elements.
 - `src/controller.ts`: one per page. `fire-dom-event` buttons (`ll-custom`), per-target mailbox, pop-up opening, Fully Kiosk events.
 - `src/stream-card.ts`: the Lit element. `evaluate()` is the only place that starts or stops playback.
+- `src/channels.ts`: M3U parsing, `ChannelList` (groups, favourites, lookup by UUID/number/name, up/down), page-wide playlist cache. `src/picker.ts`: the `stream-card-picker` element (never plays anything itself). `src/editor-form.ts`: the `getConfigForm` schema for HA's visual editor.
 - `src/lifecycle.ts`: `holdReason()` (pure) and the watcher for IntersectionObserver, visibility, pagehide, Fully, idle.
 - `src/session.ts`: one source on one `<video>`: start timeout, stall watchdog, reconnect/backoff, error classification.
 - `src/engines/`: `mpegts-engine.ts` (lazy chunk), `native-engine.ts`, `fetch-loader.ts`, `load-mpegts.ts` (loads the vendored `mpegts-<version>.js` with a script tag; the build emits it unmodified from node_modules), `video-lock.ts`.
@@ -26,7 +27,8 @@ A Home Assistant Lovelace card (`custom:stream-card`) that plays Dispatcharr MPE
 - Keep `ImmediateAbortLoader` (`src/engines/fetch-loader.ts`). mpegts.js's own loader does not abort a stalled fetch on Chrome, which leaves the Dispatcharr connection open.
 - `MpegtsEngine.destroy()` aborts the loaders synchronously and defers the rest of mpegts.js's teardown one tick: mpegts.js emits through queued microtasks and throws if destroyed inside its own callbacks. The next engine waits on `videoIdle()` before touching the same `<video>`.
 - Every release path has an e2e test asserting the fake server's open-connection count, not client state. Add one for any new path.
-- Cards in `preview`/`editMode` (HA editor and dashboard edit mode) never open a connection.
+- Cards in `preview`/`editMode` (HA editor and dashboard edit mode) never open a connection, and never download the channel list.
+- Channel names and numbers resolve to a stream UUID before `resolveSource`; the release rules don't care how a channel was chosen.
 - No real hostnames, channel UUIDs or tokens in the repo. Use `dispatcharr.example` and the fake server.
 - No new runtime dependencies beyond Lit and mpegts.js without saying so in the PR.
 - Contracts in docs/build-plan-v1.md §4 (card config, button payload, engine interface, controller) change only in their own PR, with that doc updated.
@@ -34,6 +36,6 @@ A Home Assistant Lovelace card (`custom:stream-card`) that plays Dispatcharr MPE
 
 ## Testing notes
 - Playwright's Chromium (and cloud containers) can't decode H.264/AAC. `test/e2e/mse-shim.js` replaces MediaSource so mpegts.js still fetches, demuxes and remuxes real TS while playback time is simulated. Knobs: `window.__mseShimCodecs`, `window.__mseShimBlockUnmuted`.
-- The fake server picks behaviour from the channel ID (`stall-3--x`, `hang--x`, `status-404--x`, `ac3--x`, ...); see the header of `test/fake-dispatcharr/server.mjs`. `Harness.channel(mode)` makes IDs unique per test.
+- The fake server picks behaviour from the channel ID (`stall-3--x`, `hang--x`, `status-404--x`, `ac3--x`, ...); see the header of `test/fake-dispatcharr/server.mjs`. `Harness.channel(mode)` makes IDs unique per test. `/output/m3u?prefix=…` serves a per-test playlist (`playlist()` in `test/e2e/picker.spec.ts`).
 - `test/ha/` runs against real HA 2026.10 + Bubble Card 3.4.1; prefer adding a case there when a behaviour depends on HA or Bubble internals. Bubble buttons: `tap_action` is the icon only, `button_action` the body.
 - `test/e2e/pages/harness.js` fakes HA buttons (`ll-custom`) and Bubble Card ≥ 3.2.4 pop-ups (shell detached while closed, same element re-attached on open).

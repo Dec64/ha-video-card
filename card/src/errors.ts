@@ -24,6 +24,10 @@ export const MESSAGES = {
   config: '{detail}',
   noVideo:
     'No picture in this stream: its video track is missing or uses a codec the player skips.',
+  channelsFailed:
+    "Couldn't load the channel list from Dispatcharr ({detail}). Check dispatcharr_url, or m3u_url if you set one.",
+  channelNotFound: 'No channel called "{name}" in the channel list.',
+  noChannels: 'The channel list is empty.',
 } as const;
 
 export type MessageKey = keyof typeof MESSAGES;

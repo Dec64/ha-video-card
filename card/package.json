@@ -1,6 +1,6 @@
 {
   "name": "stream-card",
-  "version": "0.1.0-beta.1",
+  "version": "1.0.0",
   "private": true,
   "description": "Home Assistant card that plays Dispatcharr IPTV and releases the stream when hidden",
   "type": "module",

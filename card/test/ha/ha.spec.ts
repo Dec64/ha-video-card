@@ -105,6 +105,58 @@ test('dashboard edit mode stops playback and the card editor preview never conne
   expect((await stats(page, 'ok--ha-c')).total).toBe(before);
 });
 
+test('the visual editor shows the card options as a form', async ({ page }) => {
+  await page.goto(DASH);
+  await page.getByRole('button', { name: /edit dashboard/i }).click();
+  await page
+    .locator('hui-card-edit-mode')
+    .filter({ has: page.locator('stream-card') })
+    .first()
+    .click();
+  const form = page.locator('hui-form-editor ha-form').first();
+  await expect(form.getByText(/^Dispatcharr URL\*?$/)).toBeVisible();
+  await expect(form.getByText('Output profile ID', { exact: true })).toBeVisible();
+  await form.getByText('Channels', { exact: true }).click();
+  await expect(form.getByText('Add Group')).toBeVisible();
+  // Unset options that default to on show as on.
+  await expect(
+    form.locator('ha-selector-boolean', { hasText: 'Channel list' }).locator('ha-switch'),
+  ).toHaveJSProperty('checked', true);
+  await expect(form.getByText('Remember last channel', { exact: true }).first()).toBeVisible();
+  await test.info().attach('editor', { body: await page.screenshot(), contentType: 'image/png' });
+});
+
+test('the page card lists every channel; tapping one plays it, switching view releases', async ({
+  page,
+}) => {
+  await page.goto(DASH);
+  const card = page.locator('stream-card').first();
+  const picker = card.locator('stream-card-picker');
+  await expect(picker.locator('.tile')).toHaveCount(6, { timeout: 15_000 });
+  await test.info().attach('picker', { body: await page.screenshot(), contentType: 'image/png' });
+  await picker.getByRole('button', { name: '101 News One HD', exact: true }).click();
+  await expectOpen(page, 'ok--m3u-1', 1, 15_000);
+  expect((await stats(page, 'ok--m3u-1')).queries.at(-1)).toEqual({ output_profile: '2' });
+  await page.getByRole('tab', { name: 'Other' }).click();
+  await expectOpen(page, 'ok--m3u-1', 0);
+});
+
+test('a Bubble button plays a channel by name in the pop-up', async ({ page }) => {
+  await page.goto(DASH);
+  await page
+    .locator('bubble-card')
+    .filter({ hasText: 'Bubble button: Sports Live HD by name' })
+    .locator('.bubble-button-background')
+    .click();
+  await expect(page).toHaveURL(/#tv-test/);
+  await expectOpen(page, 'ok--m3u-3', 1, 15_000);
+  await expect(page.locator('stream-card').last().locator('.badge')).toContainText(
+    'Sports Live HD',
+  );
+  await page.locator('.bubble-close-button').first().click();
+  await expectOpen(page, 'ok--m3u-3', 0);
+});
+
 test('constant HA state changes never restart playback', async ({ page }) => {
   await page.goto(DASH);
   await page.getByText('Play C on page card').click();

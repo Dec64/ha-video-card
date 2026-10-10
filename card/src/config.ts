@@ -48,6 +48,36 @@ function optionalNumber(
   return n;
 }
 
+function optionalStringList(raw: Record<string, unknown>, key: string): string[] {
+  const v = raw[key];
+  if (v === undefined || v === null || v === '') return [];
+  const list = Array.isArray(v) ? v : [v];
+  return list
+    .map((item) => {
+      if (typeof item !== 'string' && typeof item !== 'number') {
+        throw new ConfigError(`"${key}" must be a list of text`);
+      }
+      return String(item).trim();
+    })
+    .filter(Boolean);
+}
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** A Dispatcharr channel UUID, used as-is. */
+export function isUuid(ref: string): boolean {
+  return UUID_RE.test(ref.trim());
+}
+
+/**
+ * Whether a channel reference must be looked up in the channel list first: a name ("BBC One HD")
+ * or a channel number ("101"). Anything else is used directly as the stream ID.
+ */
+export function needsLookup(ref: string): boolean {
+  const v = ref.trim();
+  return !isUuid(v) && (/\s/.test(v) || /^\d+$/.test(v));
+}
+
 function normalizeBaseUrl(v: string): string {
   let url: URL;
   try {
@@ -91,6 +121,15 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     throw new ConfigError('"reconnect" must be an object, e.g. { max_attempts: 5 }');
   }
 
+  const m3uUrl = optionalString(raw, 'm3u_url');
+  if (m3uUrl) {
+    try {
+      new URL(m3uUrl);
+    } catch {
+      throw new ConfigError('"m3u_url" must be a full URL');
+    }
+  }
+
   const channel = optionalString(raw, 'channel');
   const url = optionalString(raw, 'url');
   const title = optionalString(raw, 'title');
@@ -112,8 +151,17 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
       ? optionalNumber(reconnect as Record<string, unknown>, 'max_attempts', 5, 0)
       : 5,
     debug: optionalBool(raw, 'debug', false),
+    channelList: optionalBool(raw, 'channel_list', !!(base || m3uUrl)),
+    m3uUrl: m3uUrl ?? (base ? `${normalizeBaseUrl(base)}/output/m3u` : undefined),
+    channelGroups: optionalStringList(raw, 'channel_groups'),
+    favourites: optionalStringList(raw, 'favourites'),
+    rememberChannel: optionalBool(raw, 'remember_channel', true),
   };
-  if (defaultRequest?.channel) resolveSource(defaultRequest, resolved);
+  // Names and numbers are looked up in the channel list later; IDs are checked now.
+  const ch = defaultRequest?.channel;
+  if (defaultRequest && ch && !(resolved.channelList && !isUuid(ch))) {
+    resolveSource(defaultRequest, resolved);
+  }
   return resolved;
 }
 

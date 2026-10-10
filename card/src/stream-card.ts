@@ -1,9 +1,13 @@
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from 'lit';
-import { ConfigError, normalizeConfig, resolveSource } from './config';
+import { ChannelList, loadChannels, type Channel } from './channels';
+import { ConfigError, isUuid, needsLookup, normalizeConfig, resolveSource } from './config';
 import { VERSION } from './const';
 import { getController, type ControllerCard, type StreamController } from './controller';
-import type { PlaybackError } from './errors';
+import { format, type PlaybackError } from './errors';
+import { configForm } from './editor-form';
 import { icon } from './icons';
+import { readRemembered, writeRemembered } from './memory';
+import type { PickerState } from './picker';
 import { holdReason, LifecycleWatcher, type HoldReason } from './lifecycle';
 import { PlaybackSession, type SessionStatus } from './session';
 import { styles } from './styles';
@@ -62,6 +66,13 @@ export class StreamCard extends LitElement implements ControllerCard {
   private debugTimer?: ReturnType<typeof setInterval>;
   private inEditor = false;
   private fullscreen = false;
+  private channels?: ChannelList;
+  private channelState: PickerState | 'idle' = 'idle';
+  private channelMessage?: string;
+  private channelsPromise?: Promise<ChannelList | undefined>;
+  private channelsKey?: string;
+  private pickerOpen = false;
+  private requestSeq = 0;
 
   constructor() {
     super();
@@ -95,9 +106,21 @@ export class StreamCard extends LitElement implements ControllerCard {
       this.controller.unregister(this);
       this.controller.register(this);
     }
+    const key = this.channelListKey();
+    if (key !== this.channelsKey) {
+      this.channels = undefined;
+      this.channelsPromise = undefined;
+      this.channelState = 'idle';
+      this.channelsKey = key;
+      if (this.isConnected) this.ensureChannels();
+    }
     if (this.request) this.applyRequest(this.request, this.wantPlaying);
     else if (this.isConnected) this.pickInitialRequest();
     this.refresh();
+  }
+
+  static getConfigForm() {
+    return configForm;
   }
 
   set hass(_hass: unknown) {
@@ -113,7 +136,7 @@ export class StreamCard extends LitElement implements ControllerCard {
   }
 
   static getStubConfig() {
-    return { dispatcharr_url: 'https://dispatcharr.example', output_profile: 1, target: 'tv' };
+    return { dispatcharr_url: 'https://dispatcharr.example', target: 'tv' };
   }
 
   // ---- ControllerCard ----
@@ -132,6 +155,7 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   stopFromController(): void {
     this.wantPlaying = false;
+    this.remember();
     this.evaluate();
   }
 
@@ -149,6 +173,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     document.addEventListener('fullscreenchange', this.onFullscreenChange);
     document.addEventListener('webkitfullscreenchange', this.onFullscreenChange);
     this.pickInitialRequest();
+    this.ensureChannels();
     if (this.config?.debug) this.debugTimer = setInterval(() => this.refresh(), 1000);
     this.evaluate();
   }
@@ -169,7 +194,61 @@ export class StreamCard extends LitElement implements ControllerCard {
   }
 
   protected override updated(changed: PropertyValues): void {
-    if (changed.has('preview') || changed.has('editMode')) this.evaluate();
+    if (changed.has('preview') || changed.has('editMode')) {
+      this.ensureChannels();
+      this.evaluate();
+    }
+  }
+
+  // ---- channel list ----
+
+  private channelListKey(): string | undefined {
+    const c = this.config;
+    if (!c?.channelList || !c.m3uUrl) return undefined;
+    return JSON.stringify([c.m3uUrl, c.channelGroups, c.favourites]);
+  }
+
+  /** Loads the channel list once (shared per page); resolves undefined if disabled or failed. */
+  private ensureChannels(force = false): Promise<ChannelList | undefined> {
+    const c = this.config;
+    if (!c?.channelList || !c.m3uUrl || this.isPreview) return Promise.resolve(undefined);
+    if (this.channelsPromise && !force) return this.channelsPromise;
+    this.channelState = 'loading';
+    this.channelMessage = undefined;
+    this.refresh();
+    const key = this.channelListKey();
+    this.channelsPromise = loadChannels(c.m3uUrl, { force }).then(
+      (all) => {
+        if (key !== this.channelListKey()) return undefined;
+        this.channels = new ChannelList(all, { groups: c.channelGroups, favourites: c.favourites });
+        this.channelState = 'ready';
+        this.channelMessage = this.channels.size ? undefined : format('noChannels');
+        this.refresh();
+        return this.channels;
+      },
+      (err: unknown) => {
+        if (key !== this.channelListKey()) return undefined;
+        this.channelState = 'error';
+        this.channelMessage = format('channelsFailed', {
+          detail: err instanceof Error ? err.message : String(err),
+        });
+        this.channelsPromise = undefined;
+        this.refresh();
+        return undefined;
+      },
+    );
+    return this.channelsPromise;
+  }
+
+  /** The channel-list entry for what's playing, if the list has it. */
+  private get currentChannel(): Channel | undefined {
+    return this.channels?.find(this.source?.channel ?? this.source?.url);
+  }
+
+  private requestFor(ch: Channel, base: StreamRequest = {}): StreamRequest {
+    return ch.streamId
+      ? { ...base, channel: ch.streamId, url: undefined, title: base.title ?? ch.name }
+      : { ...base, url: ch.url, channel: undefined, title: base.title ?? ch.name };
   }
 
   /** On connect: a button press waiting in the mailbox wins, then the target's last channel. */
@@ -181,8 +260,20 @@ export class StreamCard extends LitElement implements ControllerCard {
       return;
     }
     if (this.request) return;
-    const req = this.controller.lastFor(this.target) ?? this.config.defaultRequest;
-    if (req) this.applyRequest(req, this.config.autoplay);
+    const last = this.controller.lastFor(this.target);
+    if (last) {
+      this.applyRequest(last, this.config.autoplay);
+      return;
+    }
+    // A channel this device left stopped comes back stopped.
+    const saved = this.config.rememberChannel ? readRemembered(this.target) : undefined;
+    if (saved) {
+      const req = { channel: saved.channel, url: saved.url, title: saved.title };
+      this.applyRequest(req, this.config.autoplay && saved.playing !== false);
+      return;
+    }
+    if (this.config.defaultRequest)
+      this.applyRequest(this.config.defaultRequest, this.config.autoplay);
   }
 
   private refresh(): void {
@@ -190,6 +281,38 @@ export class StreamCard extends LitElement implements ControllerCard {
   }
 
   private applyRequest(req: StreamRequest, play: boolean): void {
+    if (!this.config) return;
+    const seq = ++this.requestSeq;
+    const ref = req.channel;
+    if (ref && !req.url && !isUuid(ref) && this.config.channelList && !this.isPreview) {
+      // A channel name or number: find its stream ID in the channel list first.
+      this.request = req;
+      this.idleStopped = false;
+      void this.ensureChannels().then((list) => {
+        if (seq !== this.requestSeq) return;
+        const ch = list?.find(ref);
+        if (ch) this.applyResolved(this.requestFor(ch, req), play);
+        // Not in the list but shaped like a stream ID: try it as one.
+        else if (!needsLookup(ref)) this.applyResolved(req, play);
+        else
+          this.showRequestError(
+            list ? format('channelNotFound', { name: ref }) : this.channelMessage,
+          );
+      });
+      return;
+    }
+    this.applyResolved(req, play);
+  }
+
+  private showRequestError(message = format('channelNotFound', { name: '' })): void {
+    this.stopSession('config');
+    this.source = undefined;
+    this.error = { kind: 'config', message, detail: message };
+    this.wantPlaying = false;
+    this.refresh();
+  }
+
+  private applyResolved(req: StreamRequest, play: boolean): void {
     if (!this.config) return;
     this.request = req;
     this.idleStopped = false;
@@ -212,7 +335,20 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.source = { ...src, title: req.title ?? src.title };
     this.error = undefined;
     if (play) this.wantPlaying = true;
+    this.remember();
     this.evaluate();
+  }
+
+  /** Saves the current channel and play intent for this target on this device. */
+  private remember(): void {
+    const req = this.request;
+    if (!this.config?.rememberChannel || !this.source || !req || this.isPreview) return;
+    writeRemembered(this.target, {
+      channel: req.channel,
+      url: req.url,
+      title: req.title,
+      playing: this.wantPlaying,
+    });
   }
 
   /** The single place that starts or stops playback. */
@@ -278,6 +414,7 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   private onIdle(): void {
     this.wantPlaying = false;
+    this.remember();
     this.idleStopped = true;
     this.evaluate();
     this.lastRelease = 'idle';
@@ -295,12 +432,55 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.idleStopped = false;
     if (this.request && !this.source) this.applyRequest(this.request, true);
     this.wantPlaying = true;
+    this.remember();
     this.evaluate();
+  };
+
+  private onPick = (e: Event): void => {
+    e.stopPropagation();
+    const ch = (e as CustomEvent<Channel>).detail;
+    this.pickerOpen = false;
+    this.applyRequest(this.requestFor(ch, { target: this.target }), true);
+  };
+
+  private togglePicker = (e?: Event): void => {
+    e?.stopPropagation();
+    this.pickerOpen = !this.pickerOpen;
+    if (this.pickerOpen) this.ensureChannels();
+    this.showControls();
+  };
+
+  private closePicker = (e?: Event): void => {
+    e?.stopPropagation();
+    this.pickerOpen = false;
+    this.refresh();
+  };
+
+  private retryChannels = (e?: Event): void => {
+    e?.stopPropagation();
+    void this.ensureChannels(true);
+  };
+
+  private channelStep(delta: 1 | -1): void {
+    const ch = this.channels?.neighbour(this.currentChannel?.id, delta);
+    if (ch) this.applyRequest(this.requestFor(ch, { target: this.target }), true);
+    this.showControls();
+  }
+
+  private channelUp = (e?: Event): void => {
+    e?.stopPropagation();
+    this.channelStep(1);
+  };
+
+  private channelDown = (e?: Event): void => {
+    e?.stopPropagation();
+    this.channelStep(-1);
   };
 
   private stop = (e?: Event): void => {
     e?.stopPropagation();
     this.wantPlaying = false;
+    this.remember();
     this.evaluate();
   };
 
@@ -424,13 +604,37 @@ export class StreamCard extends LitElement implements ControllerCard {
       notice: this.status?.notice,
       error: this.error,
       lastError: this.status?.lastError,
+      channels: { state: this.channelState, count: this.channels?.size ?? 0 },
+      pickerOpen: this.showPicker,
       stats,
     };
+  }
+
+  /** The picker shows when asked for, and on its own while nothing is selected. */
+  private get showPicker(): boolean {
+    if (!this.config?.channelList || this.isPreview || this.channelState === 'idle') return false;
+    return this.pickerOpen || this.uiState === 'empty';
+  }
+
+  private renderPicker(ui: UiState, overlay: boolean) {
+    return html`<stream-card-picker
+      class=${overlay ? 'overlay' : 'panel'}
+      .list=${this.channels}
+      .state=${this.channelState === 'idle' ? 'loading' : this.channelState}
+      .message=${this.channelMessage}
+      .currentId=${this.currentChannel?.id}
+      .closable=${ui !== 'empty'}
+      @click=${(e: Event) => e.stopPropagation()}
+      @channel-pick=${this.onPick}
+      @picker-close=${this.closePicker}
+      @picker-retry=${this.retryChannels}
+    ></stream-card-picker>`;
   }
 
   protected override render(): TemplateResult {
     const ar = this.config?.aspectRatio ?? '16 / 9';
     const ui = this.uiState;
+    const picker = this.showPicker;
     const playing = ui === 'playing';
     const controlsHidden = playing && !this.controlsVisible;
     return html`
@@ -456,16 +660,21 @@ export class StreamCard extends LitElement implements ControllerCard {
               ? html`<div class="debug">${this.debugText()}</div>`
               : nothing
           }
+          ${picker && this.fullscreen ? this.renderPicker(ui, true) : nothing}
         </div>
+        ${picker && !this.fullscreen ? this.renderPicker(ui, false) : nothing}
       </ha-card>
     `;
   }
 
   private renderBadge(ui: UiState, hidden: boolean) {
-    const title = this.source?.title;
+    const ch = this.currentChannel;
+    const title = this.source?.title ?? ch?.name;
     if (!title && ui !== 'playing') return nothing;
     return html`<div class="badge ${hidden ? 'hidden' : ''}">
       ${ui === 'playing' ? html`<span class="live-dot" role="img" aria-label="Live"></span>` : nothing}
+      ${ch?.logo ? html`<img class="badge-logo" src=${ch.logo} alt="" />` : nothing}
+      ${ch?.number ? html`<span class="badge-num">${ch.number}</span>` : nothing}
       <span class="title">${title ?? 'Live'}</span>
     </div>`;
   }
@@ -481,7 +690,9 @@ export class StreamCard extends LitElement implements ControllerCard {
       case 'empty':
         return html`<div class="layer">
           <span class="placeholder-icon">${icon('tv')}</span>
-          <div class="message">Choose a channel</div>
+          <div class="message">
+            ${this.config?.channelList && !this.isPreview ? 'Choose a channel below' : 'Choose a channel'}
+          </div>
         </div>`;
       case 'error':
         return html`<div class="layer dim" role="alert">
@@ -535,11 +746,34 @@ export class StreamCard extends LitElement implements ControllerCard {
   private renderControls(ui: UiState, hidden: boolean) {
     if (ui === 'preview' || ui === 'empty') return nothing;
     const active = ui === 'playing' || ui === 'connecting' || ui === 'reconnecting';
+    const canStep = this.channelState === 'ready' && (this.channels?.size ?? 0) > 1;
     return html`<div class="controls ${hidden ? 'hidden' : ''}">
       ${
         active
           ? html`<button class="ctl-stop" @click=${this.stop} aria-label="Stop">
               ${icon('stop')}
+            </button>`
+          : nothing
+      }
+      ${
+        canStep
+          ? html`<button class="ctl-down" @click=${this.channelDown} aria-label="Previous channel">
+                ${icon('chevronDown')}
+              </button>
+              <button class="ctl-up" @click=${this.channelUp} aria-label="Next channel">
+                ${icon('chevronUp')}
+              </button>`
+          : nothing
+      }
+      ${
+        this.config?.channelList
+          ? html`<button
+              class="ctl-channels"
+              @click=${this.togglePicker}
+              aria-label=${this.pickerOpen ? 'Hide channels' : 'Channels'}
+              aria-expanded=${this.pickerOpen ? 'true' : 'false'}
+            >
+              ${icon('list')}
             </button>`
           : nothing
       }
@@ -576,6 +810,7 @@ export class StreamCard extends LitElement implements ControllerCard {
         : 'engine -',
       st ? `frames ${st.decodedFrames ?? '-'} · dropped ${st.droppedFrames ?? '-'}` : '',
       d.lastError ? `last error ${d.lastError}` : '',
+      `channels ${d.channels.state} (${d.channels.count})`,
       `muted ${d.muted}${d.mutedByPolicy ? ' (autoplay policy)' : ''}`,
     ];
     return lines.filter(Boolean).join('\n');

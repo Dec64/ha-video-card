@@ -3,11 +3,12 @@
 A Lovelace card that plays Dispatcharr IPTV channels on wall tablets, phones and desktop, including inside Bubble Card pop-ups, and **releases the Dispatcharr connection whenever nobody can see it**: pop-up closed, screen off, Fully Kiosk screensaver, app in the background, page hidden, edit mode or idle timeout.
 
 - Plays Dispatcharr's MPEG-TS streams with [mpegts.js](https://github.com/xqq/mpegts.js) (shipped unmodified next to the card), loaded only when needed.
-- Any button can play a channel on a chosen card with HA's built-in `fire-dom-event` action. No browser_mod.
+- Lists every Dispatcharr channel on the card: logos, search, groups, favourites, channel up/down, and the last channel remembered per device.
+- Any button can play a channel (by name, number or UUID) on a chosen card with HA's built-in `fire-dom-event` action. No browser_mod.
 - Reconnects on its own after stalls and dropped connections, and never holds two connections at once.
 - Says what's wrong in plain words (unsupported codec, CORS, channel not found, a broken output profile) instead of showing a black box.
 
-Status: **v1 built, awaiting real-device acceptance** ([checklist](docs/acceptance-v1.md)). Project status and decisions: [HANDOVER.md](HANDOVER.md).
+Status: **1.0**. Project status and decisions: [HANDOVER.md](HANDOVER.md); device checklist: [docs/acceptance-v1.md](docs/acceptance-v1.md).
 
 ## 1. Dispatcharr setup (once)
 
@@ -46,16 +47,39 @@ Until the HACS release (Phase 6):
 
 1. Get the build: the **stream-card-dist** artifact of the latest successful [CI run](https://github.com/Dec64/ha-video-card/actions), or build it yourself with `cd card && npm ci && npm run build` (output in `card/dist/`).
 2. Copy **every `.js` file** from it into `/config/www/stream-card/`. The card loads its player code and `mpegts-1.8.2.js` (the unmodified [mpegts.js](https://github.com/xqq/mpegts.js) build, identical to `https://cdn.jsdelivr.net/npm/mpegts.js@1.8.2/dist/mpegts.js`) from the same folder.
-3. Settings → Dashboards → ⋮ → Resources → Add resource: URL `/local/stream-card/stream-card.js?v=0.1.0`, type **JavaScript module**. Raise `?v=` on each update so devices fetch the new version.
+3. Settings → Dashboards → ⋮ → Resources → Add resource: URL `/local/stream-card/stream-card.js?v=1.0.0`, type **JavaScript module**. Raise `?v=` on each update so devices fetch the new version.
 4. Reload the browser (on Fully Kiosk: clear cache and reload).
 
 ## 3. Card configuration
+
+The smallest useful card: every Dispatcharr channel, ready to pick.
 
 ```yaml
 type: custom:stream-card
 target: kitchen_tv                    # name buttons use to reach this card
 dispatcharr_url: https://dispatcharr.example
-output_profile: 2                     # Dispatcharr output profile ID
+output_profile: 3                     # the output profile from section 1
+```
+
+Every option is also in the visual editor (Edit card), under Channels, Playback and Advanced.
+
+### Choosing channels
+With `dispatcharr_url` set, the card loads Dispatcharr's channel list (`<dispatcharr_url>/output/m3u`, the same playlist IPTV apps use; it needs no login) and offers it three ways:
+
+- **The picker.** A card with nothing playing shows every channel below the picture: tap a logo to play it. While playing, the grid button (▦) opens it again; in full screen it opens over the picture. Search matches names and numbers (Enter plays the first match); chips filter by Dispatcharr group, and **★ Favourites** shows your `favourites` in their order.
+- **Channel up/down** (⌃ ⌄) steps through the card's channels in channel-number order, wrapping round.
+- **By name or number** in `channel:` and in buttons, e.g. `channel: BBC One HD` or `channel: "101"` (case doesn't matter). UUIDs still work.
+
+Each device remembers the last channel per `target` and starts there next time (`remember_channel: false` always starts on `channel`). Channels open with the card's `output_profile`. If the list is long, narrow it with `channel_groups`:
+
+```yaml
+type: custom:stream-card
+target: living_room
+dispatcharr_url: https://dispatcharr.example
+output_profile: 3
+channel_groups: [UK Entertainment, UK News]   # Dispatcharr group names, in this order
+favourites: [BBC One HD, ITV1 HD, "101"]
+channel: BBC One HD                           # first-time default
 ```
 
 | Option | Default | Meaning |
@@ -63,9 +87,14 @@ output_profile: 2                     # Dispatcharr output profile ID
 | `target` | `default` | Mailbox name. Buttons with the same `target` play on this card |
 | `dispatcharr_url` | — | Dispatcharr base URL. Needed to play `channel` IDs |
 | `output_profile` | none | Dispatcharr output profile ID, sent as `?output_profile=<id>` |
-| `channel` | none | Channel UUID to play when the card appears (if `autoplay`) |
+| `channel` | none | Channel to play when the card appears (if `autoplay`): name, number or UUID |
 | `url` | none | A full stream URL instead of a channel (MPEG-TS, or MP4/HLS on browsers that play them natively) |
-| `title` | none | Title for the default channel |
+| `title` | none | Title for the default channel (default: its name from the channel list) |
+| `channel_list` | `true` with `dispatcharr_url` | Load Dispatcharr's channel list for the picker, channel up/down and names |
+| `channel_groups` | all | Only these Dispatcharr groups, in this order |
+| `favourites` | none | Channel names, numbers or UUIDs shown first under ★ Favourites |
+| `remember_channel` | `true` | Start on the channel this device watched last (per `target`) |
+| `m3u_url` | `<dispatcharr_url>/output/m3u` | Another M3U playlist for the channel list |
 | `autoplay` | `true` | Play the default or last channel when the card appears |
 | `muted` | `false` | Start muted. If a browser blocks sound, the card starts muted anyway and shows "Tap to unmute" |
 | `aspect_ratio` | `16:9` | Card shape |
@@ -86,10 +115,11 @@ tap_action:
   action: fire-dom-event
   stream_card:
     target: kitchen_tv
-    channel: 3f2b9c1e-7a4d-4e8b-9c2f-1d5e6a7b8c9d
-    title: BBC One HD
+    channel: BBC One HD          # name, number ("101") or UUID
     open: "#kitchen-tv"          # optional: opens this Bubble pop-up
 ```
+
+Names and numbers are looked up in the receiving card's channel list, so that card needs `dispatcharr_url` (the default list) or `m3u_url`.
 
 A stop button:
 
@@ -101,7 +131,7 @@ tap_action:
     action: stop
 ```
 
-`stream_card` fields: `target`, `channel` or `url`, `title`, `open` (a pop-up hash like `#tv`, or a dashboard path), `action` (`play` or `stop`).
+`stream_card` fields: `target`, `channel` or `url`, `title` (default: the channel's name), `open` (a pop-up hash like `#tv`, or a dashboard path), `action` (`play` or `stop`).
 
 ### Bubble Card buttons
 On a Bubble Card button, `tap_action` only covers the **icon**. The rest of the button runs `button_action`, so set both:
@@ -116,8 +146,7 @@ tap_action: &bbc1
   action: fire-dom-event
   stream_card:
     target: kitchen_tv
-    channel: 3f2b9c1e-7a4d-4e8b-9c2f-1d5e6a7b8c9d
-    title: BBC One HD
+    channel: BBC One HD
     open: "#kitchen-tv"
 button_action:
   tap_action: *bbc1
@@ -137,7 +166,7 @@ cards:
   - type: custom:stream-card
     target: kitchen_tv
     dispatcharr_url: https://dispatcharr.example
-    output_profile: 2
+    output_profile: 3
 ```
 
 ## 5. Fully Kiosk (Fire tablets)
@@ -156,7 +185,10 @@ Turn on `debug: true` to see codecs, buffer, dropped frames and the last error o
 | This device can't play this stream's format. | As above; turn on `debug` to see the codecs. |
 | No picture in this stream: its video track is missing or uses a codec the player skips. | The channel is probably MPEG-2 video. Use a profile that converts video to H.264. Sound still plays. |
 | No data from Dispatcharr after {seconds} s. If an output profile is set, check its ffmpeg command works for this channel. | Usually a broken output profile (ffmpeg exits, Dispatcharr waits forever). Test the profile's command on the channel, or remove `output_profile` to compare. |
-| Dispatcharr doesn't know this channel (404). Check the channel ID. | Copy the channel UUID from Dispatcharr again. |
+| Dispatcharr doesn't know this channel (404). Check the channel ID. | Copy the channel UUID from Dispatcharr again, or use its name. |
+| Couldn't load the channel list from Dispatcharr ({detail}). Check dispatcharr_url, or m3u_url if you set one. | Open `<dispatcharr_url>/output/m3u` on this device. HTTP 403 means Dispatcharr's network access settings block M3U/EPG for this device's IP. Press Try again after fixing it. |
+| No channel called "{name}" in the channel list. | Check the spelling against the picker, or use the channel number. A `channel_groups` filter doesn't hide channels from names. |
+| The channel list is empty. | Dispatcharr returned a playlist with no channels: check that channels are enabled and assigned to a channel profile. |
 | Dispatcharr refused the stream ({status}). Check Dispatcharr's network access settings for streams. | Dispatcharr's network access rules block this device's IP. |
 | Dispatcharr returned an error ({status}). | Dispatcharr is having trouble (often 503 when the provider's connection limit is reached). The card retries 5xx errors on its own. |
 | Dispatcharr blocked this page's request (CORS). Check that nothing in front of Dispatcharr removes its Access-Control-Allow-Origin header. | Run the `curl` check in section 1. |

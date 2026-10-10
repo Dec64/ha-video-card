@@ -79,7 +79,7 @@ test('error state has a message and a retry button', async ({ h }) => {
 
 test('connecting and empty states', async ({ h }) => {
   await h.load();
-  await h.mount({ target: 'tv' }, { id: 'empty' });
+  await h.mount({ target: 'tv', channel_list: false }, { id: 'empty' });
   await h.expectUi('empty', '#empty');
   await expect(h.frame('#empty')).toContainText('Choose a channel');
   await shot(h, 'empty');

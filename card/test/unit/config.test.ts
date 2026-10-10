@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import {
   ConfigError,
   guessSourceType,
+  isUuid,
+  needsLookup,
   normalizeConfig,
   parseAspectRatio,
   parseRequest,
@@ -145,5 +147,71 @@ describe('helpers', () => {
     expect(parseRequest({ target: 'tv' })).toBeUndefined();
     expect(parseRequest({ channel: 'a', action: 'rewind' })).toBeUndefined();
     expect(parseRequest('abc')).toBeUndefined();
+  });
+});
+
+describe('channel list options', () => {
+  it('defaults the channel list on, from dispatcharr_url', () => {
+    const c = normalizeConfig(base);
+    expect(c).toMatchObject({
+      channelList: true,
+      m3uUrl: 'https://dispatcharr.example/output/m3u',
+      channelGroups: [],
+      favourites: [],
+      rememberChannel: true,
+    });
+  });
+
+  it('is off without a Dispatcharr URL or M3U URL', () => {
+    const c = normalizeConfig({ type: 'custom:stream-card', url: 'https://x.example/a.ts' });
+    expect(c.channelList).toBe(false);
+    expect(c.m3uUrl).toBeUndefined();
+  });
+
+  it('reads groups, favourites and an explicit M3U URL', () => {
+    const c = normalizeConfig({
+      ...base,
+      channel_list: true,
+      m3u_url: 'https://lists.example/my.m3u',
+      channel_groups: ['News', ' UK '],
+      favourites: ['BBC One', 101],
+      remember_channel: false,
+    });
+    expect(c).toMatchObject({
+      m3uUrl: 'https://lists.example/my.m3u',
+      channelGroups: ['News', 'UK'],
+      favourites: ['BBC One', '101'],
+      rememberChannel: false,
+    });
+  });
+
+  it('accepts a single string for list options', () => {
+    expect(normalizeConfig({ ...base, channel_groups: 'News' }).channelGroups).toEqual(['News']);
+  });
+
+  it('rejects bad values', () => {
+    expect(() => normalizeConfig({ ...base, m3u_url: 'not a url' })).toThrow(ConfigError);
+    expect(() => normalizeConfig({ ...base, favourites: [{ a: 1 }] })).toThrow(ConfigError);
+  });
+
+  it('accepts a channel name or number as the default when the list is on', () => {
+    expect(normalizeConfig({ ...base, channel: 'BBC One HD' }).defaultRequest?.channel).toBe(
+      'BBC One HD',
+    );
+    expect(normalizeConfig({ ...base, channel: '101' }).defaultRequest?.channel).toBe('101');
+    expect(() => normalizeConfig({ ...base, channel_list: false, channel: 'BBC One HD' })).toThrow(
+      ConfigError,
+    );
+  });
+});
+
+describe('isUuid / needsLookup', () => {
+  it('tells IDs from names and numbers', () => {
+    expect(isUuid('3F2B9C1E-7A4D-4E8B-9C2F-1D5E6A7B8C9D')).toBe(true);
+    expect(isUuid('BBC One')).toBe(false);
+    expect(needsLookup('BBC One HD')).toBe(true);
+    expect(needsLookup('101')).toBe(true);
+    expect(needsLookup('3f2b9c1e-7a4d-4e8b-9c2f-1d5e6a7b8c9d')).toBe(false);
+    expect(needsLookup('ok--abc')).toBe(false);
   });
 });

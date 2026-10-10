@@ -80,8 +80,13 @@ target: kitchen_popup               # mailbox key; required to receive button re
 dispatcharr_url: https://dispatcharr.example
 output_profile: 3                   # Dispatcharr output profile ID, sent as ?output_profile=3; omit for none
 url_template: "{base}/proxy/ts/stream/{channel}"   # default; rarely changed
-channel: <uuid>                     # optional default channel
+channel: <uuid>                     # optional default channel: UUID, or a name/number from the channel list
 title: Optional default title
+channel_list: true                  # default true when dispatcharr_url or m3u_url is set: picker, channel up/down, names
+m3u_url: <url>                      # default {base}/output/m3u
+channel_groups: [News, Sport]       # optional: only these groups, in this order
+favourites: [BBC One HD, 101]       # optional: names, numbers or UUIDs pinned under ★ Favourites
+remember_channel: true              # start on this device's last channel for the target (localStorage)
 autoplay: true                      # play the target's last or default channel when shown
 muted: false                        # start muted; falls back to muted + "tap to unmute" if blocked
 aspect_ratio: "16:9"
@@ -97,7 +102,8 @@ tap_action:
   action: fire-dom-event
   stream_card:
     target: kitchen_popup
-    channel: <uuid>          # or url: <full url> to bypass the template
+    channel: <uuid>          # or a channel name/number (looked up in the card's channel list),
+                             # or url: <full url> to bypass the template
     title: Sky Sports Main Event
     open: "#kitchen-tv"      # optional Bubble pop-up hash
   # stream_card: { target: kitchen_popup, action: stop }   ← stop button
@@ -126,6 +132,9 @@ interface EngineError {
 
 ### Controller (one per page, on `window.__streamCard`)
 `request(req)`, `take(target)`, `lastFor(target)`, `stop(target)`, `register(card)`, `unregister(card)`, `onFullyEvent(name)`. Pending requests expire after 30 s. `lastFor` lets a recreated card resume its target's last channel. Requests without a target go to `default`.
+
+### Channel list (added in 1.0)
+`card/src/channels.ts`: `loadChannels(m3uUrl)` fetches and parses Dispatcharr's M3U once per page (10-minute cache); `ChannelList` filters by group, orders by channel number and finds a channel by UUID, number or name (case-insensitive). The card resolves names and numbers to the stream UUID before building the URL, so playback, the mailbox and the release rules are unchanged. Order on connect: pending button request, then the controller's `lastFor`, then the remembered channel (`localStorage['stream-card:last:<target>']`), then `channel`.
 
 ## 5. Tasks
 
@@ -219,4 +228,5 @@ Unchanged from [development-plan.md](development-plan.md): Fire hardening and so
 - **Screenshot tests attach images instead of comparing pixels.** Fonts differ between the dev container and CI, so pixel baselines would flap. States are asserted through the DOM; screenshots are attached to the report for review.
 - **HACS:** `hacs.json` and a release workflow (zip of `dist/`) are in place but untested until Phase 6. v1 installs manually from the CI artifact.
 - **Element name:** `stream-card`, confirmed by Declan on 2026-10-10.
+- **Channel selection (1.0, asked for by Declan on 2026-10-10).** The card loads every channel from Dispatcharr's `/output/m3u` (no auth needed, CORS `*`; logos come from `/api/channels/logos/<id>/cache/`, also public) and shows a picker with search, groups, favourites and logos, channel up/down buttons, and a visual editor (`getConfigForm`). Buttons may name a channel by name or number. The EPG (8.7 MB on the real server) is not loaded. Contract additions are in §4.
 - **Real Home Assistant tests added** (`card/test/ha`): a pinned HA + Bubble Card installed with uv, onboarded over the API, dashboard created over the websocket API. Not in the original plan; they caught the Bubble `button_action` detail that the fake harness couldn't.

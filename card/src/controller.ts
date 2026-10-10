@@ -1,5 +1,6 @@
 import { CONTROLLER_KEY, DEFAULT_TARGET, POWER_EVENT, VERSION } from './const';
 import { parseRequest } from './config';
+import { rememberStopped } from './memory';
 import type { StreamRequest } from './types';
 
 /** What the controller needs from a card instance. */
@@ -110,6 +111,7 @@ export class StreamController {
   stop(target: string): void {
     this.pending.delete(target);
     this.last.delete(target);
+    rememberStopped(target);
     for (const card of this.cards) if (card.target === target) card.stopFromController();
   }
 

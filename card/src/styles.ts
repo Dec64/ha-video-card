@@ -18,6 +18,7 @@ export const styles = css`
     user-select: none;
     -webkit-user-select: none;
     -webkit-tap-highlight-color: transparent;
+    container-type: inline-size;
     font-family: var(--ha-font-family-body, var(--paper-font-body1_-_font-family, sans-serif));
   }
   .frame:fullscreen {
@@ -155,6 +156,17 @@ export const styles = css`
     text-overflow: ellipsis;
     transition: opacity 0.3s;
   }
+  .badge-logo {
+    flex: none;
+    height: 18px;
+    max-width: 40px;
+    object-fit: contain;
+  }
+  .badge-num {
+    flex: none;
+    font-variant-numeric: tabular-nums;
+    opacity: 0.8;
+  }
   .live-dot {
     flex: none;
     width: 8px;
@@ -182,7 +194,10 @@ export const styles = css`
     position: absolute;
     right: 8px;
     bottom: 8px;
+    max-width: calc(100% - 16px);
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 6px;
     transition: opacity 0.3s;
   }
@@ -223,5 +238,18 @@ export const styles = css`
     word-break: break-all;
     pointer-events: none;
     text-align: left;
+  }
+  @container (max-width: 380px) {
+    .controls button {
+      width: 36px;
+      height: 36px;
+    }
+    .controls svg {
+      width: 20px;
+      height: 20px;
+    }
+  }
+  stream-card-picker.panel {
+    border-top: 1px solid var(--divider-color, rgba(0, 0, 0, 0.12));
   }
 `;

@@ -14,6 +14,15 @@
 //
 // GET /__stats?channel=<id>  → { open, total, queries: [...] }   (all channels without ?channel)
 //
+// GET /output/m3u  → a Dispatcharr-style channel playlist. Query parameters:
+//   prefix=<p>   channel IDs are <mode>--<p>-<n>, so each test gets its own (default "m3u")
+//   n=<count>    number of channels (default 6); groups rotate News / Entertainment / Sport
+//   modes=a,b    mode of each channel in turn (default ok), e.g. modes=ok,stall-3
+//   fail=<code>  answer with this status; failfirst=<k> fails only the first k requests
+//   delay=<ms>   wait before answering
+// Requests are counted in /__stats under "m3u:<prefix>". Logos: /__logo/<n>.svg (channel 3
+// has a broken logo, channel 4 none).
+//
 // Run standalone: node test/fake-dispatcharr/server.mjs [--port 8930] [--app-port 8931]
 import { spawn } from 'node:child_process';
 import { createReadStream, existsSync, statSync } from 'node:fs';
@@ -22,6 +31,39 @@ import { extname, join, normalize, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)));
+
+const CHANNELS = [
+  ['News One HD', 'News'],
+  ['Movies Plus', 'Entertainment'],
+  ['Sports Live HD', 'Sport'],
+  ['News Two', 'News'],
+  ['Kids Time', 'Entertainment'],
+  ['Sport Extra', 'Sport'],
+  ['Docs World', 'Entertainment'],
+  ['Music Hits', 'Entertainment'],
+];
+function m3u(host, params) {
+  const prefix = params.get('prefix') || 'm3u';
+  const n = Number(params.get('n') || 6);
+  const modes = (params.get('modes') || 'ok').split(',');
+  const lines = ['#EXTM3U x-tvg-url="http://' + host + '/output/epg"'];
+  for (let i = 1; i <= n; i++) {
+    const id = `${modes[(i - 1) % modes.length]}--${prefix}-${i}`;
+    const [name, group] = CHANNELS[i - 1] ?? [`Channel ${i}`, 'Other'];
+    const logo = i === 4 ? '' : ` tvg-logo="http://${host}/__logo/${i === 3 ? 'missing' : i}.svg"`;
+    lines.push(
+      `#EXTINF:-1 tvg-id="${i}" tvg-name="${name}"${logo} tvg-chno="${100 + i}" ` +
+        `group-title="${group}",${name}`,
+      `http://${host}/proxy/ts/stream/${encodeURIComponent(id)}`,
+    );
+  }
+  return lines.join('\r\n') + '\r\n';
+}
+
+function logoSvg(i) {
+  const hue = (Number(i) * 47) % 360;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 72 40"><rect width="72" height="40" rx="6" fill="hsl(${hue} 60% 45%)"/><text x="36" y="26" font-size="16" text-anchor="middle" fill="#fff" font-family="sans-serif">${i}</text></svg>`;
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -109,6 +151,39 @@ export async function startFakeDispatcharr({ port = 0, appPort = 0, host = '127.
         'Cache-Control': 'no-store',
       });
       return res.end(JSON.stringify(body));
+    }
+    if (url.pathname === '/output/m3u') {
+      const p = url.searchParams;
+      const s = stat(`m3u:${p.get('prefix') || 'm3u'}`);
+      s.total++;
+      s.queries.push(Object.fromEntries(p));
+      const fail = Number(p.get('fail') || 0);
+      const failFirst = Number(p.get('failfirst') || 0);
+      const answer = () => {
+        if (fail && (!failFirst || s.total <= failFirst)) {
+          res.writeHead(fail, cors);
+          return res.end('error');
+        }
+        res.writeHead(200, {
+          ...cors,
+          'Content-Type': 'audio/x-mpegurl; charset=utf-8',
+          'Cache-Control': 'no-store',
+        });
+        res.end(m3u(req.headers.host, p));
+      };
+      const delay = Number(p.get('delay') || 0);
+      if (delay) setTimeout(answer, delay);
+      else answer();
+      return;
+    }
+    const logo = /^\/__logo\/(\d+)\.svg$/.exec(url.pathname);
+    if (logo) {
+      res.writeHead(200, {
+        ...cors,
+        'Content-Type': 'image/svg+xml',
+        'Cache-Control': 'max-age=60',
+      });
+      return res.end(logoSvg(logo[1]));
     }
     const m = /^\/proxy\/ts\/stream\/([^/]+)$/.exec(url.pathname);
     if (!m) {

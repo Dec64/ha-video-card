@@ -15,7 +15,7 @@ const call = (msg) =>
 
 const play = (target, channel, title, open) => ({
   action: 'fire-dom-event',
-  stream_card: { target, channel, title, ...(open ? { open } : {}) },
+  stream_card: { target, channel, ...(title ? { title } : {}), ...(open ? { open } : {}) },
 });
 
 // A sections view, as recommended for new dashboards. HA's sections view does not render
@@ -58,6 +58,18 @@ export const DASHBOARD = {
               card_layout: 'large',
               tap_action: play('tv_test', 'ok--ha-b', 'Channel B', '#tv-test'),
               button_action: { tap_action: play('tv_test', 'ok--ha-b', 'Channel B', '#tv-test') },
+            },
+            {
+              // Channel by name, looked up in the pop-up card's channel list.
+              type: 'custom:bubble-card',
+              card_type: 'button',
+              button_type: 'name',
+              name: 'Bubble button: Sports Live HD by name',
+              icon: 'mdi:soccer',
+              tap_action: play('tv_test', 'Sports Live HD', undefined, '#tv-test'),
+              button_action: {
+                tap_action: play('tv_test', 'Sports Live HD', undefined, '#tv-test'),
+              },
             },
             {
               type: 'button',
