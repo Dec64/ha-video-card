@@ -6,9 +6,9 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 **Phase:** v1 build plan drafted ([docs/build-plan-v1.md](docs/build-plan-v1.md)). Phase 0 dropped: a Dispatcharr output profile fixes the stream format, and the remaining device questions become v1 acceptance checks.
 
 **Next action (Declan):**
-1. Review the build plan, especially §2 (suggested changes to the "Web Player (AAC Audio)" profile, and switch it to Active).
-2. Answer: how does a client get that profile in Dispatcharr (per channel, per user, default, or URL parameter)?
-3. Add the CORS header on Dispatcharr's hostname in Cloudflare (rule in [phase0-test-kit/README.md](phase0-test-kit/README.md), setup step 3).
+1. Review the build plan, especially §2: suggested changes to the "Web Player (AAC Audio)" profile, and switch it to **Active** (an inactive profile is silently ignored).
+2. Note the profile's numeric ID; the card sends it as `?output_profile=<id>`.
+3. Run the CORS `curl` check in §2. Dispatcharr allows all origins itself, so the Cloudflare rule is probably not needed.
 
 **Next action (Claude), once the plan is approved:** T0 (scaffold, CLAUDE.md, CI) then T1 (test harness), per the build plan.
 
@@ -31,12 +31,12 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 | 2026-10-06 | "Cast to TV" means HA Cast of a dashboard with the card on it; the video plays in the card on the TV |
 | 2026-10-06 | iPhones are first-class; HLS fallback via go2rtc if the HA iOS app can't run mpegts.js |
 | 2026-10-10 | Skip Phase 0. Dispatcharr output profile (AAC audio, MPEG-TS) defines the stream; device checks move to v1 acceptance (T10) |
+| 2026-10-10 | The card selects the output profile per URL with `?output_profile=<id>` (Dispatcharr's own parameter) |
 | 2026-10-10 | v1 = card only, IPTV only. Companion integration, Cast and YouTube come after |
 | 2026-10-07 | Code and docs live in the private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card); `C:\Users\Declan\Projects\HA Video Card` is a clone and project files keep a mirror |
 
 ## Open questions
 - Card element name (`stream-card` is a placeholder; avoid the `ha-` prefix).
-- How a client selects the Dispatcharr output profile (decides the default `url_template`).
 - iPhone HA app support for mpegts.js, HA Cast behaviour, YouTube ads per device (checked in T10 and later phases instead of Phase 0).
 
 ## Known risks
@@ -45,6 +45,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
+- **2026-10-10:** Checked Dispatcharr's source: `?output_profile=<id>` selects the profile per stream (falls back silently to no conversion if the ID is wrong or the profile is inactive), and Dispatcharr already sends `Access-Control-Allow-Origin: *`. Plan updated.
 - **2026-10-10:** Reviewed the approach after Declan's point about output profiles. Dropped Phase 0, wrote [docs/build-plan-v1.md](docs/build-plan-v1.md) (agentic task breakdown, contracts, test harness). Found that headless Chromium here can't decode H.264/AAC, so e2e uses an MSE shim locally and real Chrome in CI.
 - **2026-10-07:** Created the private repo Dec64/ha-video-card and linked the PC folder to it (the direct folder copy wasn't working).
 - **2026-10-07:** Organized files into `docs/` and `phase0-test-kit/`, added this handover and a README.
