@@ -171,6 +171,10 @@
   ]) {
     orig[k] = Object.getOwnPropertyDescriptor(proto, k);
   }
+  let lastTap = -Infinity;
+  for (const e of ['pointerdown', 'click', 'keydown']) {
+    window.addEventListener(e, (ev) => ev.isTrusted && (lastTap = performance.now()), true);
+  }
   const origPlay = proto.play;
   const origPause = proto.pause;
   const origLoad = proto.load;
@@ -357,7 +361,9 @@
   }
   proto.play = function () {
     if (!fake(this)) return origPlay.call(this);
-    if (window.__mseShimBlockUnmuted && !this.muted) {
+    // Like Chrome: unmuted autoplay needs a user gesture (a real tap in the last second).
+    const gesture = performance.now() - lastTap < 1000;
+    if (window.__mseShimBlockUnmuted && !this.muted && !gesture) {
       return Promise.reject(new DOMException('play() needs a user gesture', 'NotAllowedError'));
     }
     const s = state(this);

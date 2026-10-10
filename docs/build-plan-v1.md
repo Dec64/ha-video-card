@@ -2,6 +2,8 @@
 
 **Date:** 2026-10-10 · **Replaces:** Phase 0 and Phase 1 of [development-plan.md](development-plan.md) · **Scope:** card only, Dispatcharr/IPTV only.
 
+> **Status (2026-10-10):** T0–T9 built in `card/` (56 unit tests, 38 e2e tests, live-tested against a real BBC One channel). T10 (real devices) is next: [acceptance-v1.md](acceptance-v1.md). Changes from this plan made during the build are listed in §7.
+
 ## 1. Why Phase 0 is dropped
 
 Phase 0 was there to find out what the stream looks like on each device before writing code. Dispatcharr's **output profiles** remove most of that question: we decide the stream format server-side instead of measuring whatever the provider sends.
@@ -78,10 +80,11 @@ output_profile: 3                   # Dispatcharr output profile ID, sent as ?ou
 url_template: "{base}/proxy/ts/stream/{channel}"   # default; rarely changed
 channel: <uuid>                     # optional default channel
 title: Optional default title
-autoplay: true                      # play pending/default channel when shown
+autoplay: true                      # play the target's last or default channel when shown
 muted: false                        # start muted; falls back to muted + "tap to unmute" if blocked
 aspect_ratio: "16:9"
 idle_timeout: 0                     # minutes, 0 = off
+start_timeout: 20                   # seconds to wait for first data before a "timeout" error
 reconnect: { max_attempts: 5 }      # backoff 1, 2, 4, 8, 15 s
 debug: false
 ```
@@ -99,22 +102,28 @@ tap_action:
 ```
 
 ### Engine interface
+As built (`card/src/engines/types.ts`). Engines report data, media info and errors; the session watches the `<video>` itself for playing and stalls, so both engines share one watchdog.
 ```ts
 interface Engine {
   readonly kind: 'mpegts' | 'native';
-  load(video: HTMLVideoElement, src: StreamSource, opts: EngineOptions): Promise<void>;
-  destroy(): Promise<void>;            // idempotent; must abort the fetch
+  load(video: HTMLVideoElement, src: StreamSource): Promise<void>;
+  destroy(): Promise<void>;            // idempotent; aborts the fetch synchronously
   on(listener: (e: EngineEvent) => void): () => void;
-  getStats(): EngineStats;             // buffer s, dropped frames, bitrate, codecs
+  getStats(video: HTMLVideoElement): EngineStats;   // buffer s, frames, dropped, KB/s
 }
 type EngineEvent =
-  | { type: 'playing' } | { type: 'stalled' } | { type: 'media-info'; video?: string; audio?: string }
-  | { type: 'error'; kind: 'network' | 'cors' | 'http' | 'codec' | 'unsupported-device' | 'media'; detail: string }
-  | { type: 'ended' };
+  | { type: 'data' }                                // first bytes arrived (ends the start timeout)
+  | ({ type: 'media-info' } & MediaInfo)            // videoCodec, audioCodec, width, height, fps
+  | { type: 'error'; error: EngineError };
+interface EngineError {
+  kind: 'network' | 'cors' | 'http' | 'timeout' | 'codec' | 'unsupported-device'
+      | 'media' | 'stall' | 'ended' | 'config';
+  detail: string; status?: number; track?: 'audio' | 'video'; codec?: string;
+}
 ```
 
 ### Controller (one per page, on `window.__streamCard`)
-`request(req)`, `take(target)`, `stop(target)`, `register(card)`, `unregister(card)`. Pending requests expire after 30 s.
+`request(req)`, `take(target)`, `lastFor(target)`, `stop(target)`, `register(card)`, `unregister(card)`, `onFullyEvent(name)`. Pending requests expire after 30 s. `lastFor` lets a recreated card resume its target's last channel. Requests without a target go to `default`.
 
 ## 5. Tasks
 
@@ -200,3 +209,11 @@ A one-page checklist replacing Phase 0. For Fire HD 8 (Fully), Android HA app, i
 
 ## 6. After v1
 Unchanged from [development-plan.md](development-plan.md): Fire hardening and soak tests (Phase 2), companion integration (Phase 3), HA Cast (Phase 4), YouTube (Phase 5), editor and HACS (Phase 6). HA Cast moves later, so it's checked in Phase 4 rather than up front.
+
+## 7. Changes made during the build
+- **mpegts.js abort bug, fixed with a custom loader.** On Chrome-based browsers, mpegts.js's fetch loader doesn't abort a request that is receiving data; it waits for the next chunk to cancel. A stalled Dispatcharr stream therefore kept its connection open. `ImmediateAbortLoader` (`card/src/engines/fetch-loader.ts`) aborts at once; the stall e2e test guards it.
+- **Codec errors before media info.** Chrome rejects an unsupported codec (`addSourceBuffer`) before mpegts.js reports media info, so the codec is parsed from that error too. MPEG-2 video is skipped by mpegts.js without an error, so the card shows a "no picture" notice when the video has no size after 3 s of playback.
+- **`start_timeout` option added.** A broken output profile makes Dispatcharr accept the request and never answer. The card reports this as a timeout that points at the output profile.
+- **Screenshot tests attach images instead of comparing pixels.** Fonts differ between the dev container and CI, so pixel baselines would flap. States are asserted through the DOM; screenshots are attached to the report for review.
+- **HACS:** `hacs.json` and a release workflow (zip of `dist/`) are in place but untested until Phase 6. v1 installs manually from the CI artifact.
+- **Element name:** still `stream-card` (open question in HANDOVER.md).

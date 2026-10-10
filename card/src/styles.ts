@@ -121,9 +121,9 @@ export const styles = css`
     fill: currentColor;
   }
   .pill.primary {
-    background: var(--primary-color, #03a9f4);
-    border-color: transparent;
-    color: var(--text-primary-color, #fff);
+    background: rgba(0, 0, 0, 0.75);
+    border-color: rgba(255, 255, 255, 0.85);
+    font-weight: 500;
   }
   .spinner {
     width: 40px;

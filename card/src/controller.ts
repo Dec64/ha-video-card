@@ -50,6 +50,12 @@ export class StreamController {
     this.bindFully();
   }
 
+  uninstall(): void {
+    if (!this.installed) return;
+    this.installed = false;
+    this.win.removeEventListener('ll-custom', this.onLlCustom);
+  }
+
   private onLlCustom = (ev: Event): void => {
     const detail = (ev as CustomEvent).detail as Record<string, unknown> | undefined;
     if (!detail || !('stream_card' in detail)) return;

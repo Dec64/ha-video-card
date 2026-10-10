@@ -2,7 +2,9 @@ import { expect, test } from './fixtures';
 
 // Every path that should release the Dispatcharr connection, asserted on the server's count.
 
-test('closing a Bubble-style pop-up releases the stream, reopening resumes it', async ({ h }) => {
+test('closing a Bubble-style pop-up releases the stream, reopening resumes it @real', async ({
+  h,
+}) => {
   await h.load();
   const ch = h.channel();
   await h.mount({ target: 'popup' }, { where: '#tv', id: 'pop' });

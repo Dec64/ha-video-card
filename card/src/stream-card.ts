@@ -304,9 +304,14 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.evaluate();
   };
 
+  /** What the mute button shows: the video's state while playing, else what the next play will use. */
+  private get effectiveMuted(): boolean {
+    return this.session ? this.video.muted : (this.userMuted ?? this.config?.muted ?? false);
+  }
+
   private toggleMute = (e?: Event): void => {
     e?.stopPropagation();
-    const muted = !this.video.muted;
+    const muted = !this.effectiveMuted;
     this.video.muted = muted;
     this.userMuted = muted;
     if (!muted && this.session?.status.mutedByPolicy) void this.session.resumeFromGesture(true);
@@ -456,7 +461,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     const title = this.source?.title;
     if (!title && ui !== 'playing') return nothing;
     return html`<div class="badge ${hidden ? 'hidden' : ''}">
-      ${ui === 'playing' ? html`<span class="live-dot" aria-label="Live"></span>` : nothing}
+      ${ui === 'playing' ? html`<span class="live-dot" role="img" aria-label="Live"></span>` : nothing}
       <span class="title">${title ?? 'Live'}</span>
     </div>`;
   }
@@ -537,9 +542,9 @@ export class StreamCard extends LitElement implements ControllerCard {
       <button
         class="ctl-mute"
         @click=${this.toggleMute}
-        aria-label=${this.video.muted ? 'Unmute' : 'Mute'}
+        aria-label=${this.effectiveMuted ? 'Unmute' : 'Mute'}
       >
-        ${icon(this.video.muted ? 'volumeOff' : 'volumeHigh')}
+        ${icon(this.effectiveMuted ? 'volumeOff' : 'volumeHigh')}
       </button>
       <button
         class="ctl-fullscreen"

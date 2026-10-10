@@ -3,6 +3,8 @@ import { defineConfig } from '@playwright/test';
 
 /** REAL_CODECS=1 runs the @real tests in Google Chrome, which can decode H.264/AAC. */
 const real = process.env.REAL_CODECS === '1';
+/** LIVE=1 runs test/live against a real Dispatcharr (see test/live/live.spec.ts). */
+const live = process.env.LIVE === '1';
 // Cloud dev containers ship a Chromium build outside Playwright's registry.
 const localChromium =
   !process.env.CI && existsSync('/opt/pw-browsers/chromium')
@@ -10,8 +12,8 @@ const localChromium =
     : undefined;
 
 export default defineConfig({
-  testDir: 'test/e2e',
-  timeout: 60_000,
+  testDir: live ? 'test/live' : 'test/e2e',
+  timeout: live ? 150_000 : 60_000,
   expect: { timeout: 10_000 },
   fullyParallel: true,
   workers: process.env.CI ? 2 : 4,
@@ -26,7 +28,14 @@ export default defineConfig({
       ? { name: 'chrome', use: { channel: 'chrome' }, grep: /@real/ }
       : {
           name: 'chromium',
-          use: { launchOptions: localChromium ? { executablePath: localChromium } : {} },
+          use: {
+            launchOptions: localChromium ? { executablePath: localChromium } : {},
+            // Live tests from a sandbox may need the outbound proxy.
+            proxy:
+              live && process.env.HTTPS_PROXY
+                ? { server: process.env.HTTPS_PROXY, bypass: '127.0.0.1,localhost' }
+                : undefined,
+          },
           grepInvert: /@real-only/,
         },
   ],

@@ -12,13 +12,13 @@ async function maxOpenWhile(h: Harness, ch: string, ms: number): Promise<number>
   return max;
 }
 
-test('a stalled stream reconnects on its own, never with two connections', async ({ h }) => {
+test('a stalled stream reconnects on its own, never with two connections @real', async ({ h }) => {
   await h.load();
   const ch = h.channel('stall-2');
   await h.mount({ channel: ch, ...FAST });
   await h.expectUi('playing');
   // Stalls after 2 s; watchdog fires after 8 s without progress, then reconnects.
-  expect(await maxOpenWhile(h, ch, 14_000)).toBe(1);
+  expect(await maxOpenWhile(h, ch, 18_000)).toBe(1);
   expect((await h.stats(ch)).total).toBeGreaterThanOrEqual(2);
   await h.expectUi('playing');
 });

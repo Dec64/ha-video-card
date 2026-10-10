@@ -12,7 +12,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "e2e": "playwright test",
-    "check": "npm run lint && npm run typecheck && npm run test && npm run build"
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build && node scripts/check-messages.mjs"
   },
   "license": "MIT",
   "dependencies": {
@@ -20,6 +20,7 @@
     "mpegts.js": "^1.8.2"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.0",
     "eslint": "^10.12.0",
