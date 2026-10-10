@@ -1,4 +1,5 @@
 import { createEngine as defaultCreateEngine, type EngineFactory } from './engines/registry';
+import { videoIdle } from './engines/video-lock';
 import {
   EngineFailure,
   type Engine,
@@ -135,6 +136,9 @@ export class PlaybackSession {
       }
     }, this.opts.startTimeoutMs);
 
+    // A previous engine may still be finishing with this <video>.
+    await videoIdle(this.video);
+    if (!this.isCurrent(id)) return;
     try {
       await engine.load(this.video, this.source);
     } catch (err) {

@@ -134,6 +134,7 @@ test('loads from a HACS path and lazy-loads the player chunk from there', async 
   await h.mount({ channel: h.channel() });
   await h.expectUi('playing');
   expect(chunks.some((u) => /stream-card-mpegts-engine-.*\.js$/.test(u))).toBe(true);
+  expect(chunks.some((u) => /\/mpegts-\d+\.\d+\.\d+\.js$/.test(u))).toBe(true);
 });
 
 test('registers in the card picker', async ({ h, page }) => {

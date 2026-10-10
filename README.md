@@ -2,7 +2,7 @@
 
 A Lovelace card that plays Dispatcharr IPTV channels on wall tablets, phones and desktop, including inside Bubble Card pop-ups, and **releases the Dispatcharr connection whenever nobody can see it**: pop-up closed, screen off, Fully Kiosk screensaver, app in the background, page hidden, edit mode or idle timeout.
 
-- Plays Dispatcharr's MPEG-TS streams with [mpegts.js](https://github.com/xqq/mpegts.js), loaded only when needed.
+- Plays Dispatcharr's MPEG-TS streams with [mpegts.js](https://github.com/xqq/mpegts.js) (shipped unmodified next to the card), loaded only when needed.
 - Any button can play a channel on a chosen card with HA's built-in `fire-dom-event` action. No browser_mod.
 - Reconnects on its own after stalls and dropped connections, and never holds two connections at once.
 - Says what's wrong in plain words (unsupported codec, CORS, channel not found, a broken output profile) instead of showing a black box.
@@ -36,7 +36,7 @@ It should print `access-control-allow-origin: *`. If you add a header rule in Cl
 Until the HACS release (Phase 6):
 
 1. Get the build: the **stream-card-dist** artifact of the latest successful [CI run](https://github.com/Dec64/ha-video-card/actions), or build it yourself with `cd card && npm ci && npm run build` (output in `card/dist/`).
-2. Copy **every file** from it into `/config/www/stream-card/` (the main file loads the player from a second file next to it).
+2. Copy **every `.js` file** from it into `/config/www/stream-card/`. The card loads its player code and `mpegts-1.8.2.js` (the unmodified [mpegts.js](https://github.com/xqq/mpegts.js) build, identical to `https://cdn.jsdelivr.net/npm/mpegts.js@1.8.2/dist/mpegts.js`) from the same folder.
 3. Settings → Dashboards → ⋮ → Resources → Add resource: URL `/local/stream-card/stream-card.js?v=0.1.0`, type **JavaScript module**. Raise `?v=` on each update so devices fetch the new version.
 4. Reload the browser (on Fully Kiosk: clear cache and reload).
 

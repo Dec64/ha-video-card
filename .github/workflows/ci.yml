@@ -28,6 +28,7 @@ jobs:
           path: |
             card/dist/*.js
             card/dist/*.js.map
+            card/dist/*.txt
 
   e2e:
     name: E2E (Chromium + MSE shim)

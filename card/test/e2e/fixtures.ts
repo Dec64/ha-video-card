@@ -83,12 +83,19 @@ export class Harness {
   }
 }
 
+// Channel IDs must not repeat across runs: a fake server reused between runs keeps its counters.
+const RUN = Date.now().toString(36);
+
 export const test = base.extend<{ h: Harness }>({
   h: async ({ page }, use, testInfo) => {
     if (!REAL) await page.addInitScript({ path: SHIM });
-    page.on('pageerror', (err) => console.log(`[pageerror] ${err.message}`));
+    page.on('pageerror', (err) =>
+      console.log(
+        `[pageerror] ${test.info().title}: ${err.message} @ ${err.stack?.split('\n').slice(1, 4).join(' < ')}`,
+      ),
+    );
     await page.goto('/');
-    await use(new Harness(page, `${testInfo.testId}-r${testInfo.retry}`));
+    await use(new Harness(page, `${testInfo.testId}-${RUN}-r${testInfo.retry}`));
   },
 });
 

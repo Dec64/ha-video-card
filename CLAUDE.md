@@ -17,13 +17,14 @@ A Home Assistant Lovelace card (`custom:stream-card`) that plays Dispatcharr MPE
 - `src/stream-card.ts`: the Lit element. `evaluate()` is the only place that starts or stops playback.
 - `src/lifecycle.ts`: `holdReason()` (pure) and the watcher for IntersectionObserver, visibility, pagehide, Fully, idle.
 - `src/session.ts`: one source on one `<video>`: start timeout, stall watchdog, reconnect/backoff, error classification.
-- `src/engines/`: `mpegts-engine.ts` (lazy chunk), `native-engine.ts`, `fetch-loader.ts`.
+- `src/engines/`: `mpegts-engine.ts` (lazy chunk), `native-engine.ts`, `fetch-loader.ts`, `load-mpegts.ts` (loads the vendored `mpegts-<version>.js` with a script tag; the build emits it unmodified from node_modules), `video-lock.ts`.
 - `src/errors.ts`: every user-facing message (`MESSAGES`). The README troubleshooting table must list each one; `scripts/check-messages.mjs` enforces it.
 
 ## Rules
 - The `<video>` element is created once in the constructor and never goes in a Lit template. HA sets `hass` constantly; it must never restart playback.
 - Never hold two connections: a session tears down its engine (synchronously aborting the fetch) before any retry, and the card stops a session before starting another.
 - Keep `ImmediateAbortLoader` (`src/engines/fetch-loader.ts`). mpegts.js's own loader does not abort a stalled fetch on Chrome, which leaves the Dispatcharr connection open.
+- `MpegtsEngine.destroy()` aborts the loaders synchronously and defers the rest of mpegts.js's teardown one tick: mpegts.js emits through queued microtasks and throws if destroyed inside its own callbacks. The next engine waits on `videoIdle()` before touching the same `<video>`.
 - Every release path has an e2e test asserting the fake server's open-connection count, not client state. Add one for any new path.
 - Cards in `preview`/`editMode` (HA editor and dashboard edit mode) never open a connection.
 - No real hostnames, channel UUIDs or tokens in the repo. Use `dispatcharr.example` and the fake server.

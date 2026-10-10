@@ -24,7 +24,7 @@ jobs:
       - name: Check the tag matches package.json
         run: test "v$(node -p "require('./package.json').version")" = "${GITHUB_REF_NAME}"
       - run: npm run check
-      - run: cd dist && zip -r ../stream-card.zip . -i '*.js'
+      - run: cd dist && zip -r ../stream-card.zip . -i '*.js' '*.txt'
       - uses: softprops/action-gh-release@v2
         with:
           files: card/stream-card.zip

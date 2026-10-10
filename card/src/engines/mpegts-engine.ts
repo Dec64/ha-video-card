@@ -1,6 +1,8 @@
-import mpegts from 'mpegts.js';
+import type mpegts from 'mpegts.js';
 import type { StreamSource } from '../types';
-import { ImmediateAbortLoader } from './fetch-loader';
+import { immediateAbortLoader } from './fetch-loader';
+import { loadMpegts, type Mpegts } from './load-mpegts';
+import { markVideoBusy } from './video-lock';
 import { Emitter } from './emitter';
 import {
   bufferAhead,
@@ -29,15 +31,13 @@ const PLAYER_CONFIG: mpegts.Config = {
   autoCleanupMinBackwardDuration: 15,
   lazyLoad: false,
   statisticsInfoReportInterval: 1000,
-  // Aborts the fetch immediately on Chrome too; see fetch-loader.ts.
-  customLoader: ImmediateAbortLoader as unknown as mpegts.CustomLoaderConstructor,
 };
 
 let loggingConfigured = false;
 
-export function mpegtsSupported(): boolean {
+function mpegtsSupported(lib: Mpegts): boolean {
   try {
-    return mpegts.isSupported() && mpegts.getFeatureList().mseLivePlayback;
+    return lib.isSupported() && lib.getFeatureList().mseLivePlayback;
   } catch {
     return false;
   }
@@ -49,18 +49,18 @@ export function classifyMpegtsError(
   info: { code?: number; msg?: string } | undefined,
 ): EngineError {
   const msg = `${type}/${detail}${info?.msg ? `: ${info.msg}` : ''}`;
-  const E = mpegts.ErrorDetails;
-  if (type === mpegts.ErrorTypes.NETWORK_ERROR) {
-    if (detail === E.NETWORK_STATUS_CODE_INVALID) {
+  // mpegts.js ErrorTypes / ErrorDetails values.
+  if (type === 'NetworkError') {
+    if (detail === 'HttpStatusCodeInvalid') {
       return { kind: 'http', status: info?.code, detail: msg };
     }
-    if (detail === E.NETWORK_UNRECOVERABLE_EARLY_EOF) return { kind: 'ended', detail: msg };
+    if (detail === 'UnrecoverableEarlyEof') return { kind: 'ended', detail: msg };
     return { kind: 'network', detail: msg };
   }
-  if (type === mpegts.ErrorTypes.MEDIA_ERROR) {
+  if (type === 'MediaError') {
     // e.g. "The type provided ('audio/mp4;codecs=ac-3') is unsupported." from addSourceBuffer
     const m = /(audio|video)\/mp4;\s*codecs="?([^"')\s]+)/i.exec(info?.msg ?? '');
-    if (detail === E.MEDIA_MSE_ERROR && m && /unsupported|not supported/i.test(info?.msg ?? '')) {
+    if (detail === 'MediaMSEError' && m && /unsupported|not supported/i.test(info?.msg ?? '')) {
       return {
         kind: 'codec',
         detail: msg,
@@ -68,7 +68,7 @@ export function classifyMpegtsError(
         codec: m[2],
       };
     }
-    if (detail === E.MEDIA_CODEC_UNSUPPORTED || detail === E.MEDIA_FORMAT_UNSUPPORTED) {
+    if (detail === 'CodecUnsupported' || detail === 'FormatUnsupported') {
       return { kind: 'codec', detail: msg };
     }
     return { kind: 'media', detail: msg };
@@ -84,6 +84,7 @@ export class MpegtsEngine implements Engine {
   private destroyed = false;
   private gotData = false;
   private speed = 0;
+  private loaders = new Set<{ abort(): void }>();
 
   constructor(private readonly debug = false) {}
 
@@ -93,7 +94,14 @@ export class MpegtsEngine implements Engine {
 
   async load(video: HTMLVideoElement, src: StreamSource): Promise<void> {
     if (this.destroyed) return;
-    if (!mpegtsSupported()) {
+    let lib: Mpegts;
+    try {
+      lib = await loadMpegts();
+    } catch (err) {
+      throw new EngineFailure({ kind: 'media', detail: `player library: ${String(err)}` });
+    }
+    if (this.destroyed) return;
+    if (!mpegtsSupported(lib)) {
       throw new EngineFailure({
         kind: 'unsupported-device',
         detail: 'mpegts.js: MediaSource / ManagedMediaSource live playback not available',
@@ -101,20 +109,22 @@ export class MpegtsEngine implements Engine {
     }
     if (!loggingConfigured || this.debug) {
       loggingConfigured = true;
-      mpegts.LoggingControl.applyConfig({
+      lib.LoggingControl.applyConfig({
         enableAll: false,
         enableError: true,
         enableWarn: this.debug,
         enableInfo: this.debug,
       });
     }
-    const player = mpegts.createPlayer(
-      { type: 'mpegts', isLive: true, url: src.url, cors: true },
-      PLAYER_CONFIG,
-    );
+    const player = lib.createPlayer({ type: 'mpegts', isLive: true, url: src.url, cors: true }, {
+      ...PLAYER_CONFIG,
+      // Aborts the fetch immediately on Chrome too; see fetch-loader.ts.
+      customLoader: immediateAbortLoader(lib) as mpegts.CustomLoaderConstructor,
+      onLoaderCreated: (l: { abort(): void }) => this.loaders.add(l),
+    } as mpegts.Config);
     this.player = player;
     this.video = video;
-    const E = mpegts.Events;
+    const E = lib.Events;
     player.on(E.ERROR, (type: string, detail: string, info?: { code?: number; msg?: string }) => {
       this.emitter.emit({ type: 'error', error: classifyMpegtsError(type, detail, info) });
     });
@@ -152,25 +162,39 @@ export class MpegtsEngine implements Engine {
     if (this.destroyed) return;
     this.destroyed = true;
     this.emitter.clear();
+    // Release the Dispatcharr connection now.
+    for (const l of this.loaders) l.abort();
+    this.loaders.clear();
     const player = this.player;
+    const video = this.video;
     this.player = undefined;
-    if (player) {
-      // unload() aborts the fetch; destroy() alone also does, but be explicit and defensive.
-      for (const step of [
-        () => player.pause(),
-        () => player.unload(),
-        () => player.detachMediaElement(),
-        () => player.destroy(),
-      ]) {
-        try {
-          step();
-        } catch {
-          /* already torn down */
-        }
-      }
-    }
-    if (this.video) resetVideo(this.video);
     this.video = undefined;
+    video?.pause();
+    // mpegts.js delivers events through queued microtasks. Destroying it synchronously (often
+    // from inside one of its own error callbacks) makes those land on a destroyed player, so
+    // the rest of the teardown runs on the next tick.
+    const done = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        if (player) {
+          for (const step of [
+            () => player.pause(),
+            () => player.unload(),
+            () => player.detachMediaElement(),
+            () => player.destroy(),
+          ]) {
+            try {
+              step();
+            } catch {
+              /* already torn down */
+            }
+          }
+        }
+        if (video) resetVideo(video);
+        resolve();
+      }, 0);
+    });
+    if (video) markVideoBusy(video, done);
+    await done;
   }
 
   getStats(video: HTMLVideoElement): EngineStats {
