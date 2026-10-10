@@ -47,7 +47,7 @@ Dispatcharr's stream proxy reads `?output_profile=<id>` on `/proxy/ts/stream/<uu
 
 ### CORS check (replaces the Cloudflare rule)
 ```
-curl -sI -H "Origin: https://hayden-family.net" "https://<dispatcharr-host>/proxy/ts/stream/<uuid>?output_profile=<id>" --max-time 3 | grep -i access-control
+curl -sI -H "Origin: https://<your-ha-host>" "https://<dispatcharr-host>/proxy/ts/stream/<uuid>?output_profile=<id>" --max-time 3 | grep -i access-control
 ```
 If that prints `access-control-allow-origin: *`, nothing else is needed. If you add a Cloudflare rule anyway, use **Set** (replace), not Add: two `Access-Control-Allow-Origin` values make the browser reject the response.
 

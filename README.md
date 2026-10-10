@@ -77,7 +77,7 @@ tap_action:
   action: fire-dom-event
   stream_card:
     target: kitchen_tv
-    channel: de528019-264f-42bf-9250-c2a55366e77c
+    channel: 3f2b9c1e-7a4d-4e8b-9c2f-1d5e6a7b8c9d
     title: BBC One HD
     open: "#kitchen-tv"          # optional: opens this Bubble pop-up
 ```
