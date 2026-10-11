@@ -2,22 +2,23 @@
 
 Living document. Newest status at the top; the change log at the bottom keeps the history. Anyone (or any Claude session) picking this up should read this first, then [docs/development-plan.md](docs/development-plan.md).
 
-## Current status (2026-10-10)
-**Phase:** v1 built and **installed on Declan's HA as 0.1.0-beta.1**. Waiting on real-device acceptance (T10).
+## Current status (2026-10-11)
+**Phase:** **1.0.0 built and installed on Declan's HA**, with channel selection. Android and the tablet dashboard play well (the earlier iPhone glitches were the Dispatcharr source, since switched). Waiting on the 1.0 rows of the acceptance checklist.
 
 **Installed on Declan's HA:**
-- Files in `/config/www/stream-card/` (`stream-card.js`, two chunks, `mpegts-1.8.2.js`), byte-identical to the build; resource `/local/stream-card/stream-card.js?v=0.1.0-beta.1`.
-- Dashboard **Stream Card Test** (`/stream-card-test/tv`): BBC One Bubble button + HA button open pop-up `#tv-test` (card target `tv_test`), stop button, and a page card (target `page_test`). Uses Dispatcharr `https://<dispatcharr>` with `output_profile: 3`, `debug: true`.
-- Dispatcharr profile **3 "Stream Card (AAC)"** (added by Declan), verified: H.264 + AAC only.
-- Added to HA for installs: HACS "HA-MCP Custom Component" with the **HA-MCP File & YAML Tools** entry (one approved restart), and the built-in **Downloader** integration (`download_dir: www`).
+- Files in `/config/www/stream-card/`: `stream-card.js`, the lazy chunks (`stream-card-mpegts-engine-*`, `stream-card-video-lock-*`, `stream-card-editor-form-*`) and `mpegts-1.8.2.js`, all byte-identical to the build (checked by SHA-256 through `/local/`). Resource `/local/stream-card/stream-card.js?v=1.0.0-2`.
+- Dashboard **Live TV** (`/live-tv/tv`, in the sidebar): one full-width card, `target: tv`, `output_profile: 3`, every Dispatcharr channel in the picker. Favourites and group filters are empty; set them in the card's visual editor.
+- Dashboard **Stream Card Test** (`/stream-card-test/tv`) still there from 0.1 (debug on); delete it whenever.
+- Dispatcharr profile **3 "Stream Card (AAC)"**, verified: H.264 + AAC only. Dispatcharr's `/output/m3u` serves 226 channels in 12 groups, all with numbers and logos, no login needed.
+- For installs: HACS "HA-MCP Custom Component" (File & YAML Tools) and the built-in **Downloader** (`download_dir: www`).
 
-**How to update the card on that HA:** build, commit the dist files temporarily on the working branch, `downloader.download_file` each from `raw.githubusercontent.com/Dec64/ha-video-card/<commit>/...` into subdir `stream-card` (mpegts from `cdn.jsdelivr.net/npm/mpegts.js@<ver>/dist/mpegts.js`), check sizes with the file tools, remove the files in the next commit, then bump `?v=` on the resource. (This session can't push tags, so releases aren't usable yet.)
+**How to update the card on that HA:** build, commit the changed dist files temporarily under `install/<version>/`, `downloader.download_file` each from `raw.githubusercontent.com/Dec64/ha-video-card/<commit>/...` into subdir `stream-card` with `overwrite: true` (chunks with unchanged hashed names can stay), compare SHA-256 through `https://<ha>/local/stream-card/...`, remove the files in the next commit, then bump `?v=` on the resource. (This session can't push tags.)
 
-**What's verified:** 56 unit, 38 e2e (fake Dispatcharr + MSE shim; `@real` tests in Google Chrome in CI), 8 real-HA tests (HA 2026.10 + Bubble 3.4.1, sections view), and live tests against the real channel through profile 3 (plays H.264 1080p25 + AAC). Not yet verified: decoding and Fully/HA-app behaviour on the actual devices.
+**What's verified:** 78 unit, 61 e2e (fake Dispatcharr + MSE shim; `@real` tests in Google Chrome in CI), 11 real-HA tests (HA 2026.10 + Bubble 3.4.1, sections view, visual editor), the picker rendered against the real 226-channel playlist (logos, groups), and an adversarial review of the 1.0 diff (26 confirmed findings, all fixed with regression tests). Not yet verified: the 1.0 rows of [docs/acceptance-v1.md](docs/acceptance-v1.md) on the actual devices.
 
-**Next action (Declan):** open Stream Card Test on each device and run the [acceptance checklist](docs/acceptance-v1.md).
+**Next action (Declan):** open Live TV on each device, pick channels, try up/down, reload; tick the new acceptance rows. Optionally add favourites/groups in the card editor.
 
-**Next action (Claude):** fix anything T10 finds; then tag v0.1.0 and move to Phase 2 or the iPhone fallback.
+**Next action (Claude):** fix anything found; then tag v1.0.0 (from GitHub's UI, since tag pushes are blocked here) and move to Phase 2 or the iPhone fallback.
 
 ## Key facts
 - HA is reached remotely through Cloudflare at `hayden-family.net`. Dispatcharr is on its own HTTPS hostname, also via Cloudflare.
@@ -45,6 +46,10 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 | 2026-10-10 | Output profile: a new profile (not the locked built-in 2) with the parameters in the README; final version drops `+nobuffer` and adds `aresample=async=1` (workflow-verified against Dispatcharr source and an ffmpeg matrix) |
 | 2026-10-10 | Repo made public by Declan so HA can download release files |
 | 2026-10-10 | Card element name is `stream-card` (YAML `type: custom:stream-card`) |
+| 2026-10-10 | 1.0 = channel selection: the card loads Dispatcharr's `/output/m3u` (no EPG; 8.7 MB) for a picker, channel up/down, favourites, group filters and names/numbers in buttons |
+| 2026-10-10 | Each device remembers each target's last channel and whether it was left playing (localStorage); Stop, a stop button and the idle timeout all count as "left stopped" |
+| 2026-10-10 | In-card picks, up/down and Stop go through the page controller like buttons, so every card on a target and every recreated card agree |
+| 2026-10-10 | With the list loaded, an unknown name is an error, never guessed as a stream ID; names/numbers are resolved after edit mode, never during |
 | 2026-10-07 | Code and docs live in the private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card); `C:\Users\Declan\Projects\HA Video Card` is a clone and project files keep a mirror |
 
 ## Open questions
@@ -58,6 +63,8 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
+- **2026-10-11:** Installed 1.0.0 on Declan's HA and created the Live TV dashboard. Rendering the picker against the real playlist found two more issues (long group names widened the card; white logos vanished on light themes), both fixed with a test.
+- **2026-10-10:** Built 1.0 channel selection (channel list, picker, up/down, names/numbers, per-device memory, visual editor via `getConfigForm`, lazy editor chunk). An adversarial review workflow confirmed 26 findings (edit-mode lookups, stop vs pending lookup, stale `lastFor` after picks, a stop missed by a closed pop-up, phone-width overlaps, a flaky connection sampler, no playlist timeout, docs); all fixed with regression tests.
 - **2026-10-10:** Installed 0.1.0-beta.1 on Declan's HA (files via Downloader from a pinned commit, resource, Stream Card Test dashboard with profile 3). Repo made public by Declan.
 - **2026-10-10:** Real-HA suite now uses a sections view. Found that HA 2026.10 doesn't render view-level `cards:` in sections views, so Bubble pop-ups must sit in their own section (README updated). Dispatcharr profile 3 ("Stream Card (AAC)") created by Declan and verified: H.264 + AAC only; the card plays BBC One through it.
 - **2026-10-10:** mpegts.js now ships as its unmodified upstream file (`mpegts-1.8.2.js`) next to the card instead of being bundled; the card's own code is 69 KB. Fixed a teardown race that made mpegts.js throw after codec errors. Installed the HA-MCP File & YAML Tools on Declan's HA (one restart, approved) so Claude can install and update the card.
