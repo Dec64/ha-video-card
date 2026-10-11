@@ -11,7 +11,7 @@ A Lovelace card that plays your [Dispatcharr](https://github.com/Dispatcharr/Dis
 
 Plays Dispatcharr's MPEG-TS streams in the browser with [mpegts.js](https://github.com/xqq/mpegts.js), shipped unmodified next to the card and loaded only when something plays.
 
-**Version 1.0.0.** Works on Android (HA app and Chrome), Fire tablets in Fully Kiosk and desktop browsers. iPhones need Media Source Extensions support; see [Troubleshooting](#7-troubleshooting).
+**Version 1.1.0.** Works on Android (HA app and Chrome), Fire tablets in Fully Kiosk and desktop browsers. iPhones need Media Source Extensions support; see [Troubleshooting](#7-troubleshooting).
 
 ## Contents
 1. [Dispatcharr setup](#1-dispatcharr-setup-once)
@@ -71,10 +71,10 @@ The card is a folder of JavaScript files served from Home Assistant's `www` fold
    - `mpegts-1.8.2.js` (identical to `https://cdn.jsdelivr.net/npm/mpegts.js@1.8.2/dist/mpegts.js`)
 
    They must sit together, because the card loads the others from its own folder.
-3. **Add the resource:** Settings → Dashboards → ⋮ → Resources → **Add resource**, URL `/local/stream-card/stream-card.js?v=1.0.0`, type **JavaScript module**.
+3. **Add the resource:** Settings → Dashboards → ⋮ → Resources → **Add resource**, URL `/local/stream-card/stream-card.js?v=1.1.0`, type **JavaScript module**.
 4. **Reload** the dashboard on each device. On Fully Kiosk, clear the cache first.
 
-**Updating:** replace the files, then raise `?v=` on the resource (for example `?v=1.0.1`) so every device fetches the new version. Old chunk files can stay: their names change when their contents do.
+**Updating:** replace the files, then raise `?v=` on the resource (for example `?v=1.1.1`) so every device fetches the new version. Old chunk files can stay: their names change when their contents do.
 
 **HACS:** the repository is laid out for HACS (custom repository, category *Dashboard*), using the release zip. This route is untested so far; the manual install above is the tested one.
 
@@ -222,6 +222,7 @@ cards:
 - Web Content Settings → **Autoplay Videos**: on. Otherwise playback starts muted.
 - Advanced Web Settings → **Enable JavaScript Interface**: on. The card then stops when the screen turns off or the screensaver starts, and resumes after.
 - Advanced Web Settings → hardware acceleration: on.
+- If playback pauses every few seconds, set the tablet's card to **Buffering: Stable** (`buffer: stable`). The picture starts after about 8 s of buffering and runs a few seconds behind live, but rides through the tablet's hiccups. If it still stutters with the debug overlay showing dropped frames climbing, the tablet can't decode the channel's video fast enough; a Dispatcharr output profile that converts to 720p for that tablet is the fix.
 
 ## 6. All options
 
@@ -240,6 +241,7 @@ cards:
 | `m3u_url` | `<dispatcharr_url>/output/m3u` | A different playlist for the list. Playing Dispatcharr channels from it still needs `dispatcharr_url` |
 | `autoplay` | `true` | Start playing when the card appears, unless this device left it stopped |
 | `muted` | `false` | Start muted |
+| `buffer` | `low` | `low` stays close to live. `stable` keeps about 8 s in reserve, never skips ahead and refills instead of stuttering: smoother on slow devices such as Fire tablets, a few seconds behind live |
 | `aspect_ratio` | `16:9` | Picture shape |
 | `idle_timeout` | `0` | Minutes with no touch or key press before stopping (remembered like a Stop). `0` = never |
 | `start_timeout` | `20` | Seconds to wait for the first data before showing an error |
@@ -276,6 +278,7 @@ Turn on `debug: true` to see codecs, buffer, dropped frames, the channel list st
 | The player hit an error it could not recover from. | Turn on `debug` and note the last error. |
 
 Other symptoms:
+- **Playback pauses every few seconds on one device** (typically a Fire tablet). Use `buffer: stable` on that device's card (see section 5, Fully Kiosk).
 - **A device keeps playing an old version** after an update. Raise `?v=` on the resource, then reload. In the HA app, use the Companion app's **Reset frontend cache** setting. On Fully, clear the cache.
 - **White logos are hard to read** on a light theme. They sit on a dark plate by default; set `--stream-card-logo-background` in your theme to change it.
 - **iPhone shows "This browser can't play live MPEG-TS streams".** That iOS version or app lacks Media Source Extensions. An HLS fallback is planned.

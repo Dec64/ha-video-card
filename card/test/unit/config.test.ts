@@ -222,3 +222,11 @@ describe('isUuid / needsLookup', () => {
     expect(needsLookup('ok--abc')).toBe(false);
   });
 });
+
+describe('buffer', () => {
+  it('defaults to low and accepts stable', () => {
+    expect(normalizeConfig(base).buffer).toBe('low');
+    expect(normalizeConfig({ ...base, buffer: 'stable' }).buffer).toBe('stable');
+    expect(() => normalizeConfig({ ...base, buffer: 'huge' })).toThrow(ConfigError);
+  });
+});

@@ -62,6 +62,19 @@ const schema: FormField[] = [
         ],
       },
       {
+        name: 'buffer',
+        default: 'low',
+        selector: {
+          select: {
+            mode: 'dropdown',
+            options: [
+              { value: 'low', label: 'Low delay (default)' },
+              { value: 'stable', label: 'Stable: for slow devices such as Fire tablets' },
+            ],
+          },
+        },
+      },
+      {
         name: 'aspect_ratio',
         default: '16:9',
         selector: {
@@ -110,6 +123,7 @@ const LABELS: Record<string, string> = {
   remember_channel: 'Remember last channel',
   autoplay: 'Autoplay',
   muted: 'Start muted',
+  buffer: 'Buffering',
   aspect_ratio: 'Aspect ratio',
   idle_timeout: 'Stop after idle',
   start_timeout: 'Start timeout',
@@ -123,6 +137,8 @@ const LABELS: Record<string, string> = {
 
 const HELPERS: Record<string, string> = {
   dispatcharr_url: 'e.g. https://dispatcharr.example',
+  buffer:
+    'Stable keeps ~8 s in reserve and never skips ahead: smoother on slow devices, a few seconds behind live.',
   output_profile:
     'The AAC output profile from the README. Leave empty to play streams as they are.',
   target: 'Buttons with the same target play on this card.',

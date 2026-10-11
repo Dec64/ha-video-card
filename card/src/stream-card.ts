@@ -407,6 +407,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       maxAttempts: this.config.maxReconnectAttempts,
       muted: this.userMuted ?? this.config.muted,
       debug: this.config.debug,
+      buffer: this.config.buffer,
       onStatus: (s) => this.onStatus(session, s),
     });
     this.session = session;
@@ -657,6 +658,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       muted: this.effectiveMuted,
       mediaInfo: this.status?.mediaInfo,
       notice: this.status?.notice,
+      buffering: this.status?.buffering ?? false,
       error: this.error,
       lastError: this.status?.lastError,
       channels: { state: this.channelState, count: this.channels?.size ?? 0 },
@@ -786,14 +788,23 @@ export class StreamCard extends LitElement implements ControllerCard {
         const text =
           ui === 'reconnecting' && s
             ? `Reconnecting… (attempt ${s.failures} of ${this.config?.maxReconnectAttempts ?? '?'})`
-            : 'Connecting…';
+            : s?.buffering
+              ? 'Buffering…'
+              : 'Connecting…';
         return html`<div class="layer">
           <div class="spinner" role="progressbar" aria-label=${text}></div>
           <div class="message">${text}</div>
         </div>`;
       }
       case 'playing':
-        return this.status?.needsGesture ? this.renderPlayButton('Tap to play') : nothing;
+        if (this.status?.needsGesture) return this.renderPlayButton('Tap to play');
+        // buffer: stable refilling its reserve after running dry.
+        return this.status?.buffering
+          ? html`<div class="layer">
+              <div class="spinner" role="progressbar" aria-label="Buffering…"></div>
+              <div class="message">Buffering…</div>
+            </div>`
+          : nothing;
       case 'ready': {
         const minutes = Math.round((this.config?.idleTimeoutMs ?? 0) / 60000);
         const why = this.idleStopped

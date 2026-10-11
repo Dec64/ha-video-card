@@ -16,7 +16,7 @@ import {
   toPlaybackError,
   type PlaybackError,
 } from './errors';
-import type { StreamSource } from './types';
+import type { BufferMode, StreamSource } from './types';
 
 export type SessionState = 'connecting' | 'reconnecting' | 'playing' | 'error' | 'stopped';
 
@@ -32,6 +32,8 @@ export interface SessionStatus {
   needsGesture: boolean;
   /** Non-fatal problem to show over the picture. */
   notice?: string;
+  /** buffer: stable is holding the picture while it builds up its reserve. */
+  buffering?: boolean;
   lastError?: string;
 }
 
@@ -40,6 +42,8 @@ export interface SessionOptions {
   maxAttempts: number;
   muted: boolean;
   debug?: boolean;
+  /** `stable` builds a reserve before playing and refills it instead of stuttering. */
+  buffer?: BufferMode;
   onStatus: (s: SessionStatus) => void;
   stallTimeoutMs?: number;
   /** Playing this long without trouble resets the failure count. */
@@ -50,6 +54,29 @@ export interface SessionOptions {
 }
 
 const DEFAULT_BACKOFF = [1000, 2000, 4000, 8000, 15000];
+
+/** buffer: stable. Seconds of reserve before the picture starts, and before it resumes. */
+export const STABLE_START_S = 8;
+export const STABLE_RESUME_S = 5;
+/** Below this much reserve while playing, pause and refill instead of stuttering. */
+const UNDERRUN_S = 0.3;
+/** If the reserve grows but never reaches the target (a slow link), start anyway after this. */
+const MAX_HOLD_MS = 20_000;
+
+/** Seconds buffered ahead of the playhead (from the next range if the playhead sits in a gap). */
+export function reserveAhead(video: HTMLVideoElement): number {
+  const b = video.buffered;
+  const t = video.currentTime;
+  for (let i = 0; i < b.length; i++) {
+    if (b.end(i) > t) return b.end(i) - Math.max(t, b.start(i));
+  }
+  return 0;
+}
+
+function bufferedEnd(video: HTMLVideoElement): number {
+  const b = video.buffered;
+  return b.length ? b.end(b.length - 1) : 0;
+}
 
 /** Counts live sessions/engines so tests can spot leaks. */
 export const sessionCounters = { sessions: 0, engines: 0 };
@@ -75,6 +102,11 @@ export class PlaybackSession {
   private lastTime = -1;
   private lastProgressAt = 0;
   private playingSince = 0;
+  /** buffer: stable is holding the picture until the reserve is built. */
+  private holding = false;
+  private holdIsStart = false;
+  private holdStartedAt = 0;
+  private holdBufferedEnd = 0;
   private readonly createEngine: EngineFactory;
   private readonly diagnose: (url: string) => Promise<'cors' | 'unreachable'>;
 
@@ -111,6 +143,7 @@ export class PlaybackSession {
     this.lastTime = -1;
     this.lastProgressAt = 0;
     this.playingSince = 0;
+    this.holding = false;
     this.update({
       state: this.status.failures > 0 ? 'reconnecting' : 'connecting',
       notice: undefined,
@@ -118,7 +151,10 @@ export class PlaybackSession {
 
     let engine: Engine;
     try {
-      engine = await this.createEngine(this.source.type, { debug: !!this.opts.debug });
+      engine = await this.createEngine(this.source.type, {
+        debug: !!this.opts.debug,
+        buffer: this.opts.buffer,
+      });
     } catch (err) {
       this.fail(id, { kind: 'media', detail: `could not load player: ${String(err)}` }, false);
       return;
@@ -149,7 +185,52 @@ export class PlaybackSession {
     }
     if (!this.isCurrent(id)) return;
     this.watchdog = setInterval(() => this.tick(id), 500);
+    if (this.stable) {
+      this.startHold(true);
+      return;
+    }
     await this.play(id);
+  }
+
+  private get stable(): boolean {
+    return this.opts.buffer === 'stable';
+  }
+
+  /** Pause the picture until the reserve is built (start) or refilled (after running dry). */
+  private startHold(atStart: boolean): void {
+    this.holding = true;
+    this.holdIsStart = atStart;
+    this.holdStartedAt = Date.now();
+    this.holdBufferedEnd = bufferedEnd(this.video);
+    this.lastProgressAt = Date.now();
+    if (!atStart) this.video.pause();
+    this.update({ buffering: true });
+  }
+
+  private tickHolding(id: number): void {
+    const v = this.video;
+    const now = Date.now();
+    const end = bufferedEnd(v);
+    if (end > this.holdBufferedEnd + 0.01) {
+      this.holdBufferedEnd = end;
+      this.lastProgressAt = now;
+    } else if (this.gotData && now - this.lastProgressAt > this.stallTimeoutMs) {
+      // Nothing arriving while we wait: same as a stall while playing.
+      void this.handleFailure(id, {
+        kind: 'stall',
+        detail: `no data for ${this.stallTimeoutMs} ms while buffering`,
+      });
+      return;
+    }
+    const ahead = reserveAhead(v);
+    const target = this.holdIsStart ? STABLE_START_S : STABLE_RESUME_S;
+    if (ahead >= target || (ahead > 1 && now - this.holdStartedAt > MAX_HOLD_MS)) {
+      this.holding = false;
+      this.lastTime = -1;
+      this.lastProgressAt = now;
+      this.update({ buffering: false });
+      void this.play(id);
+    }
   }
 
   private async play(id: number): Promise<void> {
@@ -213,8 +294,21 @@ export class PlaybackSession {
 
   private tick(id: number): void {
     if (!this.isCurrent(id)) return;
+    if (this.holding) {
+      this.tickHolding(id);
+      return;
+    }
     const v = this.video;
     const now = Date.now();
+    if (
+      this.stable &&
+      this.status.state === 'playing' &&
+      !v.paused &&
+      reserveAhead(v) < UNDERRUN_S
+    ) {
+      this.startHold(false);
+      return;
+    }
     const t = v.currentTime;
     if (t !== this.lastTime) {
       if (this.lastTime >= 0 && t > this.lastTime) {

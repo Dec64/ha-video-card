@@ -6,7 +6,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 **Phase:** **1.0.0 merged into `main`** (PR #1) **and installed on Declan's HA**, with channel selection. Android and the tablet dashboard play well (the earlier iPhone glitches were the Dispatcharr source, since switched). Waiting on the 1.0 rows of the acceptance checklist.
 
 **Installed on Declan's HA:**
-- Files in `/config/www/stream-card/`: `stream-card.js`, the lazy chunks (`stream-card-mpegts-engine-*`, `stream-card-video-lock-*`, `stream-card-editor-form-*`) and `mpegts-1.8.2.js`, all byte-identical to the build (checked by SHA-256 through `/local/`). Resource `/local/stream-card/stream-card.js?v=1.0.0-2`.
+- Files in `/config/www/stream-card/`: `stream-card.js`, the lazy chunks (`stream-card-mpegts-engine-*`, `stream-card-video-lock-*`, `stream-card-editor-form-*`) and `mpegts-1.8.2.js`, all byte-identical to the build (checked by SHA-256 through `/local/`). Resource `/local/stream-card/stream-card.js?v=1.1.0` (1.1.0 installed 2026-10-11, PR #2).
 - Dashboard **Live TV** (`/live-tv/tv`, in the sidebar): one full-width card, `target: tv`, `output_profile: 3`, every Dispatcharr channel in the picker. Favourites and group filters are empty; set them in the card's visual editor.
 - Dashboard **Stream Card Test** (`/stream-card-test/tv`) still there from 0.1 (debug on); delete it whenever.
 - Dispatcharr profile **3 "Stream Card (AAC)"**, verified: H.264 + AAC only. Dispatcharr's `/output/m3u` serves 226 channels in 12 groups, all with numbers and logos, no login needed.
@@ -52,6 +52,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 | 2026-10-10 | Each device remembers each target's last channel and whether it was left playing (localStorage); Stop, a stop button and the idle timeout all count as "left stopped" |
 | 2026-10-10 | In-card picks, up/down and Stop go through the page controller like buttons, so every card on a target and every recreated card agree |
 | 2026-10-10 | With the list loaded, an unknown name is an error, never guessed as a stream ID; names/numbers are resolved after edit mode, never during |
+| 2026-10-11 | Slow devices get `buffer: stable` per card rather than a global change: phones keep low delay |
 | 2026-10-07 | Code and docs live in the private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card); `C:\Users\Declan\Projects\HA Video Card` is a clone and project files keep a mirror |
 
 ## Open questions
@@ -65,6 +66,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
+- **2026-10-11:** 1.1.0: `buffer: stable` for slow devices. Declan's Fire HD 8 paused every 2–10 s while other devices played perfectly. The default player settings keep only 1.5–6 s of reserve and jump forward to stay near live, which a slow tablet keeps tripping over. Stable mode turns the jumping off, builds an ~8 s reserve before starting and refills (rather than stutters) if it runs dry; data stopping while it refills still counts as a stall and reconnects. Entry budget raised from 25 to 26 KB gzipped for it. New fake-server mode `gap-N` simulates a network hiccup.
 - **2026-10-11:** Merged PR #1 into `main`. Rewrote the docs: README as a 1.0 user guide (setup, install, add the card, using it, buttons and pop-ups, options, troubleshooting); new [docs/architecture.md](docs/architecture.md) with the design and the contracts (moved from build-plan §4); [docs/README.md](docs/README.md) index marking the planning docs as history; acceptance checklist made per-release.
 - **2026-10-11:** Installed 1.0.0 on Declan's HA and created the Live TV dashboard. Rendering the picker against the real playlist found two more issues (long group names widened the card; white logos vanished on light themes), both fixed with a test.
 - **2026-10-10:** Built 1.0 channel selection (channel list, picker, up/down, names/numbers, per-device memory, visual editor via `getConfigForm`, lazy editor chunk). An adversarial review workflow confirmed 26 findings (edit-mode lookups, stop vs pending lookup, stale `lastFor` after picks, a stop missed by a closed pop-up, phone-width overlaps, a flaky connection sampler, no playlist timeout, docs); all fixed with regression tests.
