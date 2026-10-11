@@ -1,0 +1,36 @@
+{
+  "name": "stream-card",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Home Assistant card that plays Dispatcharr IPTV and releases the stream when hidden",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch",
+    "build": "vite build && node scripts/size-report.mjs",
+    "lint": "eslint . && prettier --check .",
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "check": "npm run lint && npm run typecheck && npm run test && npm run build && node scripts/check-messages.mjs",
+    "e2e:ha": "bash test/ha/run.sh"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "lit": "^3.3.3",
+    "mpegts.js": "^1.8.2"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.64.0",
+    "eslint": "^10.12.0",
+    "globals": "^17.13.0",
+    "happy-dom": "^20.14.6",
+    "prettier": "^3.9.10",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.71.1",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  }
+}

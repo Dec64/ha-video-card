@@ -1,5 +1,7 @@
 # Phase 0 test kit
 
+> **History.** Phase 0 was dropped (see [docs/build-plan-v1.md](../docs/build-plan-v1.md)). Kept as an optional diagnostic tool; the card itself is in [`card/`](../card).
+
 Four short tests that settle the risky parts of the plan before the real card is built. Everything here is throwaway test code.
 
 | File | What it is |

@@ -1,5 +1,7 @@
 # ha-stream-card: development plan
 
+> **History.** The original phased plan. Phases 0–1 were replaced by [build-plan-v1.md](build-plan-v1.md); Phases 2–6 remain the roadmap. For how the card works now, see [architecture.md](architecture.md); for using it, the [README](../README.md).
+
 **Date:** 2026-10-06 · **Builds on:** [rfc-001-review.md](rfc-001-review.md) and Declan's answers in the project thread.
 
 ## 1. What we're building (requirements as agreed)
@@ -84,6 +86,8 @@ These come before card work because they decide whether the card can play at all
 ## 4. Phases
 
 ### Phase 0: Spikes (prove the risky parts before building)
+> **Dropped 2026-10-10.** A Dispatcharr output profile now defines the stream format, and device checks moved to v1 acceptance. Phases 0 and 1 are replaced by [build-plan-v1.md](build-plan-v1.md).
+
 | Spike | What we do | Exit criterion |
 |---|---|---|
 | S1 Playback matrix | Standalone test page (no HA) with mpegts.js, native `<video>` and hls.js against one real channel. Run on Fire HD 8 + Fully, Android HA app, iPhone HA app + Safari, desktop Chrome. `ffprobe` 3–5 channels. | Each device plays video **with audio**. We know which needs the AAC profile, and whether the iPhone HA app's WebView exposes Managed Media Source (mpegts.js needs it on iOS ≥ 17.1). **If it doesn't, iPhones need an HLS fallback** (see Phase 1). |
@@ -94,6 +98,8 @@ These come before card work because they decide whether the card can play at all
 **Deliverable:** a short results table that decides the engine per platform and the infra changes from §3.
 
 ### Phase 1: Core card (IPTV on dashboards)
+> Superseded by [build-plan-v1.md](build-plan-v1.md).
+
 - **iPhone fallback if S1 says so:** when Managed Media Source isn't available (HA iOS app WebView, older iOS), play an HLS version of the channel natively. Candidates: HA's built-in go2rtc re-serving the Dispatcharr URL as HLS/MP4, or a Dispatcharr ffmpeg profile producing HLS. Picked from S1 results.
 - Repo scaffold: TypeScript, Lit 3, Vite (ES module, per-engine chunks), ESLint/Prettier, Vitest, GitHub Actions build.
 - Engine contract with async idempotent `destroy()`, a state/event stream, and `getStats()`.

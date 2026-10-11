@@ -1,0 +1,16 @@
+# Minimal Home Assistant for the card's integration tests (no default_config).
+homeassistant:
+  name: Stream Card Test
+  latitude: 51.5
+  longitude: -0.1
+  elevation: 0
+  unit_system: metric
+  time_zone: Europe/London
+  country: GB
+  currency: GBP
+frontend:
+config:
+lovelace:
+  mode: storage
+logger:
+  default: warning

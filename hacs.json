@@ -1,0 +1,7 @@
+{
+  "name": "Stream Card",
+  "filename": "stream-card.zip",
+  "zip_release": true,
+  "render_readme": true,
+  "homeassistant": "2024.11.0"
+}
