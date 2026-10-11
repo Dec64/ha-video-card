@@ -6,6 +6,7 @@
 //   ok        normal H.264 + AAC stream
 //   stall-N   send for N s, then keep the socket open and send nothing
 //   drop-N    send for N s, then cut the connection
+//   gap-N     from 12 s in, hold the data back for N s, then send it all at once (a network hiccup)
 //   hang      accept the request and never answer (a broken output profile does this)
 //   status-N  answer with HTTP status N
 //   flaky-N   first N requests get 503, later ones stream normally
@@ -229,9 +230,25 @@ export async function startFakeDispatcharr({ port = 0, appPort = 0, host = '127.
     });
     ff = spawn('ffmpeg', ffmpegArgs(mode), { stdio: ['ignore', 'pipe', 'inherit'] });
     let paused = false;
+    let held = null;
     ff.stdout.on('data', (chunk) => {
-      if (!paused && !closed) res.write(chunk);
+      if (closed || paused) return;
+      if (held) held.push(chunk);
+      else res.write(chunk);
     });
+    if (mode === 'gap') {
+      timers.push(setTimeout(() => (held = []), 12_000));
+      timers.push(
+        setTimeout(
+          () => {
+            const chunks = held ?? [];
+            held = null;
+            if (!closed) for (const c of chunks) res.write(c);
+          },
+          12_000 + (arg ?? 4) * 1000,
+        ),
+      );
+    }
     ff.on('exit', () => {
       if (!closed && mode !== 'stall') res.end();
     });

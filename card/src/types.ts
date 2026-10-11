@@ -20,9 +20,13 @@ export interface StreamCardConfig {
   channel_groups?: string[];
   favourites?: Array<string | number>;
   remember_channel?: boolean;
+  buffer?: BufferMode;
 }
 
 export type SourceType = 'mpegts' | 'native';
+
+/** `low`: stay close to live. `stable`: keep a reserve of several seconds for slow devices. */
+export type BufferMode = 'low' | 'stable';
 
 /** Card config after validation and defaults. */
 export interface ResolvedConfig {
@@ -44,6 +48,7 @@ export interface ResolvedConfig {
   channelGroups: string[];
   favourites: string[];
   rememberChannel: boolean;
+  buffer: BufferMode;
 }
 
 /** A play/stop request, from a button's `stream_card:` block or the card's own config. */

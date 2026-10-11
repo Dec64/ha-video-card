@@ -1,5 +1,6 @@
 import { DEFAULT_TARGET, DEFAULT_URL_TEMPLATE } from './const';
 import type {
+  BufferMode,
   ResolvedConfig,
   SourceType,
   StreamCardConfig,
@@ -101,6 +102,11 @@ export function parseAspectRatio(v: string | undefined): string {
   throw new ConfigError('"aspect_ratio" must look like "16:9"');
 }
 
+function bufferMode(v: string | undefined): BufferMode {
+  if (v === undefined || v === 'low' || v === 'stable') return v ?? 'low';
+  throw new ConfigError('"buffer" must be "low" or "stable"');
+}
+
 export function normalizeConfig(input: unknown): ResolvedConfig {
   if (!isPlainObject(input)) throw new ConfigError('Card config must be an object');
   const raw = input as Record<string, unknown> & Partial<StreamCardConfig>;
@@ -156,6 +162,7 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     channelGroups: optionalStringList(raw, 'channel_groups'),
     favourites: optionalStringList(raw, 'favourites'),
     rememberChannel: optionalBool(raw, 'remember_channel', true),
+    buffer: bufferMode(optionalString(raw, 'buffer')),
   };
   if (resolved.channelList && !resolved.m3uUrl) {
     throw new ConfigError('"channel_list" needs "dispatcharr_url" or "m3u_url"');
