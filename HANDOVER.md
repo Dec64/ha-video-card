@@ -6,7 +6,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 **Phase:** **1.0.0 merged into `main`** (PR #1) **and installed on Declan's HA**, with channel selection. Android and the tablet dashboard play well (the earlier iPhone glitches were the Dispatcharr source, since switched). Waiting on the 1.0 rows of the acceptance checklist.
 
 **Installed on Declan's HA:**
-- Files in `/config/www/stream-card/`: `stream-card.js`, the lazy chunks (`stream-card-mpegts-engine-*`, `stream-card-video-lock-*`, `stream-card-editor-form-*`) and `mpegts-1.8.2.js`, all byte-identical to the build (checked by SHA-256 through `/local/`). Resource `/local/stream-card/stream-card.js?v=1.0.0-2`.
+- Files in `/config/www/stream-card/`: `stream-card.js`, the lazy chunks (`stream-card-mpegts-engine-*`, `stream-card-video-lock-*`, `stream-card-editor-form-*`) and `mpegts-1.8.2.js`, all byte-identical to the build (checked by SHA-256 through `/local/`). Resource `/local/stream-card/stream-card.js?v=1.1.0` (1.1.0 installed 2026-10-11, PR #2).
 - Dashboard **Live TV** (`/live-tv/tv`, in the sidebar): one full-width card, `target: tv`, `output_profile: 3`, every Dispatcharr channel in the picker. Favourites and group filters are empty; set them in the card's visual editor.
 - Dashboard **Stream Card Test** (`/stream-card-test/tv`) still there from 0.1 (debug on); delete it whenever.
 - Dispatcharr profile **3 "Stream Card (AAC)"**, verified: H.264 + AAC only. Dispatcharr's `/output/m3u` serves 226 channels in 12 groups, all with numbers and logos, no login needed.
