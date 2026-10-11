@@ -1,6 +1,6 @@
 # Stream Card: notes for coding agents
 
-A Home Assistant Lovelace card (`custom:stream-card`) that plays Dispatcharr MPEG-TS IPTV and reliably releases the Dispatcharr connection when nobody can see it. Design and contracts: [docs/build-plan-v1.md](docs/build-plan-v1.md). Status and decisions: [HANDOVER.md](HANDOVER.md). Update HANDOVER.md (status, decisions, change log) whenever you finish a piece of work.
+A Home Assistant Lovelace card (`custom:stream-card`) that plays Dispatcharr MPEG-TS IPTV and reliably releases the Dispatcharr connection when nobody can see it. Design and contracts: [docs/architecture.md](docs/architecture.md). Status and decisions: [HANDOVER.md](HANDOVER.md). Update HANDOVER.md (status, decisions, change log) whenever you finish a piece of work, and the README or docs/architecture.md when behaviour changes.
 
 ## Commands (run in `card/`)
 - `npm ci`: install
@@ -31,7 +31,7 @@ A Home Assistant Lovelace card (`custom:stream-card`) that plays Dispatcharr MPE
 - Channel names and numbers resolve to a stream UUID before `resolveSource`; the release rules don't care how a channel was chosen.
 - No real hostnames, channel UUIDs or tokens in the repo. Use `dispatcharr.example` and the fake server.
 - No new runtime dependencies beyond Lit and mpegts.js without saying so in the PR.
-- Contracts in docs/build-plan-v1.md §4 (card config, button payload, engine interface, controller) change only in their own PR, with that doc updated.
+- Contracts in docs/architecture.md § Contracts (card config, button payload, engine interface, controller, device memory) change only in their own PR, with that doc updated.
 - New user-facing message → add it to `MESSAGES` and to the README troubleshooting table.
 
 ## Testing notes

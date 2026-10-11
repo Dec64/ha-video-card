@@ -1,12 +1,12 @@
-# v1 acceptance on real devices (T10)
+# Device acceptance (1.0)
 
-Replaces Phase 0. The automated tests cover the logic; this checks what only real devices can: decoding, autoplay rules, Fully Kiosk events and the HA apps.
+The automated tests cover the logic; this checks what only real devices can: decoding, autoplay rules, Fully Kiosk events and the HA apps. Run it for each release on the devices you care about.
 
 ## Before you start
 - [ ] Dispatcharr output profile set up as in the [README](../README.md#output-profile), **Active**, and its ID noted.
 - [ ] The CORS `curl` check prints `access-control-allow-origin: *`.
-- [ ] Card installed (README section 2) and resource added with `?v=1.0.0`.
-- [ ] A test dashboard: one Bubble pop-up `#tv-test` containing the card (`target: tv_test`, `output_profile: <id>`, `debug: true`), and two buttons on the main view playing two different channels with `open: "#tv-test"`, plus a stop button.
+- [ ] Card installed (README section 2) and the resource's `?v=` raised for this release; each device reloaded.
+- [ ] A dashboard with the card on the page (e.g. Live TV), plus a Bubble pop-up containing a second card with its own target, two buttons playing two channels into the pop-up with `open:`, and a stop button. Turn on `debug: true` while testing.
 - [ ] Dispatcharr's Stats page open on another screen. That is where "released" is measured.
 
 ## Per device
@@ -28,8 +28,8 @@ Devices: Fire HD 8 (Fully Kiosk), Android phone (HA app), iPhone (HA app), iPhon
 | After reloading the dashboard, the card starts on the last channel | | | | | |
 | 30 minutes playing without an error or a stall it can't recover from | | | | | |
 
-If a device shows an error, the message plus the debug overlay text is all I need. "This browser can't play live MPEG-TS streams" on the iPhone HA app means the iOS fallback (v1.1) is needed.
+If a device shows an error, the message plus the debug overlay text is all that's needed to diagnose it. "This browser can't play live MPEG-TS streams" on the iPhone HA app means the iOS fallback (v1.1) is needed.
 
 ## Outcome
-- All ticked on the devices you care about → tag v1.0.0 (the release workflow builds the zip).
+- All ticked on the devices you care about → tag the release (`v` + the version in `card/package.json`); the release workflow builds the zip and attaches the files.
 - Anything device-specific (iPhone fallback, a video-transcode profile for some channels, buffer tuning on the Fire tablet) becomes v1.1 / Phase 2 work.

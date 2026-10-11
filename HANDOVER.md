@@ -1,9 +1,9 @@
 # Handover / status
 
-Living document. Newest status at the top; the change log at the bottom keeps the history. Anyone (or any Claude session) picking this up should read this first, then [docs/development-plan.md](docs/development-plan.md).
+Living document. Newest status at the top; the change log at the bottom keeps the history. Anyone (or any Claude session) picking this up should read this first, then [docs/architecture.md](docs/architecture.md) and [CLAUDE.md](CLAUDE.md).
 
 ## Current status (2026-10-11)
-**Phase:** **1.0.0 built and installed on Declan's HA**, with channel selection. Android and the tablet dashboard play well (the earlier iPhone glitches were the Dispatcharr source, since switched). Waiting on the 1.0 rows of the acceptance checklist.
+**Phase:** **1.0.0 merged into `main`** (PR #1) **and installed on Declan's HA**, with channel selection. Android and the tablet dashboard play well (the earlier iPhone glitches were the Dispatcharr source, since switched). Waiting on the 1.0 rows of the acceptance checklist.
 
 **Installed on Declan's HA:**
 - Files in `/config/www/stream-card/`: `stream-card.js`, the lazy chunks (`stream-card-mpegts-engine-*`, `stream-card-video-lock-*`, `stream-card-editor-form-*`) and `mpegts-1.8.2.js`, all byte-identical to the build (checked by SHA-256 through `/local/`). Resource `/local/stream-card/stream-card.js?v=1.0.0-2`.
@@ -18,9 +18,11 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 
 **Next action (Declan):** open Live TV on each device, pick channels, try up/down, reload; tick the new acceptance rows. Optionally add favourites/groups in the card editor.
 
-**Next action (Claude):** fix anything found; then tag v1.0.0 (from GitHub's UI, since tag pushes are blocked here) and move to Phase 2 or the iPhone fallback.
+**Next action (Claude):** fix anything found; then tag v1.0.0 (from GitHub's UI, Releases → Draft a new release → tag `v1.0.0` on `main`, since tag pushes are blocked here; the release workflow attaches the files) and move to Phase 2 or the iPhone fallback.
 
 ## Key facts
+- Docs: user guide in [README.md](README.md); design and contracts in [docs/architecture.md](docs/architecture.md); planning history indexed in [docs/README.md](docs/README.md).
+- The PC clone at `C:\Users\Declan\Projects\HA Video Card` tracks this repo; `git pull` on `main` gets the latest.
 - HA is reached remotely through Cloudflare at `hayden-family.net`. Dispatcharr is on its own HTTPS hostname, also via Cloudflare.
 - Dispatcharr channel URLs are `/proxy/ts/stream/<uuid>`: continuous MPEG-TS, so the player engine is **mpegts.js** (not hls.js as the RFC assumed).
 - Bubble Card ≥ 3.2.4 **removes closed pop-ups from the page**, so the card must pick up play requests when it appears (a "mailbox") and release the stream when it's removed.
@@ -63,6 +65,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
+- **2026-10-11:** Merged PR #1 into `main`. Rewrote the docs: README as a 1.0 user guide (setup, install, add the card, using it, buttons and pop-ups, options, troubleshooting); new [docs/architecture.md](docs/architecture.md) with the design and the contracts (moved from build-plan §4); [docs/README.md](docs/README.md) index marking the planning docs as history; acceptance checklist made per-release.
 - **2026-10-11:** Installed 1.0.0 on Declan's HA and created the Live TV dashboard. Rendering the picker against the real playlist found two more issues (long group names widened the card; white logos vanished on light themes), both fixed with a test.
 - **2026-10-10:** Built 1.0 channel selection (channel list, picker, up/down, names/numbers, per-device memory, visual editor via `getConfigForm`, lazy editor chunk). An adversarial review workflow confirmed 26 findings (edit-mode lookups, stop vs pending lookup, stale `lastFor` after picks, a stop missed by a closed pop-up, phone-width overlaps, a flaky connection sampler, no playlist timeout, docs); all fixed with regression tests.
 - **2026-10-10:** Installed 0.1.0-beta.1 on Declan's HA (files via Downloader from a pinned commit, resource, Stream Card Test dashboard with profile 3). Repo made public by Declan.

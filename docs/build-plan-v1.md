@@ -2,7 +2,7 @@
 
 **Date:** 2026-10-10 · **Replaces:** Phase 0 and Phase 1 of [development-plan.md](development-plan.md) · **Scope:** card only, Dispatcharr/IPTV only.
 
-> **Status (2026-10-10):** T0–T9 built in `card/` (56 unit tests, 38 e2e tests, 8 tests in a real Home Assistant with Bubble Card, live-tested against a real BBC One channel). T10 (real devices) is next: [acceptance-v1.md](acceptance-v1.md). Changes from this plan made during the build are listed in §7.
+> **History.** This is the plan v1 was built from; v1 and the 1.0 channel selection are built and merged. For how the card works now, see [architecture.md](architecture.md); for using it, the [README](../README.md).
 
 ## 1. Why Phase 0 is dropped
 
@@ -71,70 +71,8 @@ Playwright's bundled Chromium (and the cloud container's) **cannot decode H.264 
 - **In GitHub Actions:** a second e2e job runs with `channel: 'chrome'` (Google Chrome is on the Ubuntu runners and has the codecs) to prove real decode of the test stream.
 - **Real devices:** T10.
 
-## 4. Contracts (fixed up front so parallel tasks agree)
-
-### Card config
-```yaml
-type: custom:stream-card
-target: kitchen_popup               # mailbox key; required to receive button requests
-dispatcharr_url: https://dispatcharr.example
-output_profile: 3                   # Dispatcharr output profile ID, sent as ?output_profile=3; omit for none
-url_template: "{base}/proxy/ts/stream/{channel}"   # default; rarely changed
-channel: <uuid>                     # optional default channel: UUID, or a name/number from the channel list
-title: Optional default title
-channel_list: true                  # default true when dispatcharr_url or m3u_url is set: picker, channel up/down, names
-m3u_url: <url>                      # default {base}/output/m3u
-channel_groups: [News, Sport]       # optional: only these groups, in this order
-favourites: [BBC One HD, 101]       # optional: names, numbers or UUIDs pinned under ★ Favourites
-remember_channel: true              # start on this device's last channel for the target (localStorage)
-autoplay: true                      # play the target's last or default channel when shown
-muted: false                        # start muted; falls back to muted + "tap to unmute" if blocked
-aspect_ratio: "16:9"
-idle_timeout: 0                     # minutes, 0 = off
-start_timeout: 20                   # seconds to wait for first data before a "timeout" error
-reconnect: { max_attempts: 5 }      # backoff 1, 2, 4, 8, 15 s
-debug: false
-```
-
-### Button action
-```yaml
-tap_action:
-  action: fire-dom-event
-  stream_card:
-    target: kitchen_popup
-    channel: <uuid>          # or a channel name/number (looked up in the card's channel list),
-                             # or url: <full url> to bypass the template
-    title: Sky Sports Main Event
-    open: "#kitchen-tv"      # optional Bubble pop-up hash
-  # stream_card: { target: kitchen_popup, action: stop }   ← stop button
-```
-
-### Engine interface
-As built (`card/src/engines/types.ts`). Engines report data, media info and errors; the session watches the `<video>` itself for playing and stalls, so both engines share one watchdog.
-```ts
-interface Engine {
-  readonly kind: 'mpegts' | 'native';
-  load(video: HTMLVideoElement, src: StreamSource): Promise<void>;
-  destroy(): Promise<void>;            // idempotent; aborts the fetch synchronously
-  on(listener: (e: EngineEvent) => void): () => void;
-  getStats(video: HTMLVideoElement): EngineStats;   // buffer s, frames, dropped, KB/s
-}
-type EngineEvent =
-  | { type: 'data' }                                // first bytes arrived (ends the start timeout)
-  | ({ type: 'media-info' } & MediaInfo)            // videoCodec, audioCodec, width, height, fps
-  | { type: 'error'; error: EngineError };
-interface EngineError {
-  kind: 'network' | 'cors' | 'http' | 'timeout' | 'codec' | 'unsupported-device'
-      | 'media' | 'stall' | 'ended' | 'config';
-  detail: string; status?: number; track?: 'audio' | 'video'; codec?: string;
-}
-```
-
-### Controller (one per page, on `window.__streamCard`)
-`request(req)`, `take(target)`, `lastFor(target)`, `stop(target)`, `stopCount(target)`, `register(card)`, `unregister(card)`, `onFullyEvent(name)`. Pending requests expire after 30 s. `lastFor` lets a recreated card resume its target's last channel. Requests without a target go to `default`. `stop` also marks the target stopped in each device's channel memory, and `stopCount` lets a card that was off the page (a closed Bubble pop-up) notice a stop it missed. The card's own channel picks and up/down go through `request`, and its Stop button and idle timeout through `stop`, so `lastFor` and the memory always follow the latest choice.
-
-### Channel list (added in 1.0)
-`card/src/channels.ts`: `loadChannels(m3uUrl)` fetches and parses Dispatcharr's M3U once per page (10-minute cache); `ChannelList` filters by group, orders by channel number and finds a channel by UUID, number or name (case-insensitive). The card resolves names and numbers to the stream UUID before building the URL, so playback, the mailbox and the release rules are unchanged. With the list loaded, a name that isn't in it is an error (never guessed as a stream ID); in edit mode the lookup waits until edit mode ends. The playlist download times out after 15 s. Order on connect: pending button request, then the controller's `lastFor`, then the remembered channel (`localStorage['stream-card:last:<target>']`), then `channel`.
+## 4. Contracts
+Moved to [architecture.md § Contracts](architecture.md#contracts), which is kept current.
 
 ## 5. Tasks
 

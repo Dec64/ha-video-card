@@ -1,5 +1,7 @@
 # RFC-001 review: is this the right architecture for ha-stream-card?
 
+> **History.** Review of the original RFC; its conclusions shaped the card. For how the card works now, see [architecture.md](architecture.md); for using it, the [README](../README.md).
+
 **Date:** 2026-10-06 · **Scope:** architecture only. The roadmap, repo layout and stated outputs were ignored as asked.
 
 ## Verdict

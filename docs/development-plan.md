@@ -1,5 +1,7 @@
 # ha-stream-card: development plan
 
+> **History.** The original phased plan. Phases 0–1 were replaced by [build-plan-v1.md](build-plan-v1.md); Phases 2–6 remain the roadmap. For how the card works now, see [architecture.md](architecture.md); for using it, the [README](../README.md).
+
 **Date:** 2026-10-06 · **Builds on:** [rfc-001-review.md](rfc-001-review.md) and Declan's answers in the project thread.
 
 ## 1. What we're building (requirements as agreed)

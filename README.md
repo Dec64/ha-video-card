@@ -1,14 +1,27 @@
 # Stream Card for Home Assistant
 
-A Lovelace card that plays Dispatcharr IPTV channels on wall tablets, phones and desktop, including inside Bubble Card pop-ups, and **releases the Dispatcharr connection whenever nobody can see it**: pop-up closed, screen off, Fully Kiosk screensaver, app in the background, page hidden, edit mode or idle timeout.
+A Lovelace card that plays your [Dispatcharr](https://github.com/Dispatcharr/Dispatcharr) IPTV channels on wall tablets, phones and desktops, and **lets go of the Dispatcharr connection whenever nobody can see it**.
 
-- Plays Dispatcharr's MPEG-TS streams with [mpegts.js](https://github.com/xqq/mpegts.js) (shipped unmodified next to the card), loaded only when needed.
-- Lists every Dispatcharr channel on the card: logos, search, groups, favourites, channel up/down, and the last channel remembered per device.
-- Any button can play a channel (by name, number or UUID) on a chosen card with HA's built-in `fire-dom-event` action. No browser_mod.
-- Reconnects on its own after stalls and dropped connections, and never holds two connections at once.
-- Says what's wrong in plain words (unsupported codec, CORS, channel not found, a broken output profile) instead of showing a black box.
+- **Every channel on the card.** Logos, search, Dispatcharr groups, favourites, channel up/down. Each device remembers what it was watching.
+- **Releases the stream when hidden.** Closing a Bubble Card pop-up, switching view, screen off, Fully Kiosk screensaver, app in the background, idle timeout or dashboard edit mode all free the connection. Coming back resumes at the live edge.
+- **Buttons anywhere.** Any HA button can play a channel (by name, number or ID) on a chosen card and open a pop-up, using HA's built-in `fire-dom-event`. No browser_mod.
+- **Recovers by itself.** It reconnects after stalls and dropped connections, and never holds two connections at once.
+- **Plain-language errors.** It names the problem (an unsupported codec, a broken output profile, a blocked request, an unknown channel) instead of showing a black box.
+- **Visual editor.** Every option is in HA's card editor.
 
-Status: **1.0**. Project status and decisions: [HANDOVER.md](HANDOVER.md); device checklist: [docs/acceptance-v1.md](docs/acceptance-v1.md).
+Plays Dispatcharr's MPEG-TS streams in the browser with [mpegts.js](https://github.com/xqq/mpegts.js), shipped unmodified next to the card and loaded only when something plays.
+
+**Version 1.0.0.** Works on Android (HA app and Chrome), Fire tablets in Fully Kiosk and desktop browsers. iPhones need Media Source Extensions support; see [Troubleshooting](#7-troubleshooting).
+
+## Contents
+1. [Dispatcharr setup](#1-dispatcharr-setup-once)
+2. [Install](#2-install)
+3. [Add the card](#3-add-the-card)
+4. [Using it](#4-using-it)
+5. [Buttons and pop-ups](#5-buttons-and-pop-ups)
+6. [All options](#6-all-options)
+7. [Troubleshooting](#7-troubleshooting)
+8. [Development](#8-development)
 
 ## 1. Dispatcharr setup (once)
 
@@ -41,87 +54,113 @@ curl -sI -H "Origin: https://your-ha.example" "https://<dispatcharr>/proxy/ts/st
 
 It should print `access-control-allow-origin: *`. If you add a header rule in Cloudflare anyway, use **Set**, not Add: two values make browsers reject the stream.
 
+### Channel list
+The card reads `<dispatcharr_url>/output/m3u`, the same playlist IPTV apps use. It needs no login, but Dispatcharr's **network access** settings for M3U/EPG must allow the devices that show the card. Channel numbers, names, groups and logos come from Dispatcharr, so set them there.
+
 ## 2. Install
 
-Until the HACS release (Phase 6):
+The card is a folder of JavaScript files served from Home Assistant's `www` folder.
 
-1. Get the build: the **stream-card-dist** artifact of the latest successful [CI run](https://github.com/Dec64/ha-video-card/actions), or build it yourself with `cd card && npm ci && npm run build` (output in `card/dist/`).
-2. Copy **every `.js` file** from it into `/config/www/stream-card/`. The card loads its player code and `mpegts-1.8.2.js` (the unmodified [mpegts.js](https://github.com/xqq/mpegts.js) build, identical to `https://cdn.jsdelivr.net/npm/mpegts.js@1.8.2/dist/mpegts.js`) from the same folder.
-3. Settings → Dashboards → ⋮ → Resources → Add resource: URL `/local/stream-card/stream-card.js?v=1.0.0`, type **JavaScript module**. Raise `?v=` on each update so devices fetch the new version.
-4. Reload the browser (on Fully Kiosk: clear cache and reload).
+1. **Get the files:**
+   - The **Assets** of the latest [release](https://github.com/Dec64/ha-video-card/releases).
+   - Or the **stream-card-dist** artifact of the latest successful [CI run](https://github.com/Dec64/ha-video-card/actions).
+   - Or build them: `cd card && npm ci && npm run build`, which puts them in `card/dist/`.
+2. **Copy every `.js` file** into `/config/www/stream-card/`:
+   - `stream-card.js`
+   - the `stream-card-*.js` chunks
+   - `mpegts-1.8.2.js` (identical to `https://cdn.jsdelivr.net/npm/mpegts.js@1.8.2/dist/mpegts.js`)
 
-## 3. Card configuration
+   They must sit together, because the card loads the others from its own folder.
+3. **Add the resource:** Settings → Dashboards → ⋮ → Resources → **Add resource**, URL `/local/stream-card/stream-card.js?v=1.0.0`, type **JavaScript module**.
+4. **Reload** the dashboard on each device. On Fully Kiosk, clear the cache first.
 
-The smallest useful card: every Dispatcharr channel, ready to pick.
+**Updating:** replace the files, then raise `?v=` on the resource (for example `?v=1.0.1`) so every device fetches the new version. Old chunk files can stay: their names change when their contents do.
 
-```yaml
-type: custom:stream-card
-target: kitchen_tv                    # name buttons use to reach this card
-dispatcharr_url: https://dispatcharr.example
-output_profile: 3                     # the output profile from section 1
-```
+**HACS:** the repository is laid out for HACS (custom repository, category *Dashboard*), using the release zip. This route is untested so far; the manual install above is the tested one.
 
-Every option is also in the visual editor (Edit card), under Channels, Playback and Advanced.
+## 3. Add the card
 
-### Choosing channels
-With `dispatcharr_url` set, the card loads Dispatcharr's channel list (`<dispatcharr_url>/output/m3u`, the same playlist IPTV apps use; it needs no login) and offers it three ways:
+Edit a dashboard, **Add card**, pick **Stream Card**, and fill in:
 
-- **The picker.** A card with nothing playing shows every channel below the picture: tap a logo to play it. While playing, the grid button (▦) opens it again; in full screen it opens over the picture. Search matches names and numbers (Enter plays the first match); chips filter by Dispatcharr group, and **★ Favourites** shows your `favourites` in their order.
-- **Channel up/down** (⌃ ⌄) steps through the card's channels in channel-number order, wrapping round.
-- **By name or number** in `channel:` and in buttons, e.g. `channel: BBC One HD` or `channel: "101"` (case doesn't matter). UUIDs still work.
+| Setting | What to put |
+|---|---|
+| Dispatcharr URL | Your Dispatcharr address, e.g. `https://dispatcharr.example` |
+| Output profile ID | The profile from section 1 (usually `3`) |
+| Target name | A name for this screen, e.g. `living_room`. Buttons use it to reach the card |
 
-Each device remembers the last channel per `target` and whether it was left playing. Next time the card starts on that channel: playing if it was playing, stopped (with a play button) if it was stopped with the Stop button, a stop button or `idle_timeout`. `remember_channel: false` always starts on `channel`. Channels open with the card's `output_profile`. If something goes wrong, the error shows **Retry** and **Channels** buttons.
+That's a working TV: it lists every channel. The **Channels**, **Playback** and **Advanced** sections hold the rest (see [All options](#6-all-options)). The card never plays while you're editing.
 
-If the list is long, narrow it with `channel_groups`. Quote names that contain `: ` (as many Dispatcharr group names do), or YAML reads them as something else:
+The same in YAML:
 
 ```yaml
 type: custom:stream-card
 target: living_room
 dispatcharr_url: https://dispatcharr.example
 output_profile: 3
-channel_groups: ["UK: Entertainment", "UK: News"]   # Dispatcharr group names, in this order
-favourites: ["BBC One HD", "ITV1 HD", "101"]
-channel: BBC One HD                           # first-time default
 ```
 
-| Option | Default | Meaning |
-|---|---|---|
-| `target` | `default` | Mailbox name. Buttons with the same `target` play on this card |
-| `dispatcharr_url` | — | Dispatcharr base URL. Needed to play `channel` IDs |
-| `output_profile` | none | Dispatcharr output profile ID, sent as `?output_profile=<id>` |
-| `channel` | none | Channel to play when the card appears (if `autoplay`): name, number or UUID |
-| `url` | none | A full stream URL instead of a channel (MPEG-TS, or MP4/HLS on browsers that play them natively) |
-| `title` | none | Title for the default channel (default: its name from the channel list) |
-| `channel_list` | `true` with `dispatcharr_url` or `m3u_url` | Load Dispatcharr's channel list for the picker, channel up/down and names |
-| `channel_groups` | all | Only these Dispatcharr groups, in this order |
-| `favourites` | none | Channel names, numbers or UUIDs shown first under ★ Favourites |
-| `remember_channel` | `true` | Start on the channel this device watched last (per `target`), playing or stopped as it was left |
-| `m3u_url` | `<dispatcharr_url>/output/m3u` | Another playlist for the channel list. Playing a Dispatcharr channel from it still needs `dispatcharr_url` |
-| `autoplay` | `true` | Play the default or last channel when the card appears, unless this device left it stopped |
-| `muted` | `false` | Start muted. If a browser blocks sound, the card starts muted anyway and shows "Tap to unmute" |
-| `aspect_ratio` | `16:9` | Card shape |
-| `idle_timeout` | `0` | Minutes without any touch or key press before playback stops (like pressing Stop, so it stays stopped after a reload). `0` = never |
-| `start_timeout` | `20` | Seconds to wait for the first data before showing an error |
-| `reconnect.max_attempts` | `5` | Reconnects after stalls or drops before giving up (backoff 1, 2, 4, 8, 15 s) |
-| `url_template` | `{base}/proxy/ts/stream/{channel}` | How channel URLs are built |
-| `debug` | `false` | Overlay with engine, codecs, buffer, frames and the last error |
+A bigger example: only some groups, favourites first, and a channel for the very first visit. Quote group names that contain `: ` (many Dispatcharr groups do), or YAML reads them as something else:
 
-The card never plays in the dashboard editor or while the dashboard is in edit mode.
+```yaml
+type: custom:stream-card
+target: living_room
+dispatcharr_url: https://dispatcharr.example
+output_profile: 3
+channel_groups: ["UK: Entertainment", "UK: News"]
+favourites: ["BBC One HD", "ITV1 HD", "101"]
+channel: BBC One HD
+```
 
-## 4. Buttons
+**Layout tips:**
+- In a sections view, give the card a full-width row (`grid_options: {columns: full}`) or its own wide section.
+- A card with nothing playing shows the channel grid under the picture.
+- For a TV that only appears when asked for, put the card in a Bubble Card pop-up (section 5).
 
-Any card with a `tap_action` (tile, button, Mushroom) can play a channel:
+## 4. Using it
+
+**Picking a channel.** With nothing playing, every channel is shown under the picture: tap a logo.
+- **Search** matches names and numbers; Enter plays the first match, and Escape clears the search.
+- **Chips** filter by Dispatcharr group. **★ Favourites** shows your `favourites` in the order you listed them.
+- A channel with no logo shows its initials.
+
+**While playing**, tap the picture to show the controls:
+
+| Button | Does |
+|---|---|
+| ■ | Stop (frees the connection) |
+| ⌄ ⌃ | Previous / next channel, in channel-number order, wrapping round |
+| ▦ | Open the channel grid (over the picture in full screen) |
+| 🔈 | Mute / unmute |
+| ⛶ | Full screen |
+
+The badge shows the live dot, logo, number and name. If the browser blocks sound, playback starts muted with a **Tap to unmute** button. If something fails, the card says what's wrong, with **Retry** and **Channels** buttons.
+
+**What it remembers.** Each device remembers the last channel on each target and whether it was left playing.
+- Next time, it starts on that channel: playing if you left it playing, or stopped with a play button if you stopped it (Stop, a stop button or the idle timeout).
+- `remember_channel: false` always starts on the configured `channel` instead.
+- `autoplay: false` never starts by itself.
+
+**When it lets go.** The connection is released, within about a second, when:
+- the card leaves the page (pop-up closed, other view, other dashboard);
+- the page or app goes to the background, or the screen turns off;
+- Fully Kiosk's screen turns off or its screensaver starts;
+- the card is scrolled out of view;
+- `idle_timeout` passes with no touch, or the dashboard enters edit mode;
+- Stop is pressed.
+
+## 5. Buttons and pop-ups
+
+### Play from any button
+Any card with a `tap_action` (tile, button, Mushroom, a heading badge) can play a channel on a target:
 
 ```yaml
 tap_action:
   action: fire-dom-event
   stream_card:
-    target: kitchen_tv
-    channel: BBC One HD          # name, number ("101") or UUID
-    open: "#kitchen-tv"          # optional: opens this Bubble pop-up
+    target: living_room
+    channel: BBC One HD          # name, number ("101") or Dispatcharr channel UUID
+    open: "#tv"                  # optional: open this Bubble pop-up (or a dashboard path)
 ```
-
-Names and numbers are looked up in the receiving card's channel list (which `dispatcharr_url` provides), so that card needs `channel_list` on, the default. A name that isn't in the list shows "No channel called …" rather than guessing.
 
 A stop button:
 
@@ -129,11 +168,15 @@ A stop button:
 tap_action:
   action: fire-dom-event
   stream_card:
-    target: kitchen_tv
+    target: living_room
     action: stop
 ```
 
-`stream_card` fields: `target`, `channel` or `url`, `title` (default: the channel's name), `open` (a pop-up hash like `#tv`, or a dashboard path), `action` (`play` or `stop`).
+`stream_card` fields: `target`, `channel` or `url` (a full stream URL), `title` (defaults to the channel's name), `open`, `action` (`play` or `stop`).
+
+Names and numbers are looked up in the receiving card's channel list. Case doesn't matter, and an unknown name shows "No channel called …" instead of guessing.
+
+A request reaches every card with that target on the page. If none is showing yet (a closed pop-up), the request waits up to 30 s for one to appear. A stop applies even to a pop-up that's closed when it's pressed.
 
 ### Bubble Card buttons
 On a Bubble Card button, `tap_action` only covers the **icon**. The rest of the button runs `button_action`, so set both:
@@ -147,9 +190,9 @@ icon: mdi:television
 tap_action: &bbc1
   action: fire-dom-event
   stream_card:
-    target: kitchen_tv
+    target: living_room
     channel: BBC One HD
-    open: "#kitchen-tv"
+    open: "#tv"
 button_action:
   tap_action: *bbc1
 ```
@@ -157,28 +200,60 @@ button_action:
 (The `&bbc1` / `*bbc1` YAML anchor saves repeating the block; Home Assistant expands it when the dashboard is saved.)
 
 ### In a Bubble Card pop-up
-Put the stream card inside the pop-up and give the pop-up's buttons `open:` with its hash. In a **sections** view, give the pop-up card **its own section**: Home Assistant 2026.10 doesn't render view-level `cards:` in a sections view, so a pop-up placed there never opens. A closed pop-up takes no space in its section. Bubble Card removes closed pop-ups from the page; the card keeps the request until the pop-up opens, plays, and releases the stream when it closes. Reopening the pop-up resumes the last channel at the live edge.
+Put the stream card inside the pop-up, and give buttons `open:` with the pop-up's hash.
+- Bubble Card removes closed pop-ups from the page. The card picks up the button's request when the pop-up opens, plays, and releases the stream when it closes.
+- Reopening the pop-up resumes the channel at the live edge.
+
+In a **sections** view, give the pop-up card **its own section**: Home Assistant 2026.10 doesn't render view-level `cards:` there, so a pop-up placed in them never opens. A closed pop-up takes no space.
 
 ```yaml
 type: custom:bubble-card
 card_type: pop-up
-hash: "#kitchen-tv"
+hash: "#tv"
 name: TV
 cards:
   - type: custom:stream-card
-    target: kitchen_tv
+    target: living_room
     dispatcharr_url: https://dispatcharr.example
     output_profile: 3
 ```
 
-## 5. Fully Kiosk (Fire tablets)
-- Web Content Settings → **Autoplay Videos**: on (otherwise playback starts muted).
-- Advanced Web Settings → **Enable JavaScript Interface**: on. The card then stops the stream when the screen turns off or the screensaver starts, and resumes after.
+### Fully Kiosk (Fire tablets)
+- Web Content Settings → **Autoplay Videos**: on. Otherwise playback starts muted.
+- Advanced Web Settings → **Enable JavaScript Interface**: on. The card then stops when the screen turns off or the screensaver starts, and resumes after.
 - Advanced Web Settings → hardware acceleration: on.
 
-## 6. Troubleshooting
+## 6. All options
 
-Turn on `debug: true` to see codecs, buffer, dropped frames and the last error on the card.
+| Option | Default | Meaning |
+|---|---|---|
+| `target` | `default` | This screen's name. Buttons with the same `target` play here |
+| `dispatcharr_url` | — | Dispatcharr's address. Needed to play Dispatcharr channels |
+| `output_profile` | none | Output profile ID, sent as `?output_profile=<id>` |
+| `channel` | none | Channel for the first visit (name, number or UUID). After that, the remembered channel wins |
+| `url` | none | A full stream URL instead of a channel (MPEG-TS, or MP4/HLS on browsers that play them natively) |
+| `title` | channel name | Title shown on the badge |
+| `channel_list` | on with `dispatcharr_url` | Load the channel list: grid, up/down, names in buttons |
+| `channel_groups` | all | Only these Dispatcharr groups, in this order |
+| `favourites` | none | Names, numbers or UUIDs shown first under ★ Favourites |
+| `remember_channel` | `true` | Start on this device's last channel for the target, playing or stopped as it was left |
+| `m3u_url` | `<dispatcharr_url>/output/m3u` | A different playlist for the list. Playing Dispatcharr channels from it still needs `dispatcharr_url` |
+| `autoplay` | `true` | Start playing when the card appears, unless this device left it stopped |
+| `muted` | `false` | Start muted |
+| `aspect_ratio` | `16:9` | Picture shape |
+| `idle_timeout` | `0` | Minutes with no touch or key press before stopping (remembered like a Stop). `0` = never |
+| `start_timeout` | `20` | Seconds to wait for the first data before showing an error |
+| `reconnect.max_attempts` | `5` | Reconnects after stalls or drops before giving up (backoff 1, 2, 4, 8, 15 s) |
+| `url_template` | `{base}/proxy/ts/stream/{channel}` | How channel URLs are built |
+| `debug` | `false` | Overlay with engine, codecs, buffer, frames, channel list state and the last error |
+
+Theme variables:
+- `--stream-card-picker-max-height`: height of the channel grid under the picture. Default `min(60vh, 440px)`.
+- `--stream-card-logo-background`: plate behind channel logos. Default dark, because most IPTV logos are white.
+
+## 7. Troubleshooting
+
+Turn on `debug: true` to see codecs, buffer, dropped frames, the channel list state and the last error on the card.
 
 | The card says | What to do |
 |---|---|
@@ -200,20 +275,29 @@ Turn on `debug: true` to see codecs, buffer, dropped frames and the last error o
 | The stream kept dropping. Stopped after {attempts} attempts. | The stream stalled or disconnected repeatedly. Check Dispatcharr's logs for this channel; press Retry. |
 | The player hit an error it could not recover from. | Turn on `debug` and note the last error. |
 
-## Development
+Other symptoms:
+- **A device keeps playing an old version** after an update. Raise `?v=` on the resource, then reload. In the HA app, use the Companion app's **Reset frontend cache** setting. On Fully, clear the cache.
+- **White logos are hard to read** on a light theme. They sit on a dark plate by default; set `--stream-card-logo-background` in your theme to change it.
+- **iPhone shows "This browser can't play live MPEG-TS streams".** That iOS version or app lacks Media Source Extensions. An HLS fallback is planned.
 
-Source is in [`card/`](card): TypeScript, Lit, Vite. See [CLAUDE.md](CLAUDE.md) for commands and conventions, and [docs/build-plan-v1.md](docs/build-plan-v1.md) for the design.
+## 8. Development
+
+The source is in [`card/`](card): TypeScript, Lit and Vite.
+- **Design and contracts:** [docs/architecture.md](docs/architecture.md).
+- **Commands and rules for contributors and coding agents:** [CLAUDE.md](CLAUDE.md).
+- **Status and decisions:** [HANDOVER.md](HANDOVER.md).
+- **Other docs:** [docs/](docs/README.md).
 
 ```
 card/
-├── src/                     card, controller, lifecycle, session, engines
+├── src/                     card, controller, lifecycle, session, engines, channel list, picker
 ├── test/unit/               Vitest
 ├── test/e2e/                Playwright against a fake Dispatcharr (ffmpeg) + MSE shim
-├── test/fake-dispatcharr/   the fake server
-├── test/ha/                 real Home Assistant + Bubble Card integration tests (npm run e2e:ha)
+├── test/fake-dispatcharr/   the fake server (streams and /output/m3u)
+├── test/ha/                 real Home Assistant + Bubble Card tests (npm run e2e:ha)
 └── test/live/               optional tests against a real Dispatcharr channel
-docs/                        review, plans, acceptance checklist
-phase0-test-kit/             earlier diagnostic tools (Phase 0 was dropped)
+docs/                        architecture, device checklist, project history
+phase0-test-kit/             early diagnostic tools (kept for reference)
 ```
 
-The PC clone at `C:\Users\Declan\Projects\HA Video Card` tracks this repo; `git pull` gets the latest.
+`cd card && npm ci && npm run check` runs lint, types, unit tests, the build, the size budget and the README message check.
