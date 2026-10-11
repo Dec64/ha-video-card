@@ -416,6 +416,23 @@ test('unknown names say so, even one-word names', async ({ h }) => {
   await h.expectOpen(pl.id(1), 1);
 });
 
+test('long group names scroll instead of widening the card', async ({ h }) => {
+  await h.load();
+  const pl = playlist(h, { longgroups: 1 });
+  await h.mount({ m3u_url: pl.m3u_url });
+  await expect(picker(h).locator('.chip')).toHaveCount(4);
+  const sizes = await h.page.evaluate(() => {
+    const view = document.getElementById('view')!.getBoundingClientRect();
+    const frame = document
+      .querySelector('stream-card')!
+      .shadowRoot!.querySelector('.frame')!
+      .getBoundingClientRect();
+    return { view: view.width, frame: frame.width, ratio: frame.width / frame.height };
+  });
+  expect(sizes.frame).toBeLessThanOrEqual(sizes.view);
+  expect(sizes.ratio).toBeCloseTo(16 / 9, 1);
+});
+
 test('channel_groups that match nothing name the real groups', async ({ h }) => {
   await h.load();
   const pl = playlist(h);

@@ -20,6 +20,7 @@
 //   modes=a,b    mode of each channel in turn (default ok), e.g. modes=ok,stall-3
 //   fail=<code>  answer with this status; failfirst=<k> fails only the first k requests
 //   delay=<ms>   wait before answering
+//   longgroups=1 makes every group name very long (layout tests)
 // Requests are counted in /__stats under "m3u:<prefix>". Logos: /__logo/<n>.svg (channel 3
 // has a broken logo, channel 4 none).
 //
@@ -49,7 +50,10 @@ function m3u(host, params) {
   const lines = ['#EXTM3U x-tvg-url="http://' + host + '/output/epg"'];
   for (let i = 1; i <= n; i++) {
     const id = `${modes[(i - 1) % modes.length]}--${prefix}-${i}`;
-    const [name, group] = CHANNELS[i - 1] ?? [`Channel ${i}`, 'Other'];
+    const [name, base] = CHANNELS[i - 1] ?? [`Channel ${i}`, 'Other'];
+    const group = params.get('longgroups')
+      ? `${base}: Entertainment, Documentaries and Lifestyle +1 (${base})`
+      : base;
     const logo = i === 4 ? '' : ` tvg-logo="http://${host}/__logo/${i === 3 ? 'missing' : i}.svg"`;
     lines.push(
       `#EXTINF:-1 tvg-id="${i}" tvg-name="${name}"${logo} tvg-chno="${100 + i}" ` +

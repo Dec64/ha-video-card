@@ -77,6 +77,8 @@ export class StreamCardPicker extends LitElement {
       background: var(--ha-card-background, var(--card-background-color, #fff));
       font-family: var(--ha-font-family-body, var(--paper-font-body1_-_font-family, sans-serif));
       min-height: 0;
+      /* A long row of group chips must scroll, not widen the card (and with it the picture). */
+      contain: inline-size;
     }
     :host(.overlay) {
       position: absolute;
@@ -213,6 +215,11 @@ export class StreamCardPicker extends LitElement {
       width: 72px;
       height: 40px;
       object-fit: contain;
+      /* IPTV logos are mostly drawn for dark backgrounds (white text), so give them one. */
+      box-sizing: border-box;
+      padding: 3px 5px;
+      border-radius: 6px;
+      background: var(--stream-card-logo-background, #1c1c1c);
     }
     .logo.missing {
       display: none;
