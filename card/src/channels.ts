@@ -9,6 +9,8 @@ export interface Channel {
   number?: string;
   group?: string;
   logo?: string;
+  /** tvg-id: the channel's ID in Dispatcharr's XMLTV guide (its number, unless set otherwise). */
+  tvgId?: string;
 }
 
 const ATTR_RE = /([\w-]+)="([^"]*)"/g;
@@ -58,6 +60,7 @@ export function parseM3u(text: string): Channel[] {
       number: attrs['tvg-chno'] || attrs['channel-number'] || undefined,
       group: attrs['group-title'] || undefined,
       logo: attrs['tvg-logo'] || undefined,
+      tvgId: attrs['tvg-id'] || undefined,
     });
   }
   return out;
@@ -143,6 +146,24 @@ export class ChannelList {
       : -1;
     if (i < 0) return delta > 0 ? list[0] : list[list.length - 1];
     return list[(i + delta + list.length) % list.length];
+  }
+
+  /** Channels whose number starts with `digits`, lowest number first (for number entry). */
+  numberMatches(digits: string, limit = 5): Channel[] {
+    if (!/^\d+$/.test(digits)) return [];
+    const exact = this.all.find((c) => c.number === digits);
+    const rest = this.channels.filter((c) => c !== exact && (c.number ?? '').startsWith(digits));
+    return (exact ? [exact, ...rest] : rest).slice(0, limit);
+  }
+
+  /** True when `digits` is a channel number and no longer number starts with it. */
+  numberIsComplete(digits: string): boolean {
+    let exact = false;
+    for (const c of this.all) {
+      if (c.number === digits) exact = true;
+      else if (c.number?.startsWith(digits)) return false;
+    }
+    return exact;
   }
 
   /** Channels in a group ('' = all, '★' = favourites) matching a search on name or number. */

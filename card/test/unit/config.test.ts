@@ -13,6 +13,13 @@ import {
 const base = { type: 'custom:stream-card', dispatcharr_url: 'https://dispatcharr.example/' };
 
 describe('normalizeConfig', () => {
+  it('opens the guide by default and accepts closed and off', () => {
+    expect(normalizeConfig(base).guide).toBe('open');
+    expect(normalizeConfig({ ...base, guide: 'closed' }).guide).toBe('closed');
+    expect(normalizeConfig({ ...base, guide: 'off' }).guide).toBe('off');
+    expect(() => normalizeConfig({ ...base, guide: 'hidden' })).toThrow(ConfigError);
+  });
+
   it('applies defaults', () => {
     const c = normalizeConfig(base);
     expect(c).toMatchObject({
@@ -159,6 +166,8 @@ describe('channel list options', () => {
       channelGroups: [],
       favourites: [],
       rememberChannel: true,
+      epg: true,
+      epgUrl: 'https://dispatcharr.example/output/epg?days=1',
     });
   });
 
@@ -212,6 +221,49 @@ describe('channel list options', () => {
   });
 });
 
+describe('normalizeConfig: now/next (epg)', () => {
+  const base = { type: 'custom:stream-card', dispatcharr_url: 'https://dispatcharr.example/' };
+
+  it('is on by default with dispatcharr_url, and can be turned off', () => {
+    const c = normalizeConfig(base);
+    expect(c.epg).toBe(true);
+    expect(c.epgUrl).toBe('https://dispatcharr.example/output/epg?days=1');
+    expect(normalizeConfig({ ...base, epg: false }).epg).toBe(false);
+  });
+
+  it('is off by default without a channel list or a guide URL', () => {
+    expect(normalizeConfig({ ...base, channel_list: false }).epg).toBe(false);
+    const m3uOnly = { type: 'custom:stream-card', m3u_url: 'https://lists.example/a.m3u' };
+    expect(normalizeConfig(m3uOnly).epg).toBe(false);
+    expect(normalizeConfig({ ...m3uOnly, epg_url: 'https://guide.example/x.xml' }).epg).toBe(true);
+    expect(normalizeConfig({ type: 'custom:stream-card', url: 'https://x.example/a.ts' }).epg).toBe(
+      false,
+    );
+  });
+
+  it('takes an explicit guide URL', () => {
+    const c = normalizeConfig({ ...base, epg: true, epg_url: 'https://guide.example/x.xml' });
+    expect(c).toMatchObject({ epg: true, epgUrl: 'https://guide.example/x.xml' });
+  });
+
+  it('rejects settings it cannot use', () => {
+    expect(() => normalizeConfig({ ...base, epg: 'yes' })).toThrow(ConfigError);
+    expect(() => normalizeConfig({ ...base, epg_url: 'guide.xml' })).toThrow(
+      '"epg_url" must be a full URL',
+    );
+    expect(() => normalizeConfig({ ...base, epg: true, channel_list: false })).toThrow(
+      '"epg" needs the channel list',
+    );
+    expect(() =>
+      normalizeConfig({
+        type: 'custom:stream-card',
+        m3u_url: 'https://lists.example/a.m3u',
+        epg: true,
+      }),
+    ).toThrow('"epg" needs "dispatcharr_url" or "epg_url"');
+  });
+});
+
 describe('isUuid / needsLookup', () => {
   it('tells IDs from names and numbers', () => {
     expect(isUuid('3F2B9C1E-7A4D-4E8B-9C2F-1D5E6A7B8C9D')).toBe(true);
@@ -228,5 +280,45 @@ describe('buffer', () => {
     expect(normalizeConfig(base).buffer).toBe('low');
     expect(normalizeConfig({ ...base, buffer: 'stable' }).buffer).toBe('stable');
     expect(() => normalizeConfig({ ...base, buffer: 'huge' })).toThrow(ConfigError);
+  });
+});
+
+describe('multiview config', () => {
+  it('is off by default, two tiles, the card output profile', () => {
+    expect(normalizeConfig({ ...base, output_profile: 3 }).multiview).toEqual({
+      enabled: false,
+      maxTiles: 2,
+      outputProfile: '3',
+    });
+  });
+
+  it('accepts true as shorthand', () => {
+    expect(normalizeConfig({ ...base, multiview: true }).multiview).toMatchObject({
+      enabled: true,
+      maxTiles: 2,
+    });
+  });
+
+  it('stays off for an object without enabled (the visual editor writes partial blocks)', () => {
+    expect(normalizeConfig({ ...base, multiview: { max_tiles: 4 } }).multiview.enabled).toBe(false);
+  });
+
+  it('takes max_tiles 2–4 and its own output profile', () => {
+    const c = normalizeConfig({
+      ...base,
+      output_profile: 3,
+      multiview: { enabled: true, max_tiles: 4, output_profile: 7 },
+    });
+    expect(c.multiview).toEqual({ enabled: true, maxTiles: 4, outputProfile: '7' });
+  });
+
+  it('rejects bad values', () => {
+    expect(() => normalizeConfig({ ...base, multiview: 'yes' })).toThrow(ConfigError);
+    expect(() => normalizeConfig({ ...base, multiview: { max_tiles: 5 } })).toThrow(/2 to 4/);
+    expect(() => normalizeConfig({ ...base, multiview: { max_tiles: 1 } })).toThrow(ConfigError);
+    expect(() => normalizeConfig({ ...base, multiview: { max_tiles: 2.5 } })).toThrow(/2 to 4/);
+    expect(() => normalizeConfig({ ...base, multiview: { output_profile: 'low' } })).toThrow(
+      /multiview.output_profile/,
+    );
   });
 });

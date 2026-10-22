@@ -25,6 +25,11 @@
 // Requests are counted in /__stats under "m3u:<prefix>". Logos: /__logo/<n>.svg (channel 3
 // has a broken logo, channel 4 none).
 //
+// GET /output/epg  → XMLTV for the same channels (channel ID = tvg-id = n), sent in small chunks.
+//   Channel n is on "Now n" (started 10 min ago, ends in 20 min), then "Next n", then "Later n".
+//   Channel 1's titles carry XML entities ("News & Weather"); channel 4 has no programmes.
+//   n=, fail=, failfirst=, delay= as for /output/m3u. Counted under "epg:<prefix>".
+//
 // Run standalone: node test/fake-dispatcharr/server.mjs [--port 8930] [--app-port 8931]
 import { spawn } from 'node:child_process';
 import { createReadStream, existsSync, statSync } from 'node:fs';
@@ -63,6 +68,42 @@ function m3u(host, params) {
     );
   }
   return lines.join('\r\n') + '\r\n';
+}
+
+function xmltvTime(ms) {
+  return new Date(ms).toISOString().replace(/[-:T]/g, '').slice(0, 14) + ' +0000';
+}
+
+function epg(params) {
+  const n = Number(params.get('n') || 6);
+  const now = Date.now();
+  const at = (min) => xmltvTime(now + min * 60_000);
+  const out = ['<?xml version="1.0" encoding="UTF-8"?>', '<tv generator-info-name="fake">'];
+  for (let i = 1; i <= n; i++)
+    out.push(`  <channel id="${i}"><display-name>${i}</display-name></channel>`);
+  for (let i = 1; i <= n; i++) {
+    if (i === 4) continue;
+    const names =
+      i === 1
+        ? ['News &amp; Weather', 'Q&amp;A &#8211; Live', 'Later 1']
+        : [`Now ${i}`, `Next ${i}`, `Later ${i}`];
+    // Out of order on purpose: Dispatcharr sorts by database ID, not start time.
+    const slots = [
+      [1, 20, 50],
+      [0, -10, 20],
+      [2, 50, 80],
+    ];
+    for (const [k, from, to] of slots) {
+      out.push(
+        `  <programme start="${at(from)}" stop="${at(to)}" channel="${i}">`,
+        `    <title lang="en">${names[k]}</title>`,
+        `    <desc>${'A long description that the card never reads. '.repeat(8)}</desc>`,
+        '  </programme>',
+      );
+    }
+  }
+  out.push('</tv>');
+  return out.join('\n');
 }
 
 function logoSvg(i) {
@@ -179,6 +220,36 @@ export async function startFakeDispatcharr({ port = 0, appPort = 0, host = '127.
       const delay = Number(p.get('delay') || 0);
       if (delay) setTimeout(answer, delay);
       else answer();
+      return;
+    }
+    if (url.pathname === '/output/epg') {
+      const p = url.searchParams;
+      const s = stat(`epg:${p.get('prefix') || 'm3u'}`);
+      s.total++;
+      s.queries.push(Object.fromEntries(p));
+      const fail = Number(p.get('fail') || 0);
+      const failFirst = Number(p.get('failfirst') || 0);
+      const answer = async () => {
+        if (fail && (!failFirst || s.total <= failFirst)) {
+          res.writeHead(fail, cors);
+          return res.end('error');
+        }
+        res.writeHead(200, {
+          ...cors,
+          'Content-Type': 'application/xml; charset=utf-8',
+          'Cache-Control': 'no-store',
+        });
+        // Small chunks, so the card's streaming parser sees tags split across reads.
+        const body = Buffer.from(epg(p));
+        for (let i = 0; i < body.length; i += 777) {
+          res.write(body.subarray(i, i + 777));
+          await new Promise((r) => setImmediate(r));
+        }
+        res.end();
+      };
+      const delay = Number(p.get('delay') || 0);
+      if (delay) setTimeout(answer, delay);
+      else void answer();
       return;
     }
     const logo = /^\/__logo\/(\d+)\.svg$/.exec(url.pathname);

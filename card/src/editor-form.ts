@@ -13,6 +13,8 @@ interface FormField {
   default?: unknown;
   selector?: Record<string, unknown>;
   schema?: FormField[];
+  /** Label/helper key when `name` alone is ambiguous (the same option in another block). */
+  key?: string;
 }
 
 const text = { text: {} };
@@ -40,10 +42,25 @@ const schema: FormField[] = [
     title: 'Channels',
     schema: [
       { name: 'channel_list', ...on },
+      {
+        name: 'guide',
+        default: 'open',
+        selector: {
+          select: {
+            mode: 'dropdown',
+            options: [
+              { value: 'open', label: 'Open under the picture' },
+              { value: 'closed', label: 'Closed until Channels is pressed' },
+              { value: 'off', label: 'Off (Channels opens it over the picture)' },
+            ],
+          },
+        },
+      },
       { name: 'channel_groups', selector: { text: { multiple: true } } },
       { name: 'favourites', selector: { text: { multiple: true } } },
       { name: 'channel', selector: text },
       { name: 'remember_channel', ...on },
+      { name: 'epg', ...on },
     ],
   },
   {
@@ -99,6 +116,23 @@ const schema: FormField[] = [
     ],
   },
   {
+    name: 'multiview',
+    type: 'expandable',
+    title: 'Multiview',
+    schema: [
+      { name: 'enabled', selector: bool },
+      {
+        name: '',
+        type: 'grid',
+        flatten: true,
+        schema: [
+          { name: 'max_tiles', default: 2, selector: box(2, 4) },
+          { name: 'output_profile', key: 'tile_profile', selector: box(0, 9999) },
+        ],
+      },
+    ],
+  },
+  {
     name: '',
     type: 'expandable',
     flatten: true,
@@ -107,6 +141,7 @@ const schema: FormField[] = [
       { name: 'url', selector: text },
       { name: 'title', selector: text },
       { name: 'm3u_url', selector: { text: { type: 'url' } } },
+      { name: 'epg_url', selector: { text: { type: 'url' } } },
       { name: 'url_template', default: '{base}/proxy/ts/stream/{channel}', selector: text },
     ],
   },
@@ -117,6 +152,7 @@ const LABELS: Record<string, string> = {
   output_profile: 'Output profile ID',
   target: 'Target name',
   channel_list: 'Channel list',
+  guide: 'Channel guide',
   channel_groups: 'Group',
   favourites: 'Favourite',
   channel: 'Default channel',
@@ -129,9 +165,14 @@ const LABELS: Record<string, string> = {
   start_timeout: 'Start timeout',
   max_attempts: 'Reconnect attempts',
   debug: 'Debug overlay',
+  enabled: 'Multiview button',
+  max_tiles: 'Most tiles',
+  tile_profile: 'Output profile for tiles',
   url: 'Stream URL instead of a channel',
   title: 'Title for the default channel',
   m3u_url: 'Channel list (M3U) URL',
+  epg: 'Now and next',
+  epg_url: 'Guide (XMLTV) URL',
   url_template: 'Channel URL template',
 };
 
@@ -143,18 +184,24 @@ const HELPERS: Record<string, string> = {
     'The AAC output profile from the README. Leave empty to play streams as they are.',
   target: 'Buttons with the same target play on this card.',
   channel_list: 'Load every Dispatcharr channel for the picker and channel up/down.',
+  guide: 'Recent, favourites, groups, search and the number keypad.',
   channel_groups: 'Only show these Dispatcharr groups, in this order. None = every group.',
   favourites: 'Channel names or numbers, shown first under ★ Favourites.',
   channel: 'Name, number or UUID to play when the card appears.',
   remember_channel: 'Start on the channel this device watched last.',
   idle_timeout: '0 = never.',
+  enabled: 'Watch 2–4 channels at once. Each tile is its own Dispatcharr connection.',
+  max_tiles: '2 on Fire tablets; up to 4 on desktops and TVs.',
+  tile_profile: "e.g. a lower-resolution profile. Empty = the card's output profile.",
   start_timeout: 'Seconds to wait for the first data.',
   m3u_url: 'Default: <Dispatcharr URL>/output/m3u',
+  epg: "Show what's on now and next from Dispatcharr's guide. Downloads the next 24 hours of the guide every 2 hours while a dashboard with the card is open.",
+  epg_url: 'Default: <Dispatcharr URL>/output/epg?days=1',
   url_template: 'Default: {base}/proxy/ts/stream/{channel}',
 };
 
 export const configForm = {
   schema,
-  computeLabel: (field: { name: string }) => LABELS[field.name],
-  computeHelper: (field: { name: string }) => HELPERS[field.name],
+  computeLabel: (field: { name: string; key?: string }) => LABELS[field.key ?? field.name],
+  computeHelper: (field: { name: string; key?: string }) => HELPERS[field.key ?? field.name],
 };

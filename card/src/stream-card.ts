@@ -1,5 +1,6 @@
-import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from 'lit';
+import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from 'lit';
 import { ChannelList, loadChannels, type Channel } from './channels';
+import type { GuideFeed } from './epg';
 import { ConfigError, isUuid, needsLookup, normalizeConfig, resolveSource } from './config';
 import { VERSION } from './const';
 import { getController, type ControllerCard, type StreamController } from './controller';
@@ -8,13 +9,36 @@ import { icon } from './icons';
 import { readRemembered, writeRemembered } from './memory';
 import type { PickerState } from './picker';
 import { holdReason, LifecycleWatcher, type HoldReason } from './lifecycle';
+import { NumberEntry } from './number-entry';
+import { previousRecent, pushRecent, readRecents, type RecentEntry } from './recents';
 import { PlaybackSession, type SessionStatus } from './session';
+import type { SleepState } from './sleep-timer';
 import { styles } from './styles';
 import type { ResolvedConfig, StreamCardConfig, StreamRequest, StreamSource } from './types';
-
-type UiState = 'preview' | 'empty' | 'ready' | 'connecting' | 'reconnecting' | 'playing' | 'error';
+import { clampVolume, readVolume, writeVolume } from './volume';
+import {
+  renderCenter,
+  renderChips,
+  renderControls,
+  renderIdent,
+  renderOsd,
+  renderTvHints,
+} from './ui/stage';
+import {
+  detectLayout,
+  type CardActions,
+  type CardView,
+  type Layout,
+  type NavActions,
+  type NavView,
+  type NowNext,
+  type UiState,
+} from './ui/view';
+import type { StreamCardMultiview, TileItem } from './multiview';
 
 const CONTROLS_HIDE_MS = 4000;
+/** How long the big channel number stays up after a change. */
+const OSD_MS = 2600;
 const PREVIEW_HOSTS = new Set([
   'HUI-CARD-PREVIEW',
   'HUI-CARD-PICKER',
@@ -23,6 +47,14 @@ const PREVIEW_HOSTS = new Set([
 ]);
 
 /** Walks up through shadow roots looking for HA's card editor/picker. */
+/** The guide element is a lazy chunk, fetched alongside the channel list. */
+let pickerLoading: Promise<unknown> | undefined;
+function loadPicker(): void {
+  pickerLoading ??= import('./picker').then(({ PICKER_TAG, StreamCardPicker }) => {
+    if (!customElements.get(PICKER_TAG)) customElements.define(PICKER_TAG, StreamCardPicker);
+  });
+}
+
 function insideEditor(el: Element): boolean {
   let node: Node | null = el;
   for (let i = 0; node && i < 60; i++) {
@@ -70,7 +102,18 @@ export class StreamCard extends LitElement implements ControllerCard {
   private channelMessage?: string;
   private channelsPromise?: Promise<ChannelList | undefined>;
   private channelsKey?: string;
-  private pickerOpen = false;
+  /** The guide under the picture is open (guide: open | closed). */
+  private guideOpen = false;
+  /** The guide over the picture is open (full screen, TV, guide: off). */
+  private overlayOpen = false;
+  private guideMode?: string;
+  private sleepMenuOpen = false;
+  private osdUntil = 0;
+  private osdPending = false;
+  private tickTimer?: ReturnType<typeof setTimeout>;
+  /** A key reached the card, so the TV layout shows remote-key hints. */
+  private keysSeen = false;
+  private readonly layout: Layout = detectLayout();
   private requestSeq = 0;
   /** A channel name or number is waiting for the channel list. */
   private lookupPending = false;
@@ -78,6 +121,23 @@ export class StreamCard extends LitElement implements ControllerCard {
   private lookupPlay = false;
   /** The controller's stop count for this target when this card last took a request or stop. */
   private stopGen?: number;
+  /** The page-wide guide feed while `epg` is on and the card is live (never in edit mode). */
+  private guide?: GuideFeed;
+  private guideUnsub?: () => void;
+  private guideUrl?: string;
+  private readonly numbers = new NumberEntry(
+    (digits) => this.tuneNumber(digits),
+    () => this.refresh(),
+    (digits) => this.channels?.numberIsComplete(digits) ?? false,
+  );
+  /** Repaints the sleep countdown once a second during its last minute. */
+  private sleepTicker?: ReturnType<typeof setInterval>;
+  /** The multiview grid, created on first use (a lazy chunk) and kept. */
+  private mv?: StreamCardMultiview;
+  /** Multiview is showing instead of the single picture. */
+  private mvOn = false;
+  /** Whether the grid was last allowed to hold streams (for the idle timer). */
+  private mvAllowed = false;
 
   constructor() {
     super();
@@ -92,6 +152,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.video.preload = 'none';
     this.video.controls = false;
     this.video.muted = true;
+    this.video.volume = readVolume() ?? 1;
     (this.video as HTMLVideoElement & { disableRemotePlayback: boolean }).disableRemotePlayback =
       true;
     this.watcher = new LifecycleWatcher(
@@ -107,6 +168,10 @@ export class StreamCard extends LitElement implements ControllerCard {
   setConfig(raw: StreamCardConfig): void {
     const prevTarget = this.config?.target;
     this.config = normalizeConfig(raw);
+    if (this.config.guide !== this.guideMode) {
+      this.guideMode = this.config.guide;
+      this.guideOpen = this.config.guide === 'open';
+    }
     if (prevTarget && prevTarget !== this.config.target && this.isConnected) {
       this.controller.unregister(this);
       this.controller.register(this);
@@ -119,6 +184,9 @@ export class StreamCard extends LitElement implements ControllerCard {
       this.channelsKey = key;
       if (this.isConnected) this.ensureChannels();
     }
+    this.syncGuide();
+    if (this.mvOn && !this.multiviewAvailable) this.exitMultiview();
+    this.configureMultiview();
     if (this.request) {
       this.applyRequest(this.request, this.lookupPending ? this.lookupPlay : this.wantPlaying);
     } else if (this.isConnected) this.pickInitialRequest();
@@ -157,15 +225,56 @@ export class StreamCard extends LitElement implements ControllerCard {
   }
 
   deliver(req: StreamRequest): void {
+    // A button for this target leaves multiview and plays full size.
+    if (this.mvOn) this.exitMultiview();
     this.applyRequest(req, true);
   }
 
   stopFromController(): void {
     this.wantPlaying = false;
     this.lookupPlay = false;
+    if (this.mvOn) {
+      // Stop closes multiview; the tile with sound stays chosen, stopped.
+      const item = this.exitMultiview();
+      if (item) this.applyRequest(item.request, false);
+    }
     this.stopGen = this.controller.stopCount(this.target);
+    this.numbers.clear();
     this.remember();
     this.evaluate();
+  }
+
+  command(req: StreamRequest): void {
+    switch (req.action) {
+      case 'channel_up':
+        return this.channelUp();
+      case 'channel_down':
+        return this.channelDown();
+      case 'last_channel':
+        return this.lastChannel();
+      case 'volume':
+        if (req.volume !== undefined) this.setVolume(req.volume / 100);
+        return;
+      case 'mute':
+        if (!this.effectiveMuted) this.toggleMute();
+        return;
+      case 'unmute':
+        // Unmuting without a tap would pause a stream the browser only allowed muted.
+        if (this.status?.mutedByPolicy) this.userMuted = false;
+        else if (this.effectiveMuted) this.toggleMute();
+        return;
+    }
+  }
+
+  sleepChanged(): void {
+    const s = this.sleep;
+    if (s?.warning && this.isConnected && !this.sleepTicker) {
+      this.sleepTicker = setInterval(() => this.sleepChanged(), 1000);
+    } else if (!s?.warning && this.sleepTicker) {
+      clearInterval(this.sleepTicker);
+      this.sleepTicker = undefined;
+    }
+    this.refresh();
   }
 
   // ---- lifecycle ----
@@ -179,6 +288,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.inEditor = insideEditor(this);
     this.controller.register(this);
     this.watcher.attach();
+    this.addEventListener('keydown', this.onKeySeen);
     document.addEventListener('fullscreenchange', this.onFullscreenChange);
     document.addEventListener('webkitfullscreenchange', this.onFullscreenChange);
     this.pickInitialRequest();
@@ -187,7 +297,10 @@ export class StreamCard extends LitElement implements ControllerCard {
       this.stopFromController();
     }
     this.ensureChannels();
+    this.syncGuide();
     if (this.config?.debug) this.debugTimer = setInterval(() => this.refresh(), 1000);
+    this.addEventListener('keydown', this.onKeyDown);
+    this.sleepChanged();
     this.evaluate();
   }
 
@@ -198,6 +311,13 @@ export class StreamCard extends LitElement implements ControllerCard {
     document.removeEventListener('webkitfullscreenchange', this.onFullscreenChange);
     clearInterval(this.debugTimer);
     clearTimeout(this.controlsTimer);
+    this.syncGuide();
+    clearInterval(this.sleepTicker);
+    this.sleepTicker = undefined;
+    this.removeEventListener('keydown', this.onKeyDown);
+    this.numbers.clear();
+    clearTimeout(this.tickTimer);
+    this.removeEventListener('keydown', this.onKeySeen);
     super.disconnectedCallback();
     this.evaluate();
   }
@@ -213,6 +333,7 @@ export class StreamCard extends LitElement implements ControllerCard {
         this.applyRequest(this.request, this.lookupPlay);
       }
       this.ensureChannels();
+      this.syncGuide();
       this.evaluate();
     }
   }
@@ -229,6 +350,7 @@ export class StreamCard extends LitElement implements ControllerCard {
   private ensureChannels(force = false): Promise<ChannelList | undefined> {
     const c = this.config;
     if (!c?.channelList || !c.m3uUrl || this.isPreview) return Promise.resolve(undefined);
+    loadPicker();
     if (this.channelsPromise && !force) return this.channelsPromise;
     this.channelState = 'loading';
     this.channelMessage = undefined;
@@ -261,6 +383,37 @@ export class StreamCard extends LitElement implements ControllerCard {
     return this.channelsPromise;
   }
 
+  // ---- now/next ----
+
+  /**
+   * Subscribes to the guide while it's wanted; unsubscribing lets the feed stop downloading. The
+   * guide code is a lazy chunk, so cards without `epg` never load it.
+   */
+  private syncGuide(): void {
+    const c = this.config;
+    const url = this.isConnected && !this.isPreview && c?.epg ? c.epgUrl : undefined;
+    if (this.guideUrl === url) return;
+    this.guideUnsub?.();
+    this.guideUnsub = undefined;
+    this.guide = undefined;
+    this.guideUrl = url;
+    if (!url) return;
+    void import('./epg').then(({ guideFeed }) => {
+      if (this.guideUrl !== url) return;
+      this.guide = guideFeed(url);
+      this.guideUnsub = this.guide.subscribe(() => this.refresh());
+    });
+  }
+
+  /**
+   * What's on a channel now and next, from Dispatcharr's guide. Undefined when `epg` is off, in
+   * edit mode, before the guide loads, if it failed, or when the guide has nothing for the channel.
+   * The card re-renders when guide data arrives and when a programme starts or ends.
+   */
+  nowNext(channel: Channel | undefined): NowNext | undefined {
+    return channel && this.guide ? this.guide.nowNext(channel) : undefined;
+  }
+
   /** The channel-list entry for what's playing, if the list has it. */
   private get currentChannel(): Channel | undefined {
     return this.channels?.find(this.source?.channel ?? this.source?.url);
@@ -276,29 +429,130 @@ export class StreamCard extends LitElement implements ControllerCard {
   private pickInitialRequest(): void {
     if (!this.config) return;
     const pending = this.controller.take(this.target);
-    if (pending) {
+    if (pending && (pending.action ?? 'play') === 'play') {
       this.applyRequest(pending, true);
       return;
     }
+    this.pickStartingChannel(this.config);
+    // Channel up/down pressed while this card was off the page: step from where it starts,
+    // before the card connects to that channel.
+    if (pending) this.command(pending);
+  }
+
+  private pickStartingChannel(config: ResolvedConfig): void {
     if (this.request) return;
     const last = this.controller.lastFor(this.target);
     if (last) {
-      this.applyRequest(last, this.config.autoplay);
+      this.applyRequest(last, config.autoplay);
       return;
     }
     // A channel this device left stopped comes back stopped.
-    const saved = this.config.rememberChannel ? readRemembered(this.target) : undefined;
+    const saved = config.rememberChannel ? readRemembered(this.target) : undefined;
     if (saved) {
       const req = { channel: saved.channel, url: saved.url, title: saved.title };
-      this.applyRequest(req, this.config.autoplay && saved.playing !== false);
+      this.applyRequest(req, config.autoplay && saved.playing !== false);
       return;
     }
-    if (this.config.defaultRequest)
-      this.applyRequest(this.config.defaultRequest, this.config.autoplay);
+    if (config.defaultRequest) this.applyRequest(config.defaultRequest, config.autoplay);
   }
 
   private refresh(): void {
     this._ui++;
+    if (this.mv) {
+      this.mv.list = this.channels;
+      this.mv.listState = this.channelState;
+      this.mv.listMessage = this.channelMessage;
+    }
+  }
+
+  // ---- multiview ----
+
+  private get multiviewAvailable(): boolean {
+    return !!this.config?.multiview.enabled && this.config.channelList;
+  }
+
+  /** Config for tile URLs: the card's, with the multiview output profile. */
+  private get tileConfig(): ResolvedConfig | undefined {
+    const c = this.config;
+    return c && { ...c, outputProfile: c.multiview.outputProfile };
+  }
+
+  private tileItem(req: StreamRequest, channel?: Channel): TileItem | undefined {
+    const cfg = this.tileConfig;
+    if (!cfg) return undefined;
+    const request = { channel: req.channel, url: req.url, type: req.type, title: req.title };
+    const source = resolveSource(request, cfg);
+    return { request, source: { ...source, title: req.title ?? source.title }, channel };
+  }
+
+  private configureMultiview(): void {
+    const mv = this.mv;
+    const c = this.config;
+    if (!mv || !c) return;
+    mv.maxTiles = c.multiview.maxTiles;
+    mv.settings = {
+      startTimeoutMs: c.startTimeoutMs,
+      maxAttempts: c.maxReconnectAttempts,
+      debug: c.debug,
+      buffer: c.buffer,
+    };
+  }
+
+  private enterMultiview = async (e?: Event): Promise<void> => {
+    e?.stopPropagation();
+    if (!this.multiviewAvailable || this.isPreview || this.mvOn) return;
+    if (!this.mv) {
+      const { defineMultiview, MULTIVIEW_TAG } = await import('./multiview');
+      defineMultiview({ LitElement, html, css, nothing, svg, PlaybackSession, icon, format });
+      if (!this.multiviewAvailable || this.isPreview || this.mvOn || this.mv) return;
+      const mv = document.createElement(MULTIVIEW_TAG) as StreamCardMultiview;
+      mv.resolve = (ch) => this.tileItem(this.requestFor(ch), ch)!;
+      mv.addEventListener('multiview-exit', (ev) => {
+        const item = (ev as CustomEvent<{ item?: TileItem }>).detail.item;
+        this.exitMultiview();
+        if (item) this.controller.request({ ...item.request, target: this.target });
+        else this.evaluate();
+      });
+      mv.addEventListener('picker-retry', () => void this.ensureChannels(true));
+      this.mv = mv;
+      this.configureMultiview();
+    }
+    if (this.fullscreen) {
+      try {
+        await document.exitFullscreen?.();
+      } catch {
+        /* not in full screen after all */
+      }
+    }
+    let first: TileItem | undefined;
+    const req = this.request;
+    if (this.source && req && !this.lookupPending) {
+      try {
+        first = this.tileItem(req, this.currentChannel);
+      } catch {
+        first = undefined;
+      }
+    }
+    this.overlayOpen = false;
+    this.ensureChannels();
+    this.mv.open(first, this.effectiveMuted);
+    this.mvOn = true;
+    this.mvAllowed = false;
+    this.evaluate();
+  };
+
+  /** Stops every tile and goes back to the single picture; returns the tile that had sound. */
+  private exitMultiview(): TileItem | undefined {
+    const mv = this.mv;
+    if (!mv || !this.mvOn) return undefined;
+    const item = mv.mainItem;
+    this.mvOn = false;
+    this.mvAllowed = false;
+    mv.halt();
+    this.watcher.disarmIdle();
+    this.lastRelease = 'multiview-exit';
+    this.refresh();
+    return item;
   }
 
   private applyRequest(req: StreamRequest, play: boolean): void {
@@ -360,11 +614,22 @@ export class StreamCard extends LitElement implements ControllerCard {
       return;
     }
     if (this.session && this.session.source.url !== src.url) this.stopSession('switch');
+    // The big number shows once the new channel's picture arrives (tuning has its own layer).
+    if (this.source?.url !== src.url) this.osdPending = true;
     this.source = { ...src, title: req.title ?? src.title };
     this.error = undefined;
     if (play) this.wantPlaying = true;
+    if (!this.isPreview) pushRecent(this.target, this.recentEntry(req) ?? {});
     this.remember();
     this.evaluate();
+  }
+
+  /** What recents store for a request: the resolved stream ID, or the full URL. */
+  private recentEntry(req: StreamRequest | undefined): RecentEntry | undefined {
+    if (!req || !this.source) return undefined;
+    return this.source.channel
+      ? { channel: this.source.channel, title: req.title }
+      : { url: req.url, title: req.title };
   }
 
   /** Saves the current channel and play intent for this target on this device. */
@@ -381,17 +646,30 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   /** The single place that starts or stops playback. */
   private evaluate(): void {
+    const mv = this.mvOn ? this.mv : undefined;
     const reason = holdReason({
       connected: this.isConnected,
       preview: this.isPreview,
-      hasSource: !!this.source,
-      wantPlaying: this.wantPlaying,
+      // Multiview always has something to show (at least an "Add a channel" tile).
+      hasSource: !!mv || !!this.source,
+      wantPlaying: !!mv || this.wantPlaying,
       intersecting: this.watcher.intersecting,
       pageVisible: this.watcher.pageVisible,
       screenAwake: this.watcher.screenAwake,
     });
     this.hold = reason;
-    if (reason === null) {
+    if (mv) {
+      // The single picture never plays alongside the grid.
+      this.stopSession('multiview');
+      const allowed = reason === null;
+      if (allowed !== this.mvAllowed) {
+        this.mvAllowed = allowed;
+        if (allowed && this.config && this.config.idleTimeoutMs > 0) {
+          this.watcher.armIdle(this.config.idleTimeoutMs);
+        } else if (!allowed) this.watcher.disarmIdle();
+      }
+      mv.setAllowed(allowed);
+    } else if (reason === null) {
       if (!this.session) this.startSession();
     } else if (this.session) {
       this.stopSession(reason);
@@ -437,7 +715,13 @@ export class StreamCard extends LitElement implements ControllerCard {
       this.evaluate();
       return;
     }
-    if (s.state === 'playing') this.scheduleHideControls();
+    if (s.state === 'playing') {
+      this.scheduleHideControls();
+      if (this.osdPending) {
+        this.osdPending = false;
+        this.osdUntil = Date.now() + OSD_MS;
+      }
+    }
     this.refresh();
   }
 
@@ -469,8 +753,12 @@ export class StreamCard extends LitElement implements ControllerCard {
   private onPick = (e: Event): void => {
     e.stopPropagation();
     const ch = (e as CustomEvent<Channel>).detail;
-    const hadFocus = this.pickerHasFocus();
-    this.pickerOpen = false;
+    // The guide under the picture stays open for the next pick; one over the picture closes.
+    const placement = this.guidePlacement;
+    // ...as does one that was only showing because nothing was selected.
+    const closing = placement === 'overlay' || (placement === 'below' && !this.guideOpen);
+    const hadFocus = closing && this.pickerHasFocus();
+    if (closing) this.overlayOpen = false;
     this.playChannel(ch);
     if (hadFocus) this.restoreFocus();
   };
@@ -496,15 +784,28 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   private togglePicker = (e?: Event): void => {
     e?.stopPropagation();
-    this.pickerOpen = !this.pickerOpen;
-    if (this.pickerOpen) this.ensureChannels();
+    // From the error layer, "Channels" only ever opens the guide.
+    const open = this.uiState === 'error' || this.guidePlacement === undefined;
+    if (this.guideOverlays) this.overlayOpen = open;
+    else this.guideOpen = open;
+    if (open) {
+      this.ensureChannels();
+      if (!this.guideOverlays) {
+        void this.updateComplete.then(() =>
+          this.renderRoot
+            .querySelector('stream-card-picker')
+            ?.scrollIntoView({ block: 'nearest', behavior: 'smooth' }),
+        );
+      }
+    }
     this.showControls();
   };
 
   private closePicker = (e?: Event): void => {
     e?.stopPropagation();
     const hadFocus = this.pickerHasFocus();
-    this.pickerOpen = false;
+    if (this.guideOverlays) this.overlayOpen = false;
+    else this.guideOpen = false;
     this.refresh();
     if (hadFocus) this.restoreFocus();
   };
@@ -515,19 +816,182 @@ export class StreamCard extends LitElement implements ControllerCard {
   };
 
   private channelStep(delta: 1 | -1): void {
-    const ch = this.channels?.neighbour(this.currentChannel?.id, delta);
+    if (!this.channels) {
+      // A remote press can come before the list is loaded.
+      void this.ensureChannels().then((list) => list && this.channelStep(delta));
+      return;
+    }
+    const ch = this.channels.neighbour(this.currentChannel?.id, delta);
     if (ch) this.playChannel(ch);
     this.showControls();
   }
 
-  private channelUp = (e?: Event): void => {
+  channelUp = (e?: Event): void => {
     e?.stopPropagation();
     this.channelStep(1);
   };
 
-  private channelDown = (e?: Event): void => {
+  channelDown = (e?: Event): void => {
     e?.stopPropagation();
     this.channelStep(-1);
+  };
+
+  // ---- channel navigation: recents, last channel, number entry, volume, sleep ----
+
+  /** The key recents use for what's selected now. */
+  private get currentKey(): string | undefined {
+    return this.source?.channel ?? this.request?.url;
+  }
+
+  /** This device's recently watched channels for the target, newest first, current included. */
+  get recents(): Channel[] {
+    const list = this.channels;
+    if (!list || this.isPreview) return [];
+    return readRecents(this.target)
+      .map((e) => list.find(e.channel ?? e.url))
+      .filter((c): c is Channel => !!c);
+  }
+
+  private get previousEntry(): RecentEntry | undefined {
+    return this.isPreview ? undefined : previousRecent(this.target, this.currentKey);
+  }
+
+  /** The channel "Last channel" goes back to. */
+  get previousChannel(): Channel | undefined {
+    const e = this.previousEntry;
+    return e ? this.channels?.find(e.channel ?? e.url) : undefined;
+  }
+
+  /** Flips back to the previous channel, like a remote's Last/Recall key. */
+  lastChannel = (e?: Event): void => {
+    e?.stopPropagation();
+    const prev = this.previousEntry;
+    if (!prev) return;
+    this.controller.request({
+      target: this.target,
+      action: 'play',
+      channel: prev.channel,
+      url: prev.url,
+      title: prev.title,
+    });
+    this.showControls();
+  };
+
+  /** Digits typed so far and the channels they could become; undefined when not typing. */
+  get numberEntry(): { digits: string; candidates: Channel[] } | undefined {
+    const digits = this.numbers.digits;
+    if (!digits) return undefined;
+    return { digits, candidates: this.channels?.numberMatches(digits) ?? [] };
+  }
+
+  pressDigit = (d: string): void => {
+    if (!this.channels || this.isPreview) return;
+    this.numbers.press(d);
+    this.showControls();
+  };
+
+  clearDigits = (): void => this.numbers.clear();
+
+  commitDigits = (): void => this.numbers.commit();
+
+  /** Deletes the last typed digit. */
+  deleteDigit = (): void => this.numbers.delete();
+
+  private tuneNumber(digits: string): void {
+    const ch = this.channels?.numberMatches(digits, 1)[0];
+    if (ch?.number === digits) this.playChannel(ch);
+  }
+
+  /** This device's volume, 0..1 (the mute button is separate). */
+  get volume(): number {
+    return this.video.volume;
+  }
+
+  /** Sets and remembers this device's volume. Raising it above 0 also unmutes. */
+  setVolume = (v: number): void => {
+    const vol = clampVolume(v);
+    this.video.volume = vol;
+    writeVolume(vol);
+    if (vol > 0 && this.effectiveMuted && !this.status?.mutedByPolicy) this.toggleMute();
+    else this.refresh();
+  };
+
+  get sleep(): SleepState | undefined {
+    return this.isPreview ? undefined : this.controller.sleepFor(this.target);
+  }
+
+  /** Stops this target in `minutes` (0 cancels). Every card on the target shares the timer. */
+  setSleep = (minutes: number): void => {
+    this.controller.setSleep(this.target, minutes);
+  };
+
+  extendSleep = (minutes: number): void => {
+    this.controller.extendSleep(this.target, minutes);
+  };
+
+  /** Cancels the sleep timer from its last-minute warning. */
+  keepWatching = (): void => this.setSleep(0);
+
+  /** Data the navigation controls render from. */
+  navView(): NavView {
+    if (this.isPreview) return {};
+    const list = !!this.channels;
+    return {
+      recents: list ? this.recents : undefined,
+      previousChannel: this.previousChannel,
+      numberEntry: this.numberEntry,
+      volume: this.volume,
+      sleep: this.sleep,
+    };
+  }
+
+  /** Callbacks for the navigation controls; ones that can't work now are left out. */
+  navActions(): NavActions {
+    if (this.isPreview) return {};
+    const list = this.channelState === 'ready' && !!this.channels?.size;
+    return {
+      lastChannel: this.previousEntry ? this.lastChannel : undefined,
+      pressDigit: list ? this.pressDigit : undefined,
+      clearDigits: list ? this.clearDigits : undefined,
+      commitDigits: list ? this.commitDigits : undefined,
+      setVolume: this.setVolume,
+      setSleep: this.setSleep,
+      extendSleep: this.extendSleep,
+    };
+  }
+
+  /** Remote and keyboard keys while focus is in the card (never in the picker or a text field). */
+  private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || this.isPreview) return;
+    const path = e.composedPath();
+    const inField = path.some(
+      (n) =>
+        n instanceof HTMLElement &&
+        (n.tagName === 'INPUT' ||
+          n.tagName === 'TEXTAREA' ||
+          n.tagName === 'SELECT' ||
+          n.tagName === 'STREAM-CARD-PICKER' ||
+          n.isContentEditable),
+    );
+    if (inField) return;
+    const typing = !!this.numbers.digits;
+    let handled = true;
+    if (/^\d$/.test(e.key)) this.pressDigit(e.key);
+    else if (e.key === 'Enter' && typing) this.commitDigits();
+    // OK on a remote opens the guide, unless a button has focus (Enter presses that button).
+    else if (e.key === 'Enter' && !path.some((n) => n instanceof HTMLButtonElement))
+      this.togglePicker();
+    else if (e.key === 'Escape' && typing) this.clearDigits();
+    else if (e.key === 'Backspace') {
+      if (typing) this.deleteDigit();
+      else this.lastChannel();
+    } else if (e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'ChannelUp') this.channelUp();
+    else if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === 'ChannelDown')
+      this.channelDown();
+    else if (e.key === 'm' || e.key === 'M' || e.key === 'AudioVolumeMute') this.toggleMute();
+    else if (e.key === 'f' || e.key === 'F') void this.toggleFullscreen();
+    else handled = false;
+    if (handled) e.preventDefault();
   };
 
   /** Stops the target like a stop button, so a recreated card or a reload stays stopped. */
@@ -559,7 +1023,24 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.refresh();
   };
 
+  private toggleSleepMenu = (e?: Event): void => {
+    e?.stopPropagation();
+    this.sleepMenuOpen = !this.sleepMenuOpen;
+    this.showControls();
+  };
+
+  private onKeySeen = (): void => {
+    if (this.keysSeen) return;
+    this.keysSeen = true;
+    this.refresh();
+  };
+
   private onFrameClick = (): void => {
+    if (this.sleepMenuOpen) {
+      this.sleepMenuOpen = false;
+      this.showControls();
+      return;
+    }
     if (this.status?.mutedByPolicy) {
       this.unmute();
       return;
@@ -582,7 +1063,7 @@ export class StreamCard extends LitElement implements ControllerCard {
   private scheduleHideControls(): void {
     clearTimeout(this.controlsTimer);
     this.controlsTimer = setTimeout(() => {
-      if (this.status?.state === 'playing') {
+      if (this.status?.state === 'playing' && !this.sleepMenuOpen) {
         this.controlsVisible = false;
         this.refresh();
       }
@@ -597,7 +1078,8 @@ export class StreamCard extends LitElement implements ControllerCard {
     };
     type FsEl = HTMLElement & { webkitRequestFullscreen?: () => void };
     const doc = document as FsDoc;
-    const frame = this.renderRoot.querySelector('.frame') as FsEl | null;
+    // The stage holds the picture, ident and controls, so they all follow it into full screen.
+    const frame = this.renderRoot.querySelector('.stage') as FsEl | null;
     try {
       if (this.fullscreen) {
         if (doc.exitFullscreen) await doc.exitFullscreen();
@@ -621,9 +1103,16 @@ export class StreamCard extends LitElement implements ControllerCard {
     const was = this.fullscreen;
     this.fullscreen = !!root.fullscreenElement || (doc.webkitFullscreenElement ?? null) === this;
     // Full screen is for the picture: an open channel panel doesn't follow it in.
-    if (this.fullscreen && !was) this.pickerOpen = false;
+    if (this.fullscreen !== was) this.overlayOpen = false;
     this.refresh();
   };
+
+  // ---- hooks for the other 2.0 features ----
+
+  /** Multiview: shown as a control-bar button only when this returns a function. */
+  protected multiviewAction(): (() => void) | undefined {
+    return this.multiviewAvailable && !this.isPreview ? this.enterMultiview : undefined;
+  }
 
   // ---- rendering ----
 
@@ -645,6 +1134,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     return {
       version: VERSION,
       ui: this.uiState,
+      layout: this.layout,
       hold: this.hold,
       lastRelease: this.lastRelease,
       target: this.target,
@@ -662,25 +1152,108 @@ export class StreamCard extends LitElement implements ControllerCard {
       error: this.error,
       lastError: this.status?.lastError,
       channels: { state: this.channelState, count: this.channels?.size ?? 0 },
-      pickerOpen: this.showPicker,
+      pickerOpen: this.guidePlacement !== undefined,
+      guide: this.guidePlacement ?? 'hidden',
+      volume: this.video.volume,
+      sleep: this.sleep,
+      typed: this.numbers.digits,
+      multiview: this.mvOn ? this.mv?.debugInfo : undefined,
       stats,
     };
   }
 
-  /** The picker shows when asked for, and on its own while nothing is selected. */
-  private get showPicker(): boolean {
-    if (!this.config?.channelList || this.isPreview || this.channelState === 'idle') return false;
-    return this.pickerOpen || this.uiState === 'empty';
+  private get hasGuide(): boolean {
+    return !!this.config?.channelList && !this.isPreview && this.channelState !== 'idle';
   }
 
-  private renderPicker(ui: UiState, overlay: boolean) {
+  /** Over the picture in full screen, on a TV and with `guide: off`; otherwise under it. */
+  private get guideOverlays(): boolean {
+    return this.fullscreen || this.layout === 'tv' || this.config?.guide === 'off';
+  }
+
+  /** Where the guide shows now, if at all. It shows on its own while nothing is selected. */
+  private get guidePlacement(): 'below' | 'overlay' | undefined {
+    if (!this.hasGuide) return undefined;
+    const empty = this.uiState === 'empty';
+    if (this.guideOverlays) return this.overlayOpen || empty ? 'overlay' : undefined;
+    return this.guideOpen || empty ? 'below' : undefined;
+  }
+
+  private buildView(): CardView {
+    const c = this.config;
+    const ui = this.uiState;
+    const ch = this.currentChannel;
+    const s = this.status;
+    const nav = this.navView();
+    const placement = this.guidePlacement;
+    const idleMinutes = Math.round((c?.idleTimeoutMs ?? 0) / 60000);
+    return {
+      ...nav,
+      ui,
+      layout: this.layout,
+      channel: ch,
+      title: this.source?.title ?? ch?.name,
+      nowNext: ch && ui !== 'preview' ? this.nowNext(ch) : undefined,
+      chrome: !(ui === 'playing' && !this.controlsVisible),
+      osd: Date.now() < this.osdUntil,
+      muted: this.effectiveMuted,
+      mutedByPolicy: !!s?.mutedByPolicy && !s.needsGesture,
+      needsGesture: !!s?.needsGesture,
+      buffering: !!s?.buffering,
+      fullscreen: this.fullscreen,
+      canStep: this.channelState === 'ready' && (this.channels?.size ?? 0) > 1,
+      hasGuide: this.hasGuide,
+      guideOpen: placement !== undefined,
+      failures: s?.failures ?? 0,
+      maxAttempts: c?.maxReconnectAttempts ?? 0,
+      retryAt: s?.retryAt,
+      canRetry: !!(this.source || this.request),
+      errorMessage: this.error?.message,
+      errorDetail: c?.debug ? this.error?.detail : undefined,
+      stoppedReason: this.idleStopped
+        ? `Stopped after ${idleMinutes} minute${idleMinutes === 1 ? '' : 's'} without interaction`
+        : undefined,
+      notice: ui === 'playing' ? s?.notice : undefined,
+      debugText: c?.debug && ui !== 'preview' && ui !== 'empty' ? this.debugText() : undefined,
+      sleepMenuOpen: this.sleepMenuOpen,
+      edit: c
+        ? { target: c.target, profile: c.outputProfile, favourites: c.favourites.length }
+        : undefined,
+      now: Date.now(),
+    };
+  }
+
+  private buildActions(): CardActions {
+    return {
+      ...this.navActions(),
+      play: this.play,
+      stop: this.stop,
+      channelUp: this.channelUp,
+      channelDown: this.channelDown,
+      toggleMute: this.toggleMute,
+      unmute: this.unmute,
+      toggleFullscreen: this.toggleFullscreen,
+      toggleGuide: this.togglePicker,
+      toggleSleepMenu: this.toggleSleepMenu,
+      multiview: this.multiviewAction(),
+    };
+  }
+
+  private renderPicker(v: CardView, a: CardActions, overlay: boolean) {
     return html`<stream-card-picker
       class=${overlay ? 'overlay' : 'panel'}
       .list=${this.channels}
       .state=${this.channelState === 'idle' ? 'loading' : this.channelState}
       .message=${this.channelMessage}
       .currentId=${this.currentChannel?.id}
-      .closable=${ui !== 'empty'}
+      .closable=${v.ui !== 'empty'}
+      .recents=${v.recents ?? []}
+      .nowNext=${this.nowNextFn}
+      .now=${v.now}
+      .numberEntry=${v.numberEntry}
+      .pressDigit=${a.pressDigit}
+      .clearDigits=${a.clearDigits}
+      .layout=${v.layout}
       @click=${(e: Event) => e.stopPropagation()}
       @channel-pick=${this.onPick}
       @picker-close=${this.closePicker}
@@ -688,190 +1261,63 @@ export class StreamCard extends LitElement implements ControllerCard {
     ></stream-card-picker>`;
   }
 
+  /** Stable reference, so the picker only re-renders tiles when something else changes. */
+  private readonly nowNextFn = (ch: Channel): NowNext | undefined => this.nowNext(ch);
+
   protected override render(): TemplateResult {
     const ar = this.config?.aspectRatio ?? '16 / 9';
-    const ui = this.uiState;
-    const picker = this.showPicker;
-    const playing = ui === 'playing';
-    const controlsHidden = playing && !this.controlsVisible;
+    const v = this.buildView();
+    const a = this.buildActions();
+    const placement = this.guidePlacement;
+    const grid = this.mvOn && this.mv && !this.isPreview ? this.mv : undefined;
+    this.scheduleTick(v);
     return html`
-      <ha-card>
-        <div class="frame" data-state=${ui} style="aspect-ratio: ${ar}" @click=${this.onFrameClick}>
-          <div class="video-host"></div>
-          ${this.renderBadge(ui, controlsHidden)} ${this.renderCenter(ui)}
-          ${
-            this.status?.mutedByPolicy && !this.status.needsGesture
-              ? html`<button class="pill unmute" @click=${this.unmute} aria-label="Unmute">
-                  ${icon('volumeOff')} Tap to unmute
-                </button>`
-              : nothing
-          }
-          ${
-            this.status?.notice && ui === 'playing'
-              ? html`<div class="notice" role="status">${this.status.notice}</div>`
-              : nothing
-          }
-          ${this.renderControls(ui, controlsHidden)}
-          ${
-            this.config?.debug && ui !== 'preview' && ui !== 'empty'
-              ? html`<div class="debug">${this.debugText()}</div>`
-              : nothing
-          }
-          ${picker && this.fullscreen ? this.renderPicker(ui, true) : nothing}
+      <ha-card class=${v.ui === 'preview' ? 'editing' : ''}>
+        <div
+          class="stage ${v.layout === 'tv' ? 'tv' : ''} ${v.fullscreen ? 'fs' : ''}"
+          data-layout=${v.layout}
+          data-ui=${v.ui}
+          ?hidden=${!!grid}
+        >
+          <div
+            class="frame"
+            data-state=${v.ui}
+            style="aspect-ratio: ${ar}"
+            tabindex="0"
+            aria-label=${v.title ? `Stream card: ${v.title}` : 'Stream card'}
+            @click=${this.onFrameClick}
+          >
+            <div class="video-host"></div>
+            ${
+              v.ui !== 'preview' && v.ui !== 'empty'
+                ? html`<div class="sheen ${v.chrome ? '' : 'hidden'}"></div>`
+                : nothing
+            }
+            ${renderChips(v)} ${renderOsd(v)} ${renderCenter(v, a)}
+            ${v.notice ? html`<div class="notice" role="status">${v.notice}</div>` : nothing}
+            ${v.debugText ? html`<div class="debug">${v.debugText}</div>` : nothing}
+            ${renderTvHints(v, this.keysSeen)}
+            ${placement === 'overlay' ? this.renderPicker(v, a, true) : nothing}
+          </div>
+          ${renderIdent(v)} ${renderControls(v, a)}
         </div>
-        ${picker && !this.fullscreen ? this.renderPicker(ui, false) : nothing}
+        ${placement === 'below' && !grid ? this.renderPicker(v, a, false) : nothing}
+        ${grid ?? nothing}
       </ha-card>
     `;
   }
 
-  private renderBadge(ui: UiState, hidden: boolean) {
-    const ch = this.currentChannel;
-    const title = this.source?.title ?? ch?.name;
-    if (!title && ui !== 'playing') return nothing;
-    return html`<div class="badge ${hidden ? 'hidden' : ''}">
-      ${ui === 'playing' ? html`<span class="live-dot" role="img" aria-label="Live"></span>` : nothing}
-      ${ch?.logo ? html`<img class="badge-logo" src=${ch.logo} alt="" />` : nothing}
-      ${ch?.number ? html`<span class="badge-num">${ch.number}</span>` : nothing}
-      <span class="title">${title ?? 'Live'}</span>
-    </div>`;
-  }
-
-  private renderCenter(ui: UiState) {
-    switch (ui) {
-      case 'preview':
-        return html`<div class="layer dim">
-          <span class="placeholder-icon">${icon('tv')}</span>
-          <div class="message">Stream card · playback is off while editing</div>
-          ${this.config ? html`<div class="message detail">target: ${this.target}</div>` : nothing}
-        </div>`;
-      case 'empty':
-        return html`<div class="layer">
-          <span class="placeholder-icon">${icon('tv')}</span>
-          <div class="message">
-            ${this.config?.channelList && !this.isPreview ? 'Choose a channel below' : 'Choose a channel'}
-          </div>
-        </div>`;
-      case 'error':
-        return html`<div class="layer dim" role="alert">
-          <span class="error-icon">${icon('alert')}</span>
-          <div class="message">${this.error?.message}</div>
-          ${
-            this.config?.debug && this.error?.detail
-              ? html`<div class="message detail">${this.error.detail}</div>`
-              : nothing
-          }
-          <div class="actions">
-            ${
-              this.source || this.request
-                ? html`<button class="pill primary retry" @click=${this.play}>
-                    ${icon('refresh')} Retry
-                  </button>`
-                : nothing
-            }
-            ${
-              this.config?.channelList
-                ? html`<button
-                    class="pill channels"
-                    @click=${this.togglePicker}
-                    aria-expanded=${this.pickerOpen ? 'true' : 'false'}
-                  >
-                    ${icon('list')} Channels
-                  </button>`
-                : nothing
-            }
-          </div>
-        </div>`;
-      case 'connecting':
-      case 'reconnecting': {
-        if (this.status?.needsGesture) return this.renderPlayButton('Tap to play');
-        const s = this.status;
-        const text =
-          ui === 'reconnecting' && s
-            ? `Reconnecting… (attempt ${s.failures} of ${this.config?.maxReconnectAttempts ?? '?'})`
-            : s?.buffering
-              ? 'Buffering…'
-              : 'Connecting…';
-        return html`<div class="layer">
-          <div class="spinner" role="progressbar" aria-label=${text}></div>
-          <div class="message">${text}</div>
-        </div>`;
-      }
-      case 'playing':
-        if (this.status?.needsGesture) return this.renderPlayButton('Tap to play');
-        // buffer: stable refilling its reserve after running dry.
-        return this.status?.buffering
-          ? html`<div class="layer">
-              <div class="spinner" role="progressbar" aria-label="Buffering…"></div>
-              <div class="message">Buffering…</div>
-            </div>`
-          : nothing;
-      case 'ready': {
-        const minutes = Math.round((this.config?.idleTimeoutMs ?? 0) / 60000);
-        const why = this.idleStopped
-          ? `Stopped after ${minutes} minute${minutes === 1 ? '' : 's'} without interaction`
-          : undefined;
-        return this.renderPlayButton(why);
-      }
-    }
-  }
-
-  private renderPlayButton(text?: string) {
-    return html`<div class="layer ${text ? 'dim' : ''}">
-      <button class="big-play" @click=${this.play} aria-label="Play">${icon('play')}</button>
-      ${text ? html`<div class="message">${text}</div>` : nothing}
-    </div>`;
-  }
-
-  private renderControls(ui: UiState, hidden: boolean) {
-    // The error layer has its own Retry and Channels buttons in the middle.
-    if (ui === 'preview' || ui === 'empty' || ui === 'error') return nothing;
-    const active = ui === 'playing' || ui === 'connecting' || ui === 'reconnecting';
-    const canStep = this.channelState === 'ready' && (this.channels?.size ?? 0) > 1;
-    return html`<div class="controls ${hidden ? 'hidden' : ''}">
-      ${
-        active
-          ? html`<button class="ctl-stop" @click=${this.stop} aria-label="Stop">
-              ${icon('stop')}
-            </button>`
-          : nothing
-      }
-      ${
-        canStep
-          ? html`<button class="ctl-down" @click=${this.channelDown} aria-label="Previous channel">
-                ${icon('chevronDown')}
-              </button>
-              <button class="ctl-up" @click=${this.channelUp} aria-label="Next channel">
-                ${icon('chevronUp')}
-              </button>`
-          : nothing
-      }
-      ${
-        this.config?.channelList
-          ? html`<button
-              class="ctl-channels"
-              @click=${this.togglePicker}
-              aria-label=${this.pickerOpen ? 'Hide channels' : 'Channels'}
-              aria-expanded=${this.pickerOpen ? 'true' : 'false'}
-            >
-              ${icon('list')}
-            </button>`
-          : nothing
-      }
-      <button
-        class="ctl-mute"
-        @click=${this.toggleMute}
-        aria-label=${this.effectiveMuted ? 'Unmute' : 'Mute'}
-      >
-        ${icon(this.effectiveMuted ? 'volumeOff' : 'volumeHigh')}
-      </button>
-      <button
-        class="ctl-fullscreen"
-        @click=${this.toggleFullscreen}
-        aria-label=${this.fullscreen ? 'Exit full screen' : 'Full screen'}
-      >
-        ${icon(this.fullscreen ? 'fullscreenExit' : 'fullscreen')}
-      </button>
-    </div>`;
+  /**
+   * Re-renders on a clock while something on screen counts: reconnect countdowns and the sleep
+   * timer every second, programme progress bars every 30 s.
+   */
+  private scheduleTick(v: CardView): void {
+    clearTimeout(this.tickTimer);
+    if (!this.isConnected || v.ui === 'preview') return;
+    const fast = (v.ui === 'reconnecting' && v.retryAt) || v.sleep || v.osd;
+    const slow = v.nowNext?.now || v.layout === 'tv';
+    if (!fast && !slow) return;
+    this.tickTimer = setTimeout(() => this.refresh(), fast ? 1000 : 30_000);
   }
 
   private debugText(): string {

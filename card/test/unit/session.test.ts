@@ -105,6 +105,24 @@ describe('PlaybackSession', () => {
     expect(FakeEngine.live).toBe(0);
   });
 
+  it('keeps a changed mute setting across reconnects (multiview sound focus)', async () => {
+    const { s, video, engine } = setup({ muted: true });
+    s.start();
+    await flush();
+    expect(video.muted).toBe(true);
+    s.setMuted(false);
+    expect(video.muted).toBe(false);
+    engine().emit({ type: 'data' });
+    engine().emit({ type: 'error', error: { kind: 'ended', detail: 'eof' } });
+    vi.advanceTimersByTime(100);
+    await flush();
+    expect(FakeEngine.created).toHaveLength(2);
+    expect(video.muted).toBe(false);
+    s.setMuted(true);
+    expect(video.muted).toBe(true);
+    await s.destroy();
+  });
+
   it('reconnects on retryable errors and never holds two engines', async () => {
     const { s, statuses, engine } = setup();
     s.start();

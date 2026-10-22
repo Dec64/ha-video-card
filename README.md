@@ -57,6 +57,9 @@ It should print `access-control-allow-origin: *`. If you add a header rule in Cl
 ### Channel list
 The card reads `<dispatcharr_url>/output/m3u`, the same playlist IPTV apps use. It needs no login, but Dispatcharr's **network access** settings for M3U/EPG must allow the devices that show the card. Channel numbers, names, groups and logos come from Dispatcharr, so set them there.
 
+### Now and next
+With `dispatcharr_url` set, the card also reads `<dispatcharr_url>/output/epg?days=1`, the next 24 hours of Dispatcharr's guide, to show what's on now and next. The guide is large (several MB on a big channel list), so the card downloads it once per dashboard page, keeps only titles and times, and refreshes it every 2 hours while a dashboard with the card is open (never in edit mode or while the page is hidden). Channels need guide data assigned in Dispatcharr. If the guide can't be loaded, or has nothing for a channel, the card simply shows no programme line. Set `epg: false` to never download it.
+
 ## 2. Install
 
 The card is a folder of JavaScript files served from Home Assistant's `www` folder.
@@ -118,22 +121,62 @@ channel: BBC One HD
 
 ## 4. Using it
 
-**Picking a channel.** With nothing playing, every channel is shown under the picture: tap a logo.
-- **Search** matches names and numbers; Enter plays the first match, and Escape clears the search.
-- **Chips** filter by Dispatcharr group. **★ Favourites** shows your `favourites` in the order you listed them.
-- A channel with no logo shows its initials.
+**The guide.** Under the picture sits the channel guide (`guide: open`, the default). It opens on **Recent** (this device's last channels), then **★ Favourites** (your `favourites`, in the order you listed them), **All** and one chip per Dispatcharr group.
+- **Search** matches names and numbers across every channel; Enter plays the first match, and Escape clears the search.
+- **123** opens a number keypad: type a channel number and it tunes.
+- Each tile shows the logo (or initials), number and name; with guide data, also what's on now and how far through it is. The playing channel is outlined.
+- Picking a tile plays it and leaves the guide open. The guide button in the control bar collapses it. `guide: closed` starts it collapsed; `guide: off` never puts it under the picture, and the button opens it over the picture instead (as full screen and TVs always do).
 
-**While playing**, tap the picture to show the controls:
+**While playing**, the channel ident in the top left shows the logo, number, name and, with guide data, the programme and its progress. A big channel number flashes up on every change. Tap the picture to show or hide the ident and controls:
 
 | Button | Does |
 |---|---|
 | ■ | Stop (frees the connection) |
+| ↺ | Last channel, like a remote's Recall |
 | ⌄ ⌃ | Previous / next channel, in channel-number order, wrapping round |
-| ▦ | Open the channel grid (over the picture in full screen) |
-| 🔈 | Mute / unmute |
-| ⛶ | Full screen |
+| 🔈 and slider | Mute / unmute, and volume |
+| ☾ | Sleep timer: stop after 15, 30, 60 or 90 minutes |
+| ☰ | Show or hide the guide |
+| ⛶ | Full screen (the ident and controls come along) |
+| ▦ | Multiview (only with `multiview` turned on) |
 
-The badge shows the live dot, logo, number and name. If the browser blocks sound, playback starts muted with a **Tap to unmute** button. If something fails, the card says what's wrong, with **Retry** and **Channels** buttons.
+**States.** While tuning, the new channel's logo and name show before any video arrives. If the picture drops, the card says it's reconnecting, which try it's on and when the next one starts. If the browser blocks sound, playback starts muted with a **Tap for sound** button. If something fails, the card says what's wrong and offers **Back to** the previous channel first, then **Retry** and **Channels**. A minute before the sleep timer ends, **Keep watching** and **+30 min** appear. In the dashboard editor the card shows its target, output profile and number of favourites instead of playing.
+
+**On each screen.** The layout follows the card's width and the device, with no settings:
+- **Phones and Bubble pop-ups** (under 520 px wide): the ident and big round controls sit below the picture, in reach of a thumb, and the guide lists one channel per row.
+- **Wall panels** (touch screens 900 px and wider, such as a Fire HD 8 in Fully Kiosk): 56 px buttons and bigger guide tiles for arm's-length taps.
+- **Desktop**: everything floats over the picture, with "Next" in the control bar.
+- **TV** (HA Cast to a Chromecast or Google TV): a 10-foot layout inside the TV-safe area with no tap controls; the clock shows, and remote-key hints appear once a key is pressed.
+
+**Theme.** The card uses your Home Assistant theme (card background, text colours, primary colour, corner radius), light or dark. The picture area is always dark.
+
+**Channel navigation.** These work from the keyboard (or a remote that sends keys) while focus is in the card, from the control bar and guide (Last channel, volume, sleep timer, number keypad) and from buttons (below).
+
+| Key | Does |
+|---|---|
+| `0`–`9` | Type a channel number. It tunes after a 2-second pause, on Enter, or at once when no longer number can follow (typing `105` when there's no `1050`). A number that doesn't exist does nothing |
+| Enter | Tune the number you typed; with nothing typed, open or close the channel guide (OK on a remote) |
+| Escape | Cancel the number you're typing |
+| Backspace | Delete a typed digit; with nothing typed, **last channel** (flip back to the previous channel) |
+| ↑ ↓, Page Up/Down | Next / previous channel |
+| M | Mute / unmute |
+| F | Full screen |
+
+Keys typed in the channel search box stay in the search box.
+
+- **Recently watched.** Each device keeps the last 8 channels per target, newest first. **Last channel** goes to the newest one that isn't playing now, so pressing it twice flips between two channels.
+- **Volume** is remembered per device and shared by every card on it. Raising it above 0 also unmutes. iPhones and iPads ignore page volume (use the side buttons there).
+- **Sleep timer.** Stops a target after a number of minutes, through the same release path as Stop: the connection closes and the device remembers it was left stopped. It is shared by every card on the target, keeps running while a pop-up is closed, and survives a page reload. In its last minute the card shows **Keep watching** and **+30 min**. Stop cancels it.
+
+**Multiview.** For watching several matches at once. Turn it on per card with `multiview: true` (it's off by default because **every tile is its own Dispatcharr connection**, counting against your provider's limits). Then:
+- The multiview button turns the picture into a grid. The channel you were watching becomes the first tile and keeps the sound; the header shows how many Dispatcharr connections are open.
+- **Add a channel** on an empty tile opens the channel grid for that tile.
+- The speaker on a tile moves the sound there; on the tile that already has it, it mutes and unmutes. Only one tile ever plays sound.
+- Tap a tile for **Channel** (change it), **Full size** (leave multiview with this channel) and **Remove** (closes its connection).
+- 2 tiles side by side by default. `multiview: { enabled: true, max_tiles: 4 }` adds a **2 × 2** layout; switching back to 2 × 1 closes the extra tiles and keeps the one with sound.
+- **Exit** goes back to one picture, playing the tile that had the sound.
+- A button for this card's target, Stop, a stop button and the idle timeout all leave multiview and close every tile. Everything under "When it lets go" below releases every tile at once.
+- Fire HD 8 tablets: keep `max_tiles` at 2. Each tile is a separate video decode, and these tablets run out of hardware decoders quickly. If a tile stutters, the card says the device can't keep up; a lower-resolution Dispatcharr output profile for tiles (`multiview.output_profile`, e.g. one that scales to 540p) helps, at the cost of Dispatcharr transcoding each tile.
 
 **What it remembers.** Each device remembers the last channel on each target and whether it was left playing.
 - Next time, it starts on that channel: playing if you left it playing, or stopped with a play button if you stopped it (Stop, a stop button or the idle timeout).
@@ -146,6 +189,7 @@ The badge shows the live dot, logo, number and name. If the browser blocks sound
 - Fully Kiosk's screen turns off or its screensaver starts;
 - the card is scrolled out of view;
 - `idle_timeout` passes with no touch, or the dashboard enters edit mode;
+- the sleep timer runs out;
 - Stop is pressed.
 
 ## 5. Buttons and pop-ups
@@ -172,7 +216,19 @@ tap_action:
     action: stop
 ```
 
-`stream_card` fields: `target`, `channel` or `url` (a full stream URL), `title` (defaults to the channel's name), `open`, `action` (`play` or `stop`).
+Remote-style buttons use other actions:
+
+```yaml
+stream_card: { target: living_room, action: channel_up }     # or channel_down
+stream_card: { target: living_room, action: last_channel }
+stream_card: { target: bedroom, action: sleep, sleep: 30 }   # minutes; sleep: 0 cancels
+stream_card: { target: living_room, action: volume, volume: 40 }   # 0–100
+stream_card: { target: living_room, action: mute }           # or unmute
+```
+
+`stream_card` fields: `target`, `channel` or `url` (a full stream URL), `title` (defaults to the channel's name), `open`, `action` (`play` (default), `stop`, `channel_up`, `channel_down`, `last_channel`, `sleep`, `volume`, `mute`, `unmute`), `sleep` (minutes, with `action: sleep`), `volume` (0–100, with `action: volume`).
+
+With no card for the target on the page: a sleep timer still starts, a volume is saved for next time, last channel plays this device's previous channel, and channel up/down waits (like a play request) for the card to appear. Mute and unmute need a card that's showing. An unmute from a button can't override a browser that only allowed muted playback; the card keeps its **Tap to unmute** button.
 
 Names and numbers are looked up in the receiving card's channel list. Case doesn't matter, and an unknown name shows "No channel called …" instead of guessing.
 
@@ -233,11 +289,14 @@ cards:
 | `output_profile` | none | Output profile ID, sent as `?output_profile=<id>` |
 | `channel` | none | Channel for the first visit (name, number or UUID). After that, the remembered channel wins |
 | `url` | none | A full stream URL instead of a channel (MPEG-TS, or MP4/HLS on browsers that play them natively) |
-| `title` | channel name | Title shown on the badge |
-| `channel_list` | on with `dispatcharr_url` | Load the channel list: grid, up/down, names in buttons |
+| `title` | channel name | Title shown in the channel ident |
+| `channel_list` | on with `dispatcharr_url` | Load the channel list: guide, up/down, names in buttons |
+| `guide` | `open` | The channel guide: `open` under the picture, `closed` until the guide button is pressed, or `off` (only ever over the picture) |
 | `channel_groups` | all | Only these Dispatcharr groups, in this order |
 | `favourites` | none | Names, numbers or UUIDs shown first under ★ Favourites |
 | `remember_channel` | `true` | Start on this device's last channel for the target, playing or stopped as it was left |
+| `epg` | on with `dispatcharr_url` | Show what's on now and next from Dispatcharr's guide (see [Now and next](#now-and-next)). Needs the channel list |
+| `epg_url` | `<dispatcharr_url>/output/epg?days=1` | A different XMLTV guide. Its channel IDs must match the playlist's `tvg-id` (Dispatcharr's default: the channel number) |
 | `m3u_url` | `<dispatcharr_url>/output/m3u` | A different playlist for the list. Playing Dispatcharr channels from it still needs `dispatcharr_url` |
 | `autoplay` | `true` | Start playing when the card appears, unless this device left it stopped |
 | `muted` | `false` | Start muted |
@@ -248,9 +307,14 @@ cards:
 | `reconnect.max_attempts` | `5` | Reconnects after stalls or drops before giving up (backoff 1, 2, 4, 8, 15 s) |
 | `url_template` | `{base}/proxy/ts/stream/{channel}` | How channel URLs are built |
 | `debug` | `false` | Overlay with engine, codecs, buffer, frames, channel list state and the last error |
+| `multiview` | off | `true`, or `{ enabled: true, max_tiles: 2, output_profile: <id> }`: the multiview button (needs the channel list). Each tile is its own Dispatcharr connection |
+| `multiview.max_tiles` | `2` | Most tiles at once, 2 to 4. More than 2 adds the 2 × 2 layout |
+| `multiview.output_profile` | the card's `output_profile` | Output profile for tiles, e.g. a lower resolution for tablets |
 
 Theme variables:
-- `--stream-card-picker-max-height`: height of the channel grid under the picture. Default `min(60vh, 440px)`.
+- `--stream-card-picker-max-height`: height of the channel grid under the picture. Default `min(60vh, 460px)`.
+- `--stream-card-accent`: colour for the selected tab, playing channel and phone Stop button. Default the theme's `--primary-color`.
+- `--stream-card-font`, `--stream-card-mono-font`: text and number fonts. Default the theme's font and the system monospace font.
 - `--stream-card-logo-background`: plate behind channel logos. Default dark, because most IPTV logos are white.
 
 ## 7. Troubleshooting
@@ -276,6 +340,7 @@ Turn on `debug: true` to see codecs, buffer, dropped frames, the channel list st
 | This browser can't play live MPEG-TS streams (no Media Source Extensions). | Old iOS, or a WebView without Media Source Extensions. An HLS fallback for these is planned (v1.1). |
 | The stream kept dropping. Stopped after {attempts} attempts. | The stream stalled or disconnected repeatedly. Check Dispatcharr's logs for this channel; press Retry. |
 | The player hit an error it could not recover from. | Turn on `debug` and note the last error. |
+| This device can't keep up with this many tiles. Use fewer tiles, or a lower-resolution output profile for multiview. | Multiview: more than a quarter of frames were dropped across the tiles. Remove a tile, lower `multiview.max_tiles`, or set `multiview.output_profile` to a Dispatcharr profile that scales video down. |
 
 Other symptoms:
 - **Playback pauses every few seconds on one device** (typically a Fire tablet). Use `buffer: stable` on that device's card (see section 5, Fully Kiosk).

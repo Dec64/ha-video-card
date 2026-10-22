@@ -7,6 +7,7 @@
 | [architecture.md](architecture.md) | How the card works, and the contracts (config, button payload, engine, controller) |
 | [acceptance-v1.md](acceptance-v1.md) | Checklist for trying a release on real devices |
 | [../HANDOVER.md](../HANDOVER.md) | Project status, decisions and change log |
+| [ui-redesign-2026-10-22.md](ui-redesign-2026-10-22.md) | UI redesign mockup and the decisions it raises (proposal, not built) |
 | [../CLAUDE.md](../CLAUDE.md) | Commands and rules for contributors and coding agents |
 
 ## History

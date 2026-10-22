@@ -1,8 +1,11 @@
 import { DEFAULT_TARGET, DEFAULT_URL_TEMPLATE } from './const';
 import type {
   BufferMode,
+  GuideMode,
   ResolvedConfig,
+  ResolvedMultiview,
   SourceType,
+  StreamAction,
   StreamCardConfig,
   StreamRequest,
   StreamSource,
@@ -107,17 +110,42 @@ function bufferMode(v: string | undefined): BufferMode {
   throw new ConfigError('"buffer" must be "low" or "stable"');
 }
 
+export const MULTIVIEW_MAX_TILES = 4;
+/** Two tiles unless a card asks for more: Fire HD 8 tablets struggle beyond that. */
+export const MULTIVIEW_DEFAULT_TILES = 2;
+
+function profileId(raw: Record<string, unknown>, key: string, label: string): string | undefined {
+  const v = optionalString(raw, key);
+  if (v !== undefined && !/^\d+$/.test(v)) {
+    throw new ConfigError(`"${label}" must be the numeric ID of a Dispatcharr output profile`);
+  }
+  return v;
+}
+
+function normalizeMultiview(v: unknown, outputProfile: string | undefined): ResolvedMultiview {
+  if (v === undefined || v === null || typeof v === 'boolean') {
+    return { enabled: v === true, maxTiles: MULTIVIEW_DEFAULT_TILES, outputProfile };
+  }
+  if (!isPlainObject(v)) {
+    throw new ConfigError('"multiview" must be true, false or an object, e.g. { enabled: true }');
+  }
+  const maxTiles = optionalNumber(v, 'max_tiles', MULTIVIEW_DEFAULT_TILES, 2);
+  if (!Number.isInteger(maxTiles) || maxTiles > MULTIVIEW_MAX_TILES) {
+    throw new ConfigError(`"max_tiles" must be a whole number from 2 to ${MULTIVIEW_MAX_TILES}`);
+  }
+  return {
+    enabled: optionalBool(v, 'enabled', false),
+    maxTiles,
+    outputProfile: profileId(v, 'output_profile', 'multiview.output_profile') ?? outputProfile,
+  };
+}
+
 export function normalizeConfig(input: unknown): ResolvedConfig {
   if (!isPlainObject(input)) throw new ConfigError('Card config must be an object');
   const raw = input as Record<string, unknown> & Partial<StreamCardConfig>;
 
   const base = optionalString(raw, 'dispatcharr_url');
-  const outputProfile = optionalString(raw, 'output_profile');
-  if (outputProfile !== undefined && !/^\d+$/.test(outputProfile)) {
-    throw new ConfigError(
-      '"output_profile" must be the numeric ID of a Dispatcharr output profile',
-    );
-  }
+  const outputProfile = profileId(raw, 'output_profile', 'output_profile');
   const urlTemplate = optionalString(raw, 'url_template') ?? DEFAULT_URL_TEMPLATE;
   if (!urlTemplate.includes('{channel}')) {
     throw new ConfigError('"url_template" must contain {channel}');
@@ -134,6 +162,20 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     } catch {
       throw new ConfigError('"m3u_url" must be a full URL');
     }
+  }
+
+  const epgUrl = optionalString(raw, 'epg_url');
+  if (epgUrl) {
+    try {
+      new URL(epgUrl);
+    } catch {
+      throw new ConfigError('"epg_url" must be a full URL');
+    }
+  }
+
+  const guide = optionalString(raw, 'guide') ?? 'open';
+  if (guide !== 'open' && guide !== 'closed' && guide !== 'off') {
+    throw new ConfigError('"guide" must be open, closed or off');
   }
 
   const channel = optionalString(raw, 'channel');
@@ -163,7 +205,20 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     favourites: optionalStringList(raw, 'favourites'),
     rememberChannel: optionalBool(raw, 'remember_channel', true),
     buffer: bufferMode(optionalString(raw, 'buffer')),
+    epg: false,
+    // days=1: Dispatcharr sends only the next 24 hours, not the whole guide.
+    epgUrl: epgUrl ?? (base ? `${normalizeBaseUrl(base)}/output/epg?days=1` : undefined),
+    guide: guide as GuideMode,
+    multiview: normalizeMultiview(raw.multiview, outputProfile),
   };
+  // On by default whenever there's a channel list and a guide to read (dispatcharr_url set).
+  resolved.epg = optionalBool(raw, 'epg', resolved.channelList && !!resolved.epgUrl);
+  if (resolved.epg && !resolved.channelList) {
+    throw new ConfigError('"epg" needs the channel list ("channel_list" can\'t be false)');
+  }
+  if (resolved.epg && !resolved.epgUrl) {
+    throw new ConfigError('"epg" needs "dispatcharr_url" or "epg_url"');
+  }
   if (resolved.channelList && !resolved.m3uUrl) {
     throw new ConfigError('"channel_list" needs "dispatcharr_url" or "m3u_url"');
   }
@@ -220,6 +275,23 @@ export function resolveSource(req: StreamRequest, cfg: ResolvedConfig): StreamSo
   return { url: url.href, type: req.type ?? 'mpegts', title: req.title, channel };
 }
 
+const ACTIONS = new Set<string>([
+  'play',
+  'stop',
+  'channel_up',
+  'channel_down',
+  'last_channel',
+  'sleep',
+  'volume',
+  'mute',
+  'unmute',
+] satisfies StreamAction[]);
+
+function optionalNumberField(v: unknown): number | undefined {
+  const n = typeof v === 'string' && v.trim() ? Number(v) : v;
+  return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
+}
+
 /**
  * Validates a button's `stream_card:` block. Returns undefined (and the caller logs) when the
  * payload is unusable, so one bad button can't break the page.
@@ -233,7 +305,7 @@ export function parseRequest(input: unknown): StreamRequest | undefined {
     return undefined;
   };
   const action = pick('action');
-  if (action !== undefined && action !== 'play' && action !== 'stop') return undefined;
+  if (action !== undefined && !ACTIONS.has(action)) return undefined;
   const type = pick('type');
   if (type !== undefined && type !== 'mpegts' && type !== 'native') return undefined;
   const req: StreamRequest = {
@@ -246,5 +318,15 @@ export function parseRequest(input: unknown): StreamRequest | undefined {
     open: pick('open'),
   };
   if (req.action === 'play' && !req.channel && !req.url) return undefined;
+  if (req.action === 'sleep') {
+    const m = optionalNumberField(input.sleep);
+    if (m === undefined || m < 0) return undefined;
+    req.sleep = m;
+  }
+  if (req.action === 'volume') {
+    const v = optionalNumberField(input.volume);
+    if (v === undefined || v < 0 || v > 100) return undefined;
+    req.volume = v;
+  }
   return req;
 }

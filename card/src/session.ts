@@ -35,6 +35,8 @@ export interface SessionStatus {
   /** buffer: stable is holding the picture while it builds up its reserve. */
   buffering?: boolean;
   lastError?: string;
+  /** While reconnecting: when the next attempt starts (epoch ms). */
+  retryAt?: number;
 }
 
 export interface SessionOptions {
@@ -147,6 +149,7 @@ export class PlaybackSession {
     this.update({
       state: this.status.failures > 0 ? 'reconnecting' : 'connecting',
       notice: undefined,
+      retryAt: undefined,
     });
 
     let engine: Engine;
@@ -257,10 +260,17 @@ export class PlaybackSession {
     }
   }
 
+  /** Mutes or unmutes now and on every reconnect (multiview moves the sound between tiles). */
+  setMuted(muted: boolean): void {
+    this.opts.muted = muted;
+    this.video.muted = muted || this.status.mutedByPolicy;
+  }
+
   /** Called from a user tap: retries play() inside the gesture, unmuting if asked. */
   async resumeFromGesture(unmute: boolean): Promise<void> {
     const v = this.video;
     if (unmute) {
+      this.opts.muted = false;
       v.muted = false;
       this.update({ mutedByPolicy: false });
     }
@@ -381,7 +391,12 @@ export class PlaybackSession {
     }
     const backoff = this.opts.backoffMs ?? DEFAULT_BACKOFF;
     const delay = backoff[Math.min(failures - 1, backoff.length - 1)];
-    this.update({ state: 'reconnecting', failures, lastError: `${e.kind}: ${e.detail}` });
+    this.update({
+      state: 'reconnecting',
+      failures,
+      retryAt: Date.now() + delay,
+      lastError: `${e.kind}: ${e.detail}`,
+    });
     this.retryTimer = setTimeout(() => {
       if (this.isCurrent(id)) void this.attempt();
     }, delay);

@@ -1,30 +1,67 @@
 import { svg, type SVGTemplateResult } from 'lit';
 
-// Material Design Icons (Pictogrammers, Apache 2.0).
+// Stroke icons drawn for the 2.0 design (24 × 24, round caps). `fill` icons are solid shapes.
 const P = {
-  play: 'M8,5.14V19.14L19,12.14L8,5.14Z',
-  stop: 'M18,18H6V6H18V18Z',
-  volumeHigh:
-    'M14,3.23V5.29C16.89,6.15 19,8.83 19,12C19,15.17 16.89,17.84 14,18.7V20.77C18,19.86 21,16.28 21,12C21,7.72 18,4.14 14,3.23M16.5,12C16.5,10.23 15.5,8.71 14,7.97V16C15.5,15.29 16.5,13.76 16.5,12M3,9V15H7L12,20V4L7,9H3Z',
-  volumeOff:
-    'M12,4L9.91,6.09L12,8.18M4.27,3L3,4.27L7.73,9H3V15H7L12,20V13.27L16.25,17.53C15.58,18.04 14.83,18.46 14,18.7V20.77C15.38,20.45 16.63,19.82 17.68,18.96L19.73,21L21,19.73L12,10.73M19,12C19,12.94 18.8,13.82 18.46,14.64L19.97,16.15C20.62,14.91 21,13.5 21,12C21,7.72 18,4.14 14,3.23V5.29C16.89,6.15 19,8.83 19,12M16.5,12C16.5,10.23 15.5,8.71 14,7.97V10.18L16.45,12.63C16.5,12.43 16.5,12.21 16.5,12Z',
-  fullscreen:
-    'M5,5H10V7H7V10H5V5M14,5H19V10H17V7H14V5M17,14H19V19H14V17H17V14M10,17V19H5V14H7V17H10Z',
-  fullscreenExit:
-    'M14,14H19V16H16V19H14V14M5,14H10V19H8V16H5V14M8,5H10V10H5V8H8V5M19,8V10H14V5H16V8H19Z',
-  alert:
-    'M11,15H13V17H11V15M11,7H13V13H11V7M12,2C6.47,2 2,6.5 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,2M12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20Z',
-  refresh:
-    'M17.65,6.35C16.2,4.9 14.21,4 12,4A8,8 0 0,0 4,12A8,8 0 0,0 12,20C15.73,20 18.84,17.45 19.73,14H17.65C16.83,16.33 14.61,18 12,18A6,6 0 0,1 6,12A6,6 0 0,1 12,6C13.66,6 15.14,6.69 16.22,7.78L13,11H20V4L17.65,6.35Z',
-  tv: 'M21,17H3V5H21M21,3H3A2,2 0 0,0 1,5V17A2,2 0 0,0 3,19H8V21H16V19H21A2,2 0 0,0 23,17V5A2,2 0 0,0 21,3Z',
-  close:
-    'M19,6.41L17.59,5L12,10.59L6.41,5L5,6.41L10.59,12L5,17.59L6.41,19L12,13.41L17.59,19L19,17.59L13.41,12L19,6.41Z',
-  list: 'M3,11H11V3H3M3,21H11V13H3M13,21H21V13H13M13,3V11H21V3',
-  chevronUp: 'M7.41,15.41L12,10.83L16.59,15.41L18,14L12,8L6,14L7.41,15.41Z',
-  chevronDown: 'M7.41,8.58L12,13.17L16.59,8.58L18,10L12,16L6,10L7.41,8.58Z',
-} as const;
+  play: {
+    d: 'M8 5.5v13a1 1 0 0 0 1.5.86l10.5-6.5a1 1 0 0 0 0-1.72L9.5 4.64A1 1 0 0 0 8 5.5z',
+    fill: true,
+  },
+  stop: {
+    d: 'M8.5 6h7A2.5 2.5 0 0 1 18 8.5v7a2.5 2.5 0 0 1-2.5 2.5h-7A2.5 2.5 0 0 1 6 15.5v-7A2.5 2.5 0 0 1 8.5 6z',
+    fill: true,
+  },
+  last: { d: 'M3 12a9 9 0 1 0 3-6.7M3 4v5h5' },
+  chevronUp: { d: 'M6 15l6-6 6 6' },
+  chevronDown: { d: 'M6 9l6 6 6-6' },
+  volumeHigh: { d: 'M11 5L6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7M18.5 5.5a9 9 0 0 1 0 13' },
+  volumeLow: { d: 'M11 5L6 9H3v6h3l5 4zM15.5 8.5a5 5 0 0 1 0 7' },
+  volumeOff: { d: 'M11 5L6 9H3v6h3l5 4zM22 9l-6 6M16 9l6 6' },
+  sleep: { d: 'M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z' },
+  fullscreen: { d: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5' },
+  fullscreenExit: { d: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' },
+  guide: { d: 'M4 6h16M4 12h16M4 18h10' },
+  grid: { d: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
+  multiview: { d: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
+  list: { d: 'M4 6h16M4 12h16M4 18h10' },
+  search: { d: 'M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0zM20 20l-3.5-3.5' },
+  keypad: {
+    d: 'M6 5h.01M12 5h.01M18 5h.01M6 11h.01M12 11h.01M18 11h.01M6 17h.01M12 17h.01M18 17h.01M12 22h.01',
+    heavy: true,
+  },
+  backspace: { d: 'M21 5H9l-6 7 6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1zM17 9l-5 5M12 9l5 5' },
+  close: { d: 'M6 6l12 12M18 6L6 18' },
+  alert: { d: 'M12 3l9.5 17h-19zM12 10v4M12 17h.01' },
+  refresh: { d: 'M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5' },
+  tv: { d: 'M5 6h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2zM8 3l4 3 4-3' },
+  clock: { d: 'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0zM12 7v5l3 2' },
+  star: { d: 'M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z', fill: true },
+} as const satisfies Record<string, { d: string; fill?: boolean; heavy?: boolean }>;
 
 export type IconName = keyof typeof P;
 
-export const icon = (name: IconName): SVGTemplateResult =>
-  svg`<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d=${P[name]}></path></svg>`;
+export const icon = (name: IconName): SVGTemplateResult => {
+  const p: { d: string; fill?: boolean; heavy?: boolean } = P[name];
+  const cls = p.fill ? 'icon fill' : p.heavy ? 'icon heavy' : 'icon';
+  return svg`<svg class=${cls} viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d=${p.d}></path></svg>`;
+};
+
+/** Shared icon styles; every shadow root that uses icon() includes these. */
+export const iconStyles = `
+  svg.icon {
+    width: 22px;
+    height: 22px;
+    flex: none;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.9;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  svg.icon.fill {
+    fill: currentColor;
+    stroke: none;
+  }
+  svg.icon.heavy {
+    stroke-width: 3.2;
+  }
+`;
