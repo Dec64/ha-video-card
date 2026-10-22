@@ -1,0 +1,47 @@
+name: Set up ffmpeg
+description: >
+  Installs Ubuntu's ffmpeg (libx264/libx265) from .deb files cached per runner image. The Azure
+  Ubuntu mirror is sometimes slow enough to stall a job for half an hour, so only a cache miss
+  touches it, with timeouts and retries.
+
+runs:
+  using: composite
+  steps:
+    # The debs match what apt picks on this exact runner image, so dpkg can install them as is.
+    # ImageOS/ImageVersion are runner variables, not in the `env` context, hence this step.
+    - id: key
+      shell: bash
+      run: echo "key=ffmpeg-debs-${ImageOS:-unknown}-${ImageVersion:-unknown}-$(uname -m)-v1" >> "$GITHUB_OUTPUT"
+
+    - uses: actions/cache@v4
+      id: cache
+      with:
+        path: ~/ffmpeg-debs
+        key: ${{ steps.key.outputs.key }}
+
+    - name: Download ffmpeg packages (cache miss)
+      if: steps.cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        set -euo pipefail
+        APT=(-o Acquire::Retries=5 -o Acquire::http::Timeout=30 -o Acquire::https::Timeout=30)
+        for i in 1 2 3; do
+          timeout 600 sudo apt-get "${APT[@]}" update && break
+          echo "apt-get update failed (try $i)"; sleep 5
+        done
+        sudo apt-get clean
+        for i in 1 2 3; do
+          timeout 900 sudo apt-get "${APT[@]}" install -y --download-only --no-install-recommends ffmpeg && break
+          echo "download failed (try $i)"; sleep 5
+        done
+        mkdir -p ~/ffmpeg-debs
+        cp /var/cache/apt/archives/*.deb ~/ffmpeg-debs/
+
+    - name: Install ffmpeg
+      shell: bash
+      run: |
+        set -euo pipefail
+        # Skip the man-db trigger, which can take minutes on its own.
+        sudo rm -f /var/lib/man-db/auto-update
+        sudo DEBIAN_FRONTEND=noninteractive dpkg -i ~/ffmpeg-debs/*.deb
+        ffmpeg -hide_banner -encoders | grep -E 'libx264|libx265'
