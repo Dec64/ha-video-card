@@ -785,7 +785,7 @@ var Y = {
 		}
 	}
 	get stable() {
-		return this.opts.buffer === "stable";
+		return this.opts.buffer === "stable" && this.source.type === "mpegts";
 	}
 	startHold(e) {
 		this.holding = !0, this.holdIsStart = e, this.holdStartedAt = Date.now(), this.holdBufferedEnd = Fe(this.video), this.lastProgressAt = Date.now(), e || this.video.pause(), this.update({ buffering: !0 });
