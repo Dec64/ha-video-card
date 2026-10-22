@@ -138,6 +138,24 @@ channel: BBC One HD
 
 The badge shows the live dot, logo, number and name. If the browser blocks sound, playback starts muted with a **Tap to unmute** button. If something fails, the card says what's wrong, with **Retry** and **Channels** buttons.
 
+**Channel navigation.** These work from the keyboard (or a remote that sends keys) while focus is in the card, and from buttons (below). On-screen controls for them arrive with the card redesign.
+
+| Key | Does |
+|---|---|
+| `0`–`9` | Type a channel number. It tunes after a 2-second pause, on Enter, or at once when no longer number can follow (typing `105` when there's no `1050`). A number that doesn't exist does nothing |
+| Enter | Tune the number you typed; with nothing typed, open or close the channel guide (OK on a remote) |
+| Escape | Cancel the number you're typing |
+| Backspace | Delete a typed digit; with nothing typed, **last channel** (flip back to the previous channel) |
+| ↑ ↓, Page Up/Down | Next / previous channel |
+| M | Mute / unmute |
+| F | Full screen |
+
+Keys typed in the channel search box stay in the search box.
+
+- **Recently watched.** Each device keeps the last 8 channels per target, newest first. **Last channel** goes to the newest one that isn't playing now, so pressing it twice flips between two channels.
+- **Volume** is remembered per device and shared by every card on it. Raising it above 0 also unmutes. iPhones and iPads ignore page volume (use the side buttons there).
+- **Sleep timer.** Stops a target after a number of minutes, through the same release path as Stop: the connection closes and the device remembers it was left stopped. It is shared by every card on the target, keeps running while a pop-up is closed, and survives a page reload. Its last minute counts as a warning, which the redesign shows with **Keep watching**. Stop cancels it.
+
 **What it remembers.** Each device remembers the last channel on each target and whether it was left playing.
 - Next time, it starts on that channel: playing if you left it playing, or stopped with a play button if you stopped it (Stop, a stop button or the idle timeout).
 - `remember_channel: false` always starts on the configured `channel` instead.
@@ -149,6 +167,7 @@ The badge shows the live dot, logo, number and name. If the browser blocks sound
 - Fully Kiosk's screen turns off or its screensaver starts;
 - the card is scrolled out of view;
 - `idle_timeout` passes with no touch, or the dashboard enters edit mode;
+- the sleep timer runs out;
 - Stop is pressed.
 
 ## 5. Buttons and pop-ups
@@ -175,7 +194,19 @@ tap_action:
     action: stop
 ```
 
-`stream_card` fields: `target`, `channel` or `url` (a full stream URL), `title` (defaults to the channel's name), `open`, `action` (`play` or `stop`).
+Remote-style buttons use other actions:
+
+```yaml
+stream_card: { target: living_room, action: channel_up }     # or channel_down
+stream_card: { target: living_room, action: last_channel }
+stream_card: { target: bedroom, action: sleep, sleep: 30 }   # minutes; sleep: 0 cancels
+stream_card: { target: living_room, action: volume, volume: 40 }   # 0–100
+stream_card: { target: living_room, action: mute }           # or unmute
+```
+
+`stream_card` fields: `target`, `channel` or `url` (a full stream URL), `title` (defaults to the channel's name), `open`, `action` (`play` (default), `stop`, `channel_up`, `channel_down`, `last_channel`, `sleep`, `volume`, `mute`, `unmute`), `sleep` (minutes, with `action: sleep`), `volume` (0–100, with `action: volume`).
+
+With no card for the target on the page: a sleep timer still starts, a volume is saved for next time, last channel plays this device's previous channel, and channel up/down waits (like a play request) for the card to appear. Mute and unmute need a card that's showing. An unmute from a button can't override a browser that only allowed muted playback; the card keeps its **Tap to unmute** button.
 
 Names and numbers are looked up in the receiving card's channel list. Case doesn't matter, and an unknown name shows "No channel called …" instead of guessing.
 

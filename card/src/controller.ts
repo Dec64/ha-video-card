@@ -1,7 +1,10 @@
 import { CONTROLLER_KEY, DEFAULT_TARGET, POWER_EVENT, VERSION } from './const';
 import { parseRequest } from './config';
-import { rememberStopped } from './memory';
+import { readRemembered, rememberStopped } from './memory';
+import { previousRecent } from './recents';
+import { SleepTimers, type SleepState } from './sleep-timer';
 import type { StreamRequest } from './types';
+import { writeVolume } from './volume';
 
 /** What the controller needs from a card instance. */
 export interface ControllerCard {
@@ -10,6 +13,10 @@ export interface ControllerCard {
   readonly isLive: boolean;
   deliver(req: StreamRequest): void;
   stopFromController(): void;
+  /** channel_up/down, last_channel, volume, mute, unmute: steer what's playing. */
+  command(req: StreamRequest): void;
+  /** The target's sleep timer started, changed, entered its last minute or was cancelled. */
+  sleepChanged(): void;
 }
 
 export interface PowerState {
@@ -42,6 +49,12 @@ export class StreamController {
   private last = new Map<string, StreamRequest>();
   private cards = new Set<ControllerCard>();
   private installed = false;
+  private readonly sleep = new SleepTimers(
+    (target) => this.stop(target),
+    (target) => {
+      for (const card of this.cards) if (card.target === target) card.sleepChanged();
+    },
+  );
 
   constructor(private readonly win: Window = window) {}
 
@@ -79,8 +92,14 @@ export class StreamController {
 
   request(req: StreamRequest): void {
     const target = req.target ?? DEFAULT_TARGET;
-    if (req.action === 'stop') {
+    const action = req.action ?? 'play';
+    if (action === 'stop') {
       this.stop(target);
+      return;
+    }
+    if (action !== 'play') {
+      this.command({ ...req, target, action });
+      if (req.open) this.navigate(req.open);
       return;
     }
     const full = { ...req, target };
@@ -93,6 +112,43 @@ export class StreamController {
       this.pending.set(target, { req: full, at: Date.now() });
     }
     if (req.open) this.navigate(req.open);
+  }
+
+  /**
+   * Everything except play and stop. Volume and the sleep timer work with no card on the page;
+   * channel up/down waits in the mailbox like a play request; last channel uses device memory.
+   */
+  private command(req: StreamRequest & { target: string }): void {
+    const { target } = req;
+    if (req.action === 'sleep') {
+      this.setSleep(target, req.sleep ?? 0);
+      return;
+    }
+    if (req.action === 'volume' && req.volume !== undefined) writeVolume(req.volume / 100);
+    const live = [...this.cards].filter((c) => c.target === target && c.isLive);
+    if (live.length) {
+      for (const card of live) card.command(req);
+      return;
+    }
+    if (req.action === 'last_channel') {
+      const prev = previousRecent(target, readRemembered(target)?.channel);
+      if (prev) this.request({ ...prev, target, action: 'play' });
+    } else if (req.action === 'channel_up' || req.action === 'channel_down') {
+      this.pending.set(target, { req, at: Date.now() });
+    }
+  }
+
+  /** Stops the target `minutes` from now (0 cancels), like a stop button at that time. */
+  setSleep(target: string, minutes: number): void {
+    this.sleep.set(target, minutes);
+  }
+
+  extendSleep(target: string, minutes: number): void {
+    this.sleep.extend(target, minutes);
+  }
+
+  sleepFor(target: string): SleepState | undefined {
+    return this.sleep.get(target);
   }
 
   /** Called by a card when it connects: a request made in the last 30 s that no card took yet. */
@@ -119,6 +175,7 @@ export class StreamController {
     this.last.delete(target);
     this.stops.set(target, this.stopCount(target) + 1);
     rememberStopped(target);
+    this.sleep.cancel(target);
     for (const card of this.cards) if (card.target === target) card.stopFromController();
   }
 

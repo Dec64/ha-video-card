@@ -20,6 +20,9 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 
 **Next action (Claude):** fix anything found; then tag v1.0.0 (from GitHub's UI, Releases → Draft a new release → tag `v1.0.0` on `main`, since tag pushes are blocked here; the release workflow attaches the files) and move to Phase 2 or the iPhone fallback.
 
+## In progress (2026-10-22): channel navigation
+Branch `claude/project-thread-4s7k2u` (draft PR): logic for channel up/down from buttons, last channel, recently watched, typed channel numbers, keyboard/remote keys, remembered volume and a sleep timer, plus button actions for all of them and the planned media_player mapping (docs/architecture.md). No on-screen controls: the "Card UI redesign build" thread renders them through `navView()`/`navActions()`. Entry size budget raised from 25 to 32 KB gz (main was at 24.7; this adds 2.5).
+
 ## Key facts
 - Docs: user guide in [README.md](README.md); design and contracts in [docs/architecture.md](docs/architecture.md); planning history indexed in [docs/README.md](docs/README.md).
 - The PC clone at `C:\Users\Declan\Projects\HA Video Card` tracks this repo; `git pull` on `main` gets the latest.
@@ -53,6 +56,8 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 | 2026-10-10 | In-card picks, up/down and Stop go through the page controller like buttons, so every card on a target and every recreated card agree |
 | 2026-10-10 | With the list loaded, an unknown name is an error, never guessed as a stream ID; names/numbers are resolved after edit mode, never during |
 | 2026-10-22 | Now/next is on by default whenever `dispatcharr_url` is set (Declan, 2026-10-22; `epg: false` turns it off): the card reads `/output/epg?days=1` (public like the M3U; Dispatcharr's JSON `current-programs` API needs a login), streams it, keeps titles and times only, and refreshes every 2 h. A failed or empty guide just hides the programme line. Only now/next; no full guide grid |
+| 2026-10-22 | Channel navigation (recents, last channel, number entry, volume, sleep) is logic only; the redesign owns all markup. Sleep timers live in the page controller per target, are saved per device, and stop through `controller.stop()` |
+| 2026-10-22 | Entry bundle budget 32 KB gz (was 25) to make room for navigation and the redesign |
 | 2026-10-07 | Code and docs live in the private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card); `C:\Users\Declan\Projects\HA Video Card` is a clone and project files keep a mirror |
 
 ## Open questions
@@ -69,6 +74,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 ## Change log
 - **2026-10-22:** UI redesign mockup (design canvas, not built): new channel ident with now/next, broadcast-style zap number, last channel, volume, sleep timer, recents, number keypad, wall/phone/TV layouts, redesigned states and a multiview idea. Summary and open decisions in [docs/ui-redesign-2026-10-22.md](docs/ui-redesign-2026-10-22.md).
 - **2026-10-22:** Now/next data for the redesign (branch `claude/project-thread-eu2dyi`): `epg` / `epg_url` options, `src/epg.ts` (streaming XMLTV parser, page-wide `GuideFeed`, lazy chunk), `Channel.tvgId`, the card's `nowNext(channel)` for the redesigned templates to render, fake `/output/epg`, unit and e2e tests (no guide download when off or in edit mode; one shared download; failures change nothing). Nothing is drawn yet: the "Card UI redesign build" thread renders it.
+- **2026-10-22:** Channel navigation logic (draft PR): `recents.ts`, `number-entry.ts`, `volume.ts`, `sleep-timer.ts`; button actions `channel_up`, `channel_down`, `last_channel`, `sleep`, `volume`, `mute`, `unmute`; keyboard keys; documented how the companion integration's media_player will map onto `controller.request()`. New unit tests (navigation, controller sleep/commands) and e2e tests including the sleep timer's connection release, also for a closed pop-up. Fixed a unit test that silently replaced `window.addEventListener` for every later test in its file.
 - **2026-10-11:** Merged PR #1 into `main`. Rewrote the docs: README as a 1.0 user guide (setup, install, add the card, using it, buttons and pop-ups, options, troubleshooting); new [docs/architecture.md](docs/architecture.md) with the design and the contracts (moved from build-plan §4); [docs/README.md](docs/README.md) index marking the planning docs as history; acceptance checklist made per-release.
 - **2026-10-11:** Installed 1.0.0 on Declan's HA and created the Live TV dashboard. Rendering the picker against the real playlist found two more issues (long group names widened the card; white logos vanished on light themes), both fixed with a test.
 - **2026-10-10:** Built 1.0 channel selection (channel list, picker, up/down, names/numbers, per-device memory, visual editor via `getConfigForm`, lazy editor chunk). An adversarial review workflow confirmed 26 findings (edit-mode lookups, stop vs pending lookup, stale `lastFor` after picks, a stop missed by a closed pop-up, phone-width overlaps, a flaky connection sampler, no playlist timeout, docs); all fixed with regression tests.
