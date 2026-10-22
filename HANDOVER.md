@@ -52,6 +52,9 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 | 2026-10-10 | Each device remembers each target's last channel and whether it was left playing (localStorage); Stop, a stop button and the idle timeout all count as "left stopped" |
 | 2026-10-10 | In-card picks, up/down and Stop go through the page controller like buttons, so every card on a target and every recreated card agree |
 | 2026-10-10 | With the list loaded, an unknown name is an error, never guessed as a stream ID; names/numbers are resolved after edit mode, never during |
+| 2026-10-22 | Multiview (from the redesign mockup) is opt-in per card, 2 tiles by default, `max_tiles` up to 4 (Declan). Each tile is its own Dispatcharr connection; one tile has the sound |
+| 2026-10-22 | In multiview, a button for the target, Stop, a stop button and the idle timeout leave multiview and close every tile; Exit plays the tile with sound full size |
+| 2026-10-22 | Entry size budget raised from 25 to 26 KB gz for multiview's hooks (the grid itself is a lazy chunk) |
 | 2026-10-07 | Code and docs live in the private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card); `C:\Users\Declan\Projects\HA Video Card` is a clone and project files keep a mirror |
 
 ## Open questions
@@ -65,6 +68,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
+- **2026-10-22:** Built multiview (draft PR, branch `claude/project-thread-bq4bpp`): `multiview` config and editor section, a lazy `stream-card-multiview` grid with 2–4 tiles, sound focus, per-tile change/full size/remove, a connection counter, a "can't keep up" notice from dropped frames, and `multiview.output_profile` for lower-resolution tiles. 14 e2e tests assert every tile is released on every hold path. Not yet tried on the Fire HD 8 or real Dispatcharr.
 - **2026-10-11:** Merged PR #1 into `main`. Rewrote the docs: README as a 1.0 user guide (setup, install, add the card, using it, buttons and pop-ups, options, troubleshooting); new [docs/architecture.md](docs/architecture.md) with the design and the contracts (moved from build-plan §4); [docs/README.md](docs/README.md) index marking the planning docs as history; acceptance checklist made per-release.
 - **2026-10-11:** Installed 1.0.0 on Declan's HA and created the Live TV dashboard. Rendering the picker against the real playlist found two more issues (long group names widened the card; white logos vanished on light themes), both fixed with a test.
 - **2026-10-10:** Built 1.0 channel selection (channel list, picker, up/down, names/numbers, per-device memory, visual editor via `getConfigForm`, lazy editor chunk). An adversarial review workflow confirmed 26 findings (edit-mode lookups, stop vs pending lookup, stale `lastFor` after picks, a stop missed by a closed pop-up, phone-width overlaps, a flaky connection sampler, no playlist timeout, docs); all fixed with regression tests.

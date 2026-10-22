@@ -130,10 +130,21 @@ channel: BBC One HD
 | ■ | Stop (frees the connection) |
 | ⌄ ⌃ | Previous / next channel, in channel-number order, wrapping round |
 | ▦ | Open the channel grid (over the picture in full screen) |
+| ◫ | Multiview (only with `multiview` turned on) |
 | 🔈 | Mute / unmute |
 | ⛶ | Full screen |
 
 The badge shows the live dot, logo, number and name. If the browser blocks sound, playback starts muted with a **Tap to unmute** button. If something fails, the card says what's wrong, with **Retry** and **Channels** buttons.
+
+**Multiview.** For watching several matches at once. Turn it on per card with `multiview: true` (it's off by default because **every tile is its own Dispatcharr connection**, counting against your provider's limits). Then:
+- The multiview button turns the picture into a grid. The channel you were watching becomes the first tile and keeps the sound; the header shows how many Dispatcharr connections are open.
+- **Add a channel** on an empty tile opens the channel grid for that tile.
+- The speaker on a tile moves the sound there; on the tile that already has it, it mutes and unmutes. Only one tile ever plays sound.
+- Tap a tile for **Channel** (change it), **Full size** (leave multiview with this channel) and **Remove** (closes its connection).
+- 2 tiles side by side by default. `multiview: { enabled: true, max_tiles: 4 }` adds a **2 × 2** layout; switching back to 2 × 1 closes the extra tiles and keeps the one with sound.
+- **Exit** goes back to one picture, playing the tile that had the sound.
+- A button for this card's target, Stop, a stop button and the idle timeout all leave multiview and close every tile. Everything under "When it lets go" below releases every tile at once.
+- Fire HD 8 tablets: keep `max_tiles` at 2. Each tile is a separate video decode, and these tablets run out of hardware decoders quickly. If a tile stutters, the card says the device can't keep up; a lower-resolution Dispatcharr output profile for tiles (`multiview.output_profile`, e.g. one that scales to 540p) helps, at the cost of Dispatcharr transcoding each tile.
 
 **What it remembers.** Each device remembers the last channel on each target and whether it was left playing.
 - Next time, it starts on that channel: playing if you left it playing, or stopped with a play button if you stopped it (Stop, a stop button or the idle timeout).
@@ -246,6 +257,9 @@ cards:
 | `reconnect.max_attempts` | `5` | Reconnects after stalls or drops before giving up (backoff 1, 2, 4, 8, 15 s) |
 | `url_template` | `{base}/proxy/ts/stream/{channel}` | How channel URLs are built |
 | `debug` | `false` | Overlay with engine, codecs, buffer, frames, channel list state and the last error |
+| `multiview` | off | `true`, or `{ enabled: true, max_tiles: 2, output_profile: <id> }`: the multiview button (needs the channel list). Each tile is its own Dispatcharr connection |
+| `multiview.max_tiles` | `2` | Most tiles at once, 2 to 4. More than 2 adds the 2 × 2 layout |
+| `multiview.output_profile` | the card's `output_profile` | Output profile for tiles, e.g. a lower resolution for tablets |
 
 Theme variables:
 - `--stream-card-picker-max-height`: height of the channel grid under the picture. Default `min(60vh, 440px)`.
@@ -274,6 +288,7 @@ Turn on `debug: true` to see codecs, buffer, dropped frames, the channel list st
 | This browser can't play live MPEG-TS streams (no Media Source Extensions). | Old iOS, or a WebView without Media Source Extensions. An HLS fallback for these is planned (v1.1). |
 | The stream kept dropping. Stopped after {attempts} attempts. | The stream stalled or disconnected repeatedly. Check Dispatcharr's logs for this channel; press Retry. |
 | The player hit an error it could not recover from. | Turn on `debug` and note the last error. |
+| This device can't keep up with this many tiles. Use fewer tiles, or a lower-resolution output profile for multiview. | Multiview: more than a quarter of frames were dropped across the tiles. Remove a tile, lower `multiview.max_tiles`, or set `multiview.output_profile` to a Dispatcharr profile that scales video down. |
 
 Other symptoms:
 - **A device keeps playing an old version** after an update. Raise `?v=` on the resource, then reload. In the HA app, use the Companion app's **Reset frontend cache** setting. On Fully, clear the cache.

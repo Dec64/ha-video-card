@@ -128,6 +128,12 @@ test('the visual editor shows the card options as a form', async ({ page }) => {
     form.locator('ha-selector-boolean', { hasText: 'Channel list' }).locator('ha-switch'),
   ).toHaveJSProperty('checked', true);
   await expect(form.getByText('Remember last channel', { exact: true }).first()).toBeVisible();
+  // The multiview block's fields are labelled by key, so its output profile isn't confused
+  // with the card's.
+  await form.getByText('Multiview', { exact: true }).click();
+  await expect(form.getByText('Multiview button', { exact: true }).first()).toBeVisible();
+  await expect(form.getByText('Most tiles', { exact: true }).first()).toBeVisible();
+  await expect(form.getByText('Output profile for tiles', { exact: true }).first()).toBeVisible();
   await test.info().attach('editor', { body: await page.screenshot(), contentType: 'image/png' });
 });
 

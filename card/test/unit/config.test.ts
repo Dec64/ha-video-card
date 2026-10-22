@@ -222,3 +222,43 @@ describe('isUuid / needsLookup', () => {
     expect(needsLookup('ok--abc')).toBe(false);
   });
 });
+
+describe('multiview config', () => {
+  it('is off by default, two tiles, the card output profile', () => {
+    expect(normalizeConfig({ ...base, output_profile: 3 }).multiview).toEqual({
+      enabled: false,
+      maxTiles: 2,
+      outputProfile: '3',
+    });
+  });
+
+  it('accepts true as shorthand', () => {
+    expect(normalizeConfig({ ...base, multiview: true }).multiview).toMatchObject({
+      enabled: true,
+      maxTiles: 2,
+    });
+  });
+
+  it('stays off for an object without enabled (the visual editor writes partial blocks)', () => {
+    expect(normalizeConfig({ ...base, multiview: { max_tiles: 4 } }).multiview.enabled).toBe(false);
+  });
+
+  it('takes max_tiles 2–4 and its own output profile', () => {
+    const c = normalizeConfig({
+      ...base,
+      output_profile: 3,
+      multiview: { enabled: true, max_tiles: 4, output_profile: 7 },
+    });
+    expect(c.multiview).toEqual({ enabled: true, maxTiles: 4, outputProfile: '7' });
+  });
+
+  it('rejects bad values', () => {
+    expect(() => normalizeConfig({ ...base, multiview: 'yes' })).toThrow(ConfigError);
+    expect(() => normalizeConfig({ ...base, multiview: { max_tiles: 5 } })).toThrow(/2 to 4/);
+    expect(() => normalizeConfig({ ...base, multiview: { max_tiles: 1 } })).toThrow(ConfigError);
+    expect(() => normalizeConfig({ ...base, multiview: { max_tiles: 2.5 } })).toThrow(/2 to 4/);
+    expect(() => normalizeConfig({ ...base, multiview: { output_profile: 'low' } })).toThrow(
+      /multiview.output_profile/,
+    );
+  });
+});

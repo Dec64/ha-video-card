@@ -176,10 +176,17 @@ export class PlaybackSession {
     }
   }
 
+  /** Mutes or unmutes now and on every reconnect (multiview moves the sound between tiles). */
+  setMuted(muted: boolean): void {
+    this.opts.muted = muted;
+    this.video.muted = muted || this.status.mutedByPolicy;
+  }
+
   /** Called from a user tap: retries play() inside the gesture, unmuting if asked. */
   async resumeFromGesture(unmute: boolean): Promise<void> {
     const v = this.video;
     if (unmute) {
+      this.opts.muted = false;
       v.muted = false;
       this.update({ mutedByPolicy: false });
     }

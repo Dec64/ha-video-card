@@ -21,6 +21,9 @@ export const styles = css`
     container-type: inline-size;
     font-family: var(--ha-font-family-body, var(--paper-font-body1_-_font-family, sans-serif));
   }
+  .frame[hidden] {
+    display: none;
+  }
   .frame:fullscreen {
     aspect-ratio: auto !important;
     width: 100%;
