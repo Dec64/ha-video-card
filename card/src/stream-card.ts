@@ -1,10 +1,11 @@
-import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from 'lit';
+import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from 'lit';
 import { ChannelList, loadChannels, type Channel } from './channels';
 import type { GuideFeed } from './epg';
 import { ConfigError, isUuid, needsLookup, normalizeConfig, resolveSource } from './config';
 import { VERSION } from './const';
 import { getController, type ControllerCard, type StreamController } from './controller';
 import { format, type PlaybackError } from './errors';
+import { icon } from './icons';
 import { readRemembered, writeRemembered } from './memory';
 import type { PickerState } from './picker';
 import { holdReason, LifecycleWatcher, type HoldReason } from './lifecycle';
@@ -33,6 +34,7 @@ import {
   type NowNext,
   type UiState,
 } from './ui/view';
+import type { StreamCardMultiview, TileItem } from './multiview';
 
 const CONTROLS_HIDE_MS = 4000;
 /** How long the big channel number stays up after a change. */
@@ -130,6 +132,12 @@ export class StreamCard extends LitElement implements ControllerCard {
   );
   /** Repaints the sleep countdown once a second during its last minute. */
   private sleepTicker?: ReturnType<typeof setInterval>;
+  /** The multiview grid, created on first use (a lazy chunk) and kept. */
+  private mv?: StreamCardMultiview;
+  /** Multiview is showing instead of the single picture. */
+  private mvOn = false;
+  /** Whether the grid was last allowed to hold streams (for the idle timer). */
+  private mvAllowed = false;
 
   constructor() {
     super();
@@ -177,6 +185,8 @@ export class StreamCard extends LitElement implements ControllerCard {
       if (this.isConnected) this.ensureChannels();
     }
     this.syncGuide();
+    if (this.mvOn && !this.multiviewAvailable) this.exitMultiview();
+    this.configureMultiview();
     if (this.request) {
       this.applyRequest(this.request, this.lookupPending ? this.lookupPlay : this.wantPlaying);
     } else if (this.isConnected) this.pickInitialRequest();
@@ -215,12 +225,19 @@ export class StreamCard extends LitElement implements ControllerCard {
   }
 
   deliver(req: StreamRequest): void {
+    // A button for this target leaves multiview and plays full size.
+    if (this.mvOn) this.exitMultiview();
     this.applyRequest(req, true);
   }
 
   stopFromController(): void {
     this.wantPlaying = false;
     this.lookupPlay = false;
+    if (this.mvOn) {
+      // Stop closes multiview; the tile with sound stays chosen, stopped.
+      const item = this.exitMultiview();
+      if (item) this.applyRequest(item.request, false);
+    }
     this.stopGen = this.controller.stopCount(this.target);
     this.numbers.clear();
     this.remember();
@@ -441,6 +458,100 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   private refresh(): void {
     this._ui++;
+    if (this.mv) {
+      this.mv.list = this.channels;
+      this.mv.listState = this.channelState;
+      this.mv.listMessage = this.channelMessage;
+    }
+  }
+
+  // ---- multiview ----
+
+  private get multiviewAvailable(): boolean {
+    return !!this.config?.multiview.enabled && this.config.channelList;
+  }
+
+  /** Config for tile URLs: the card's, with the multiview output profile. */
+  private get tileConfig(): ResolvedConfig | undefined {
+    const c = this.config;
+    return c && { ...c, outputProfile: c.multiview.outputProfile };
+  }
+
+  private tileItem(req: StreamRequest, channel?: Channel): TileItem | undefined {
+    const cfg = this.tileConfig;
+    if (!cfg) return undefined;
+    const request = { channel: req.channel, url: req.url, type: req.type, title: req.title };
+    const source = resolveSource(request, cfg);
+    return { request, source: { ...source, title: req.title ?? source.title }, channel };
+  }
+
+  private configureMultiview(): void {
+    const mv = this.mv;
+    const c = this.config;
+    if (!mv || !c) return;
+    mv.maxTiles = c.multiview.maxTiles;
+    mv.settings = {
+      startTimeoutMs: c.startTimeoutMs,
+      maxAttempts: c.maxReconnectAttempts,
+      debug: c.debug,
+    };
+  }
+
+  private enterMultiview = async (e?: Event): Promise<void> => {
+    e?.stopPropagation();
+    if (!this.multiviewAvailable || this.isPreview || this.mvOn) return;
+    if (!this.mv) {
+      const { defineMultiview, MULTIVIEW_TAG } = await import('./multiview');
+      defineMultiview({ LitElement, html, css, nothing, svg, PlaybackSession, icon, format });
+      if (!this.multiviewAvailable || this.isPreview || this.mvOn || this.mv) return;
+      const mv = document.createElement(MULTIVIEW_TAG) as StreamCardMultiview;
+      mv.resolve = (ch) => this.tileItem(this.requestFor(ch), ch)!;
+      mv.addEventListener('multiview-exit', (ev) => {
+        const item = (ev as CustomEvent<{ item?: TileItem }>).detail.item;
+        this.exitMultiview();
+        if (item) this.controller.request({ ...item.request, target: this.target });
+        else this.evaluate();
+      });
+      mv.addEventListener('picker-retry', () => void this.ensureChannels(true));
+      this.mv = mv;
+      this.configureMultiview();
+    }
+    if (this.fullscreen) {
+      try {
+        await document.exitFullscreen?.();
+      } catch {
+        /* not in full screen after all */
+      }
+    }
+    let first: TileItem | undefined;
+    const req = this.request;
+    if (this.source && req && !this.lookupPending) {
+      try {
+        first = this.tileItem(req, this.currentChannel);
+      } catch {
+        first = undefined;
+      }
+    }
+    this.overlayOpen = false;
+    this.ensureChannels();
+    this.mv.open(first, this.effectiveMuted);
+    this.mvOn = true;
+    this.mvAllowed = false;
+    this.evaluate();
+  };
+
+  /** Stops every tile and goes back to the single picture; returns the tile that had sound. */
+  private exitMultiview(): TileItem | undefined {
+    const mv = this.mv;
+    if (!mv || !this.mvOn) return undefined;
+    const item = mv.mainItem;
+    this.mvOn = false;
+    this.mvAllowed = false;
+    mv.halt();
+    this.watcher.disarmIdle();
+    this.lastRelease = 'multiview-exit';
+    this.refresh();
+    return item;
   }
 
   private applyRequest(req: StreamRequest, play: boolean): void {
@@ -534,17 +645,30 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   /** The single place that starts or stops playback. */
   private evaluate(): void {
+    const mv = this.mvOn ? this.mv : undefined;
     const reason = holdReason({
       connected: this.isConnected,
       preview: this.isPreview,
-      hasSource: !!this.source,
-      wantPlaying: this.wantPlaying,
+      // Multiview always has something to show (at least an "Add a channel" tile).
+      hasSource: !!mv || !!this.source,
+      wantPlaying: !!mv || this.wantPlaying,
       intersecting: this.watcher.intersecting,
       pageVisible: this.watcher.pageVisible,
       screenAwake: this.watcher.screenAwake,
     });
     this.hold = reason;
-    if (reason === null) {
+    if (mv) {
+      // The single picture never plays alongside the grid.
+      this.stopSession('multiview');
+      const allowed = reason === null;
+      if (allowed !== this.mvAllowed) {
+        this.mvAllowed = allowed;
+        if (allowed && this.config && this.config.idleTimeoutMs > 0) {
+          this.watcher.armIdle(this.config.idleTimeoutMs);
+        } else if (!allowed) this.watcher.disarmIdle();
+      }
+      mv.setAllowed(allowed);
+    } else if (reason === null) {
       if (!this.session) this.startSession();
     } else if (this.session) {
       this.stopSession(reason);
@@ -985,7 +1109,7 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   /** Multiview: shown as a control-bar button only when this returns a function. */
   protected multiviewAction(): (() => void) | undefined {
-    return undefined;
+    return this.multiviewAvailable && !this.isPreview ? this.enterMultiview : undefined;
   }
 
   // ---- rendering ----
@@ -1030,6 +1154,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       volume: this.video.volume,
       sleep: this.sleep,
       typed: this.numbers.digits,
+      multiview: this.mvOn ? this.mv?.debugInfo : undefined,
       stats,
     };
   }
@@ -1140,6 +1265,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     const v = this.buildView();
     const a = this.buildActions();
     const placement = this.guidePlacement;
+    const grid = this.mvOn && this.mv && !this.isPreview ? this.mv : undefined;
     this.scheduleTick(v);
     return html`
       <ha-card class=${v.ui === 'preview' ? 'editing' : ''}>
@@ -1147,6 +1273,7 @@ export class StreamCard extends LitElement implements ControllerCard {
           class="stage ${v.layout === 'tv' ? 'tv' : ''} ${v.fullscreen ? 'fs' : ''}"
           data-layout=${v.layout}
           data-ui=${v.ui}
+          ?hidden=${!!grid}
         >
           <div
             class="frame"
@@ -1170,7 +1297,8 @@ export class StreamCard extends LitElement implements ControllerCard {
           </div>
           ${renderIdent(v)} ${renderControls(v, a)}
         </div>
-        ${placement === 'below' ? this.renderPicker(v, a, false) : nothing}
+        ${placement === 'below' && !grid ? this.renderPicker(v, a, false) : nothing}
+        ${grid ?? nothing}
       </ha-card>
     `;
   }

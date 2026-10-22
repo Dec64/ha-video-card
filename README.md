@@ -138,6 +138,7 @@ channel: BBC One HD
 | ☾ | Sleep timer: stop after 15, 30, 60 or 90 minutes |
 | ☰ | Show or hide the guide |
 | ⛶ | Full screen (the ident and controls come along) |
+| ▦ | Multiview (only with `multiview` turned on) |
 
 **States.** While tuning, the new channel's logo and name show before any video arrives. If the picture drops, the card says it's reconnecting, which try it's on and when the next one starts. If the browser blocks sound, playback starts muted with a **Tap for sound** button. If something fails, the card says what's wrong and offers **Back to** the previous channel first, then **Retry** and **Channels**. A minute before the sleep timer ends, **Keep watching** and **+30 min** appear. In the dashboard editor the card shows its target, output profile and number of favourites instead of playing.
 
@@ -166,6 +167,16 @@ Keys typed in the channel search box stay in the search box.
 - **Recently watched.** Each device keeps the last 8 channels per target, newest first. **Last channel** goes to the newest one that isn't playing now, so pressing it twice flips between two channels.
 - **Volume** is remembered per device and shared by every card on it. Raising it above 0 also unmutes. iPhones and iPads ignore page volume (use the side buttons there).
 - **Sleep timer.** Stops a target after a number of minutes, through the same release path as Stop: the connection closes and the device remembers it was left stopped. It is shared by every card on the target, keeps running while a pop-up is closed, and survives a page reload. In its last minute the card shows **Keep watching** and **+30 min**. Stop cancels it.
+
+**Multiview.** For watching several matches at once. Turn it on per card with `multiview: true` (it's off by default because **every tile is its own Dispatcharr connection**, counting against your provider's limits). Then:
+- The multiview button turns the picture into a grid. The channel you were watching becomes the first tile and keeps the sound; the header shows how many Dispatcharr connections are open.
+- **Add a channel** on an empty tile opens the channel grid for that tile.
+- The speaker on a tile moves the sound there; on the tile that already has it, it mutes and unmutes. Only one tile ever plays sound.
+- Tap a tile for **Channel** (change it), **Full size** (leave multiview with this channel) and **Remove** (closes its connection).
+- 2 tiles side by side by default. `multiview: { enabled: true, max_tiles: 4 }` adds a **2 × 2** layout; switching back to 2 × 1 closes the extra tiles and keeps the one with sound.
+- **Exit** goes back to one picture, playing the tile that had the sound.
+- A button for this card's target, Stop, a stop button and the idle timeout all leave multiview and close every tile. Everything under "When it lets go" below releases every tile at once.
+- Fire HD 8 tablets: keep `max_tiles` at 2. Each tile is a separate video decode, and these tablets run out of hardware decoders quickly. If a tile stutters, the card says the device can't keep up; a lower-resolution Dispatcharr output profile for tiles (`multiview.output_profile`, e.g. one that scales to 540p) helps, at the cost of Dispatcharr transcoding each tile.
 
 **What it remembers.** Each device remembers the last channel on each target and whether it was left playing.
 - Next time, it starts on that channel: playing if you left it playing, or stopped with a play button if you stopped it (Stop, a stop button or the idle timeout).
@@ -294,6 +305,9 @@ cards:
 | `reconnect.max_attempts` | `5` | Reconnects after stalls or drops before giving up (backoff 1, 2, 4, 8, 15 s) |
 | `url_template` | `{base}/proxy/ts/stream/{channel}` | How channel URLs are built |
 | `debug` | `false` | Overlay with engine, codecs, buffer, frames, channel list state and the last error |
+| `multiview` | off | `true`, or `{ enabled: true, max_tiles: 2, output_profile: <id> }`: the multiview button (needs the channel list). Each tile is its own Dispatcharr connection |
+| `multiview.max_tiles` | `2` | Most tiles at once, 2 to 4. More than 2 adds the 2 × 2 layout |
+| `multiview.output_profile` | the card's `output_profile` | Output profile for tiles, e.g. a lower resolution for tablets |
 
 Theme variables:
 - `--stream-card-picker-max-height`: height of the channel grid under the picture. Default `min(60vh, 460px)`.
@@ -324,6 +338,7 @@ Turn on `debug: true` to see codecs, buffer, dropped frames, the channel list st
 | This browser can't play live MPEG-TS streams (no Media Source Extensions). | Old iOS, or a WebView without Media Source Extensions. An HLS fallback for these is planned (v1.1). |
 | The stream kept dropping. Stopped after {attempts} attempts. | The stream stalled or disconnected repeatedly. Check Dispatcharr's logs for this channel; press Retry. |
 | The player hit an error it could not recover from. | Turn on `debug` and note the last error. |
+| This device can't keep up with this many tiles. Use fewer tiles, or a lower-resolution output profile for multiview. | Multiview: more than a quarter of frames were dropped across the tiles. Remove a tile, lower `multiview.max_tiles`, or set `multiview.output_profile` to a Dispatcharr profile that scales video down. |
 
 Other symptoms:
 - **A device keeps playing an old version** after an update. Raise `?v=` on the resource, then reload. In the HA app, use the Companion app's **Reset frontend cache** setting. On Fully, clear the cache.

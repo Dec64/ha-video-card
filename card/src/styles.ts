@@ -36,6 +36,9 @@ const card = css`
     outline: 2px solid var(--sc-accent);
     outline-offset: 2px;
   }
+  .stage[hidden] {
+    display: none;
+  }
   .stage {
     position: relative;
     container: stage / inline-size;
