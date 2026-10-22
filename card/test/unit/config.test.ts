@@ -159,6 +159,8 @@ describe('channel list options', () => {
       channelGroups: [],
       favourites: [],
       rememberChannel: true,
+      epg: false,
+      epgUrl: 'https://dispatcharr.example/output/epg?days=1',
     });
   });
 
@@ -209,6 +211,38 @@ describe('channel list options', () => {
     expect(() => normalizeConfig({ ...base, channel_list: false, channel: 'BBC One HD' })).toThrow(
       ConfigError,
     );
+  });
+});
+
+describe('normalizeConfig: now/next (epg)', () => {
+  const base = { type: 'custom:stream-card', dispatcharr_url: 'https://dispatcharr.example/' };
+
+  it('is off by default, with the guide URL ready for when it is turned on', () => {
+    const c = normalizeConfig(base);
+    expect(c.epg).toBe(false);
+    expect(c.epgUrl).toBe('https://dispatcharr.example/output/epg?days=1');
+  });
+
+  it('takes an explicit guide URL', () => {
+    const c = normalizeConfig({ ...base, epg: true, epg_url: 'https://guide.example/x.xml' });
+    expect(c).toMatchObject({ epg: true, epgUrl: 'https://guide.example/x.xml' });
+  });
+
+  it('rejects settings it cannot use', () => {
+    expect(() => normalizeConfig({ ...base, epg: 'yes' })).toThrow(ConfigError);
+    expect(() => normalizeConfig({ ...base, epg_url: 'guide.xml' })).toThrow(
+      '"epg_url" must be a full URL',
+    );
+    expect(() => normalizeConfig({ ...base, epg: true, channel_list: false })).toThrow(
+      '"epg" needs the channel list',
+    );
+    expect(() =>
+      normalizeConfig({
+        type: 'custom:stream-card',
+        m3u_url: 'https://lists.example/a.m3u',
+        epg: true,
+      }),
+    ).toThrow('"epg" needs "dispatcharr_url" or "epg_url"');
   });
 });
 

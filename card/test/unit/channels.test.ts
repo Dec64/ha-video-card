@@ -44,6 +44,7 @@ describe('parseM3u', () => {
       number: '20',
       group: 'Films',
       logo: 'https://dispatcharr.example/api/channels/logos/2/cache/',
+      tvgId: '2',
     });
     expect(list[1]).toMatchObject({ id: U1, streamId: U1, group: 'News, UK', number: '10' });
   });

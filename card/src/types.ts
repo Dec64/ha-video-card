@@ -20,6 +20,8 @@ export interface StreamCardConfig {
   channel_groups?: string[];
   favourites?: Array<string | number>;
   remember_channel?: boolean;
+  epg?: boolean;
+  epg_url?: string;
 }
 
 export type SourceType = 'mpegts' | 'native';
@@ -44,6 +46,9 @@ export interface ResolvedConfig {
   channelGroups: string[];
   favourites: string[];
   rememberChannel: boolean;
+  /** Show now/next programme info from Dispatcharr's XMLTV guide (opt-in). */
+  epg: boolean;
+  epgUrl?: string;
 }
 
 /** A play/stop request, from a button's `stream_card:` block or the card's own config. */
