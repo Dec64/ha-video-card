@@ -1,5 +1,6 @@
 import { DEFAULT_TARGET, DEFAULT_URL_TEMPLATE } from './const';
 import type {
+  GuideMode,
   ResolvedConfig,
   SourceType,
   StreamAction,
@@ -140,6 +141,11 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     }
   }
 
+  const guide = optionalString(raw, 'guide') ?? 'open';
+  if (guide !== 'open' && guide !== 'closed' && guide !== 'off') {
+    throw new ConfigError('"guide" must be open, closed or off');
+  }
+
   const channel = optionalString(raw, 'channel');
   const url = optionalString(raw, 'url');
   const title = optionalString(raw, 'title');
@@ -169,6 +175,7 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     epg: false,
     // days=1: Dispatcharr sends only the next 24 hours, not the whole guide.
     epgUrl: epgUrl ?? (base ? `${normalizeBaseUrl(base)}/output/epg?days=1` : undefined),
+    guide: guide as GuideMode,
   };
   // On by default whenever there's a channel list and a guide to read (dispatcharr_url set).
   resolved.epg = optionalBool(raw, 'epg', resolved.channelList && !!resolved.epgUrl);

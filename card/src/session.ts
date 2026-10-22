@@ -33,6 +33,8 @@ export interface SessionStatus {
   /** Non-fatal problem to show over the picture. */
   notice?: string;
   lastError?: string;
+  /** While reconnecting: when the next attempt starts (epoch ms). */
+  retryAt?: number;
 }
 
 export interface SessionOptions {
@@ -114,6 +116,7 @@ export class PlaybackSession {
     this.update({
       state: this.status.failures > 0 ? 'reconnecting' : 'connecting',
       notice: undefined,
+      retryAt: undefined,
     });
 
     let engine: Engine;
@@ -287,7 +290,12 @@ export class PlaybackSession {
     }
     const backoff = this.opts.backoffMs ?? DEFAULT_BACKOFF;
     const delay = backoff[Math.min(failures - 1, backoff.length - 1)];
-    this.update({ state: 'reconnecting', failures, lastError: `${e.kind}: ${e.detail}` });
+    this.update({
+      state: 'reconnecting',
+      failures,
+      retryAt: Date.now() + delay,
+      lastError: `${e.kind}: ${e.detail}`,
+    });
     this.retryTimer = setTimeout(() => {
       if (this.isCurrent(id)) void this.attempt();
     }, delay);

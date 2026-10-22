@@ -104,7 +104,7 @@ test('dashboard edit mode stops playback and the card editor preview never conne
   await expect(page.getByText('Stream card configuration')).toBeVisible();
   await expect(
     page.locator('hui-card-preview stream-card, ha-dialog stream-card').first(),
-  ).toContainText('playback is off while editing');
+  ).toContainText('Playback is off while editing');
   await page.waitForTimeout(3000);
   expect((await stats(page, 'ok--m3u-6')).open).toBe(0);
   expect((await stats(page, 'ok--m3u-6')).total).toBe(before);
@@ -155,7 +155,7 @@ test('a Bubble button plays a channel by name in the pop-up', async ({ page }) =
     .click();
   await expect(page).toHaveURL(/#tv-test/);
   await expectOpen(page, 'ok--m3u-3', 1, 15_000);
-  await expect(page.locator('stream-card').last().locator('.badge')).toContainText(
+  await expect(page.locator('stream-card').last().locator('.ident')).toContainText(
     'Sports Live HD',
   );
   await page.locator('.bubble-close-button').first().click();

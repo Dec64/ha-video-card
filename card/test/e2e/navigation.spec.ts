@@ -207,7 +207,7 @@ test('Enter (OK on a remote) toggles the guide, but still presses a focused butt
 }) => {
   await h.load();
   const pl = playlist(h);
-  await h.mount({ m3u_url: pl.m3u_url, target: 'tv', channel: 'News One HD' });
+  await h.mount({ m3u_url: pl.m3u_url, target: 'tv', channel: 'News One HD', guide: 'closed' });
   await h.expectOpen(pl.id(1), 1);
   const pickerOpen = async () =>
     ((await h.info()) as unknown as { pickerOpen: boolean }).pickerOpen;

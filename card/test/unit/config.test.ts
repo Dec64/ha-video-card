@@ -13,6 +13,13 @@ import {
 const base = { type: 'custom:stream-card', dispatcharr_url: 'https://dispatcharr.example/' };
 
 describe('normalizeConfig', () => {
+  it('opens the guide by default and accepts closed and off', () => {
+    expect(normalizeConfig(base).guide).toBe('open');
+    expect(normalizeConfig({ ...base, guide: 'closed' }).guide).toBe('closed');
+    expect(normalizeConfig({ ...base, guide: 'off' }).guide).toBe('off');
+    expect(() => normalizeConfig({ ...base, guide: 'hidden' })).toThrow(ConfigError);
+  });
+
   it('applies defaults', () => {
     const c = normalizeConfig(base);
     expect(c).toMatchObject({

@@ -1,13 +1,11 @@
 import { CARD_NAME, CARD_TAG, VERSION } from './const';
 import { getController } from './controller';
-import { PICKER_TAG, StreamCardPicker } from './picker';
 import { sessionCounters } from './session';
 import { StreamCard } from './stream-card';
 
 const controller = getController();
 (controller as unknown as { counters: typeof sessionCounters }).counters ??= sessionCounters;
 
-if (!customElements.get(PICKER_TAG)) customElements.define(PICKER_TAG, StreamCardPicker);
 if (!customElements.get(CARD_TAG)) customElements.define(CARD_TAG, StreamCard);
 
 interface CustomCardEntry {
