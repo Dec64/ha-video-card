@@ -763,6 +763,9 @@ export class StreamCard extends LitElement implements ControllerCard {
     let handled = true;
     if (/^\d$/.test(e.key)) this.pressDigit(e.key);
     else if (e.key === 'Enter' && typing) this.commitDigits();
+    // OK on a remote opens the guide, unless a button has focus (Enter presses that button).
+    else if (e.key === 'Enter' && !path.some((n) => n instanceof HTMLButtonElement))
+      this.togglePicker();
     else if (e.key === 'Escape' && typing) this.clearDigits();
     else if (e.key === 'Backspace') {
       if (typing) this.deleteDigit();

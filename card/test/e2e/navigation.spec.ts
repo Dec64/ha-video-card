@@ -201,3 +201,29 @@ test('channel up pressed while the pop-up is closed steps from its channel when 
   // It went straight to the next channel without reconnecting to the old one first.
   expect((await h.stats(pl.id(4))).total).toBe(before);
 });
+
+test('Enter (OK on a remote) toggles the guide, but still presses a focused button', async ({
+  h,
+}) => {
+  await h.load();
+  const pl = playlist(h);
+  await h.mount({ m3u_url: pl.m3u_url, target: 'tv', channel: 'News One HD' });
+  await h.expectOpen(pl.id(1), 1);
+  const pickerOpen = async () =>
+    ((await h.info()) as unknown as { pickerOpen: boolean }).pickerOpen;
+  expect(await pickerOpen()).toBe(false);
+  const enterOnCard = () =>
+    onCard(h, (c) =>
+      c.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })),
+    );
+  await enterOnCard();
+  await expect.poll(pickerOpen).toBe(true);
+  await enterOnCard();
+  await expect.poll(pickerOpen).toBe(false);
+
+  // On a focused Mute button, Enter mutes and leaves the guide alone.
+  await focusCard(h);
+  await h.page.keyboard.press('Enter');
+  await expect.poll(async () => (await h.info()).muted).toBe(true);
+  expect(await pickerOpen()).toBe(false);
+});

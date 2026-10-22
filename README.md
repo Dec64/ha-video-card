@@ -140,6 +140,7 @@ The badge shows the live dot, logo, number and name. If the browser blocks sound
 | Key | Does |
 |---|---|
 | `0`–`9` | Type a channel number. It tunes after a 2-second pause, on Enter, or at once when no longer number can follow (typing `105` when there's no `1050`). A number that doesn't exist does nothing |
+| Enter | Tune the number you typed; with nothing typed, open or close the channel guide (OK on a remote) |
 | Escape | Cancel the number you're typing |
 | Backspace | Delete a typed digit; with nothing typed, **last channel** (flip back to the previous channel) |
 | ↑ ↓, Page Up/Down | Next / previous channel |
