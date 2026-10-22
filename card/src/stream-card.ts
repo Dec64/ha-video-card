@@ -1,5 +1,6 @@
 import { html, LitElement, nothing, type PropertyValues, type TemplateResult } from 'lit';
 import { ChannelList, loadChannels, type Channel } from './channels';
+import type { GuideFeed, NowNext } from './epg';
 import { ConfigError, isUuid, needsLookup, normalizeConfig, resolveSource } from './config';
 import { VERSION } from './const';
 import { getController, type ControllerCard, type StreamController } from './controller';
@@ -78,6 +79,10 @@ export class StreamCard extends LitElement implements ControllerCard {
   private lookupPlay = false;
   /** The controller's stop count for this target when this card last took a request or stop. */
   private stopGen?: number;
+  /** The page-wide guide feed while `epg` is on and the card is live (never in edit mode). */
+  private guide?: GuideFeed;
+  private guideUnsub?: () => void;
+  private guideUrl?: string;
 
   constructor() {
     super();
@@ -119,6 +124,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       this.channelsKey = key;
       if (this.isConnected) this.ensureChannels();
     }
+    this.syncGuide();
     if (this.request) {
       this.applyRequest(this.request, this.lookupPending ? this.lookupPlay : this.wantPlaying);
     } else if (this.isConnected) this.pickInitialRequest();
@@ -187,6 +193,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       this.stopFromController();
     }
     this.ensureChannels();
+    this.syncGuide();
     if (this.config?.debug) this.debugTimer = setInterval(() => this.refresh(), 1000);
     this.evaluate();
   }
@@ -198,6 +205,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     document.removeEventListener('webkitfullscreenchange', this.onFullscreenChange);
     clearInterval(this.debugTimer);
     clearTimeout(this.controlsTimer);
+    this.syncGuide();
     super.disconnectedCallback();
     this.evaluate();
   }
@@ -213,6 +221,7 @@ export class StreamCard extends LitElement implements ControllerCard {
         this.applyRequest(this.request, this.lookupPlay);
       }
       this.ensureChannels();
+      this.syncGuide();
       this.evaluate();
     }
   }
@@ -259,6 +268,37 @@ export class StreamCard extends LitElement implements ControllerCard {
       },
     );
     return this.channelsPromise;
+  }
+
+  // ---- now/next ----
+
+  /**
+   * Subscribes to the guide while it's wanted; unsubscribing lets the feed stop downloading. The
+   * guide code is a lazy chunk, so cards without `epg` never load it.
+   */
+  private syncGuide(): void {
+    const c = this.config;
+    const url = this.isConnected && !this.isPreview && c?.epg ? c.epgUrl : undefined;
+    if (this.guideUrl === url) return;
+    this.guideUnsub?.();
+    this.guideUnsub = undefined;
+    this.guide = undefined;
+    this.guideUrl = url;
+    if (!url) return;
+    void import('./epg').then(({ guideFeed }) => {
+      if (this.guideUrl !== url) return;
+      this.guide = guideFeed(url);
+      this.guideUnsub = this.guide.subscribe(() => this.refresh());
+    });
+  }
+
+  /**
+   * What's on a channel now and next, from Dispatcharr's guide. Undefined when `epg` is off, in
+   * edit mode, before the guide loads, if it failed, or when the guide has nothing for the channel.
+   * The card re-renders when guide data arrives and when a programme starts or ends.
+   */
+  nowNext(channel: Channel | undefined): NowNext | undefined {
+    return channel && this.guide ? this.guide.nowNext(channel) : undefined;
   }
 
   /** The channel-list entry for what's playing, if the list has it. */

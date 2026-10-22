@@ -9,6 +9,8 @@ export interface Channel {
   number?: string;
   group?: string;
   logo?: string;
+  /** tvg-id: the channel's ID in Dispatcharr's XMLTV guide (its number, unless set otherwise). */
+  tvgId?: string;
 }
 
 const ATTR_RE = /([\w-]+)="([^"]*)"/g;
@@ -58,6 +60,7 @@ export function parseM3u(text: string): Channel[] {
       number: attrs['tvg-chno'] || attrs['channel-number'] || undefined,
       group: attrs['group-title'] || undefined,
       logo: attrs['tvg-logo'] || undefined,
+      tvgId: attrs['tvg-id'] || undefined,
     });
   }
   return out;

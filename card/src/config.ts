@@ -130,6 +130,15 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     }
   }
 
+  const epgUrl = optionalString(raw, 'epg_url');
+  if (epgUrl) {
+    try {
+      new URL(epgUrl);
+    } catch {
+      throw new ConfigError('"epg_url" must be a full URL');
+    }
+  }
+
   const channel = optionalString(raw, 'channel');
   const url = optionalString(raw, 'url');
   const title = optionalString(raw, 'title');
@@ -156,7 +165,18 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     channelGroups: optionalStringList(raw, 'channel_groups'),
     favourites: optionalStringList(raw, 'favourites'),
     rememberChannel: optionalBool(raw, 'remember_channel', true),
+    epg: false,
+    // days=1: Dispatcharr sends only the next 24 hours, not the whole guide.
+    epgUrl: epgUrl ?? (base ? `${normalizeBaseUrl(base)}/output/epg?days=1` : undefined),
   };
+  // On by default whenever there's a channel list and a guide to read (dispatcharr_url set).
+  resolved.epg = optionalBool(raw, 'epg', resolved.channelList && !!resolved.epgUrl);
+  if (resolved.epg && !resolved.channelList) {
+    throw new ConfigError('"epg" needs the channel list ("channel_list" can\'t be false)');
+  }
+  if (resolved.epg && !resolved.epgUrl) {
+    throw new ConfigError('"epg" needs "dispatcharr_url" or "epg_url"');
+  }
   if (resolved.channelList && !resolved.m3uUrl) {
     throw new ConfigError('"channel_list" needs "dispatcharr_url" or "m3u_url"');
   }
