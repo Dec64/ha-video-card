@@ -22,7 +22,11 @@ export interface StreamCardConfig {
   remember_channel?: boolean;
   epg?: boolean;
   epg_url?: string;
+  guide?: GuideMode;
 }
+
+/** The channel guide under the picture: shown, collapsed until Channels is pressed, or never. */
+export type GuideMode = 'open' | 'closed' | 'off';
 
 export type SourceType = 'mpegts' | 'native';
 
@@ -49,6 +53,7 @@ export interface ResolvedConfig {
   /** Show now/next programme info from Dispatcharr's XMLTV guide (default on with a list and guide URL). */
   epg: boolean;
   epgUrl?: string;
+  guide: GuideMode;
 }
 
 export type StreamAction =

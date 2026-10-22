@@ -1,4 +1,4 @@
-# Stream Card architecture (1.0)
+# Stream Card architecture (2.0)
 
 How the card works today and the contracts other code relies on. For using the card, see the [README](../README.md). For why it is built this way, see [rfc-001-review.md](rfc-001-review.md) and [build-plan-v1.md](build-plan-v1.md) (history).
 
@@ -46,7 +46,10 @@ How the card works today and the contracts other code relies on. For using the c
 | `engines/` | `mpegts-engine.ts` (lazy chunk; loads the vendored `mpegts-<version>.js`), `native-engine.ts` (MP4/HLS where the browser plays them), `fetch-loader.ts` (`ImmediateAbortLoader`), `video-lock.ts`. |
 | `channels.ts` | M3U parsing, `ChannelList`, page-wide playlist cache. |
 | `epg.ts` | Now/next (`epg`): streaming XMLTV parser and the page-wide `GuideFeed`. A lazy chunk, loaded only by cards with `epg` on. |
-| `picker.ts` | The channel browser element. It only fires events; the card plays. |
+| `picker.ts` | The channel guide element (`stream-card-picker`), a lazy chunk loaded with the channel list. It only fires events; the card plays. |
+| `ui/view.ts` | `CardView` and `CardActions`: what the templates read. Also the seams other features fill: `NavView`/`NavActions` (recents, last channel, keypad, volume, sleep timer) and `NowNext` (guide data). |
+| `ui/stage.ts` | Templates for the picture: channel ident, channel-number OSD, state layers, control bar, TV hints. Pure functions of `CardView` + `CardActions`. |
+| `ui/theme.ts` | Design tokens mapped from the HA theme (`--sc-*`); the picture area is always dark. |
 | `memory.ts` | Last channel and play intent per target, per device (localStorage). |
 | `recents.ts`, `number-entry.ts`, `volume.ts`, `sleep-timer.ts` | Channel navigation logic: recently watched per target and device, remote-style number entry, remembered volume, sleep timers (owned by the controller). No markup. |
 | `editor-form.ts` | Schema for HA's visual editor (`getConfigForm`), a lazy chunk. |
@@ -78,6 +81,14 @@ On connect, the card takes the first of:
 
 Channel picks, up/down, the Stop button and the idle timeout go through the controller (`request` / `stop`) exactly like HA buttons. So every card on a target, a recreated card, and the device memory all agree on the latest choice. A stop also bumps `stopCount(target)`, so a pop-up card that was off the page when a stop button was pressed notices it when it comes back.
 
+## UI
+
+`render()` builds a `CardView` (data) and `CardActions` (callbacks) and hands them to the templates in `src/ui/stage.ts` and to the guide element; the templates never reach into the card. An action left undefined hides its button, so features can arrive one at a time. Three hooks on the card fill the parts other features own: `navView()` / `navActions()` (navigation) and `nowNext(channel)` (guide data).
+
+`.stage` holds the picture (`.frame`, with the `<video>` and the state layers), the ident and the control bar, and is what goes full screen. It's a size container: under 520 px the ident and controls sit below the picture in the card's colours (phones, Bubble pop-ups); wider, they float over it and auto-hide while playing. A Cast receiver or TV user agent (`detectLayout()`) gets the 10-foot layout: larger type inside a 5% safe area, no tap controls, guide over the picture. Wall panels (coarse pointer, 900 px and wider) get 56 px targets through `--sc-target`.
+
+The guide shows under the picture (`guide: open`, or `closed` after the guide button), or over the picture in full screen, on a TV and with `guide: off`. With nothing selected it shows on its own. A pick from under the picture keeps it open; one over the picture closes it.
+
 ## Channel list
 
 `loadChannels(m3uUrl)` downloads Dispatcharr's `/output/m3u` (no login; CORS `*`) once per page, shares it between cards for 10 minutes, and gives up after 15 s. `ChannelList` applies `channel_groups`, orders by channel number, builds favourites, and finds a channel by UUID, number or name (case-insensitive, across all groups). Logos are Dispatcharr's cached logo URLs from the playlist.
@@ -105,6 +116,7 @@ channel: BBC One HD                 # optional default: UUID, or a name/number f
 url: https://…                      # optional: a full stream URL instead of a channel
 title: Optional title               # default: the channel's name
 channel_list: true                  # default true when dispatcharr_url or m3u_url is set
+guide: open                         # open (under the picture) | closed | off (only over the picture)
 m3u_url: <url>                      # default {base}/output/m3u
 channel_groups: ["UK: News"]        # optional: only these groups, in this order
 favourites: [BBC One HD, "101"]     # optional: names, numbers or UUIDs under ★ Favourites
@@ -194,7 +206,7 @@ Engines report `EngineError`s; the session decides retry or stop: network drops,
 
 ## Build and packaging
 
-Vite library build in `card/dist/`: `stream-card.js` (entry, budget 32 KB gzipped, enforced by `npm run check`), hashed lazy chunks for the mpegts engine, the video lock and the editor form, and `mpegts-<version>.js` copied unmodified from npm with its licence. Every file sits in one folder; chunks load relative to the entry, so `/local/…` and `/hacsfiles/…` both work. A `v*` tag runs `.github/workflows/release.yml`, which checks the tag matches `package.json` and attaches a zip (for HACS) and the loose files.
+Vite library build in `card/dist/`: `stream-card.js` (entry) and the chunks it imports statically (shared code such as Lit), budget 36 KB gzipped for that initial load, enforced by `npm run check`; hashed lazy chunks for the mpegts engine, the guide, the now/next feed (`epg.ts`), the video lock and the editor form; and `mpegts-<version>.js` copied unmodified from npm with its licence. Every file sits in one folder; chunks load relative to the entry, so `/local/…` and `/hacsfiles/…` both work. A `v*` tag runs `.github/workflows/release.yml`, which checks the tag matches `package.json` and attaches a zip (for HACS) and the loose files.
 
 ## Testing
 

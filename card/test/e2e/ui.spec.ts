@@ -17,7 +17,7 @@ test('playing state: title badge, live dot, controls that auto-hide and come bac
   await h.load();
   await h.mount({ channel: h.channel(), title: 'BBC One HD' });
   await h.expectUi('playing');
-  await expect(h.frame().locator('.badge')).toContainText('BBC One HD');
+  await expect(h.frame().locator('.ident')).toContainText('BBC One HD');
   await expect(h.frame().locator('.live-dot')).toBeVisible();
   await shot(h, 'playing');
   await axe(h);
@@ -35,7 +35,7 @@ test('blocked autoplay starts muted and offers tap to unmute', async ({ h }) => 
   expect(info.mutedByPolicy).toBe(true);
   expect(info.muted).toBe(true);
   const pill = h.frame().locator('button.unmute');
-  await expect(pill).toContainText('Tap to unmute');
+  await expect(pill).toContainText('Tap for sound');
   await shot(h, 'tap-to-unmute');
   await pill.click();
   await expect.poll(async () => (await h.info()).muted).toBe(false);
@@ -85,7 +85,7 @@ test('connecting and empty states', async ({ h }) => {
   await shot(h, 'empty');
   await h.mount({ channel: h.channel('hang'), start_timeout: 30 }, { id: 'conn' });
   await h.expectUi('connecting', '#conn');
-  await expect(h.frame('#conn')).toContainText('Connecting');
+  await expect(h.frame('#conn')).toContainText('Tuning');
 });
 
 test('debug overlay shows engine, codecs and buffer', async ({ h }) => {
