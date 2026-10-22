@@ -3,10 +3,10 @@
 Living document. Newest status at the top; the change log at the bottom keeps the history. Anyone (or any Claude session) picking this up should read this first, then [docs/architecture.md](docs/architecture.md) and [CLAUDE.md](CLAUDE.md).
 
 ## Current status (2026-10-22)
-**Phase:** **2.0 redesign merged into `main`**: card UI 2.0 (#7), now/next from Dispatcharr's guide (#4), channel navigation (#5), multiview (#6) and the mockup summary (#3). Not yet installed on Declan's HA, which still runs 1.0.0. `card/package.json` still says 1.0.0; bump it (2.0.0) when installing or tagging.
+**Phase:** **2.0.0 on `main`**: card UI 2.0 (#7), now/next from Dispatcharr's guide (#4), channel navigation (#5), multiview (#6), the mockup summary (#3) and `buffer: stable` for slow devices (#2, first shipped as 1.1.0). Installing on Declan's HA (2026-10-22).
 
 **Installed on Declan's HA:**
-- Files in `/config/www/stream-card/`: `stream-card.js`, the lazy chunks (`stream-card-mpegts-engine-*`, `stream-card-video-lock-*`, `stream-card-editor-form-*`) and `mpegts-1.8.2.js`, all byte-identical to the build (checked by SHA-256 through `/local/`). Resource `/local/stream-card/stream-card.js?v=1.0.0-2`.
+- Files in `/config/www/stream-card/`: `stream-card.js`, the lazy chunks (`stream-card-mpegts-engine-*`, `stream-card-video-lock-*`, `stream-card-editor-form-*`) and `mpegts-1.8.2.js`, all byte-identical to the build (checked by SHA-256 through `/local/`). Resource `/local/stream-card/stream-card.js?v=1.1.0` (1.1.0 installed 2026-10-11, PR #2).
 - Dashboard **Live TV** (`/live-tv/tv`, in the sidebar): one full-width card, `target: tv`, `output_profile: 3`, every Dispatcharr channel in the picker. Favourites and group filters are empty; set them in the card's visual editor.
 - Dashboard **Stream Card Test** (`/stream-card-test/tv`) still there from 0.1 (debug on); delete it whenever.
 - Dispatcharr profile **3 "Stream Card (AAC)"**, verified: H.264 + AAC only. Dispatcharr's `/output/m3u` serves 226 channels in 12 groups, all with numbers and logos, no login needed.
@@ -16,9 +16,9 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 
 **What's verified (2026-10-22, on the merged code):** 124 unit, 100 e2e (fake Dispatcharr + MSE shim, including `test/e2e/integration.spec.ts`, which drives now/next in the ident and guide, Ch+ / Last channel / typed numbers and multiview on one card while counting connections), the `@real` e2e in Google Chrome in CI, and 11 real-HA tests (HA 2026.10 + Bubble 3.4.1). Initial load 34.5 KB gz of the 36 KB budget. Not yet verified on real devices or against a real Dispatcharr guide: see the 2.0 rows in [docs/acceptance-v1.md](docs/acceptance-v1.md).
 
-**Next action (Declan):** say when to install 2.0 on HA, then run the 2.0 acceptance rows on the Fire HD 8, phones, desktop and a Chromecast (the 1.0 rows are still open too). PR #2 (1.1.0 buffer for Fire tablets) is still a draft against the 1.0 code.
+**Next action (Declan):** run the 2.0 acceptance rows on the Fire HD 8, phones, desktop and a Chromecast (the 1.0 rows are still open too).
 
-**Next action (Claude):** install 2.0 on HA when asked (same procedure; new chunks `stream-card-view-*`, `stream-card-picker-*`, `stream-card-epg-*`, `stream-card-multiview-*`); fix what the device checks find; bring PR #2 up to 2.0.
+**Next action (Claude):** fix what the device checks find; tag v2.0.0 from GitHub's UI when Declan is happy.
 
 ## Key facts
 - Docs: user guide in [README.md](README.md); design and contracts in [docs/architecture.md](docs/architecture.md); planning history indexed in [docs/README.md](docs/README.md).
@@ -52,6 +52,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 | 2026-10-10 | Each device remembers each target's last channel and whether it was left playing (localStorage); Stop, a stop button and the idle timeout all count as "left stopped" |
 | 2026-10-10 | In-card picks, up/down and Stop go through the page controller like buttons, so every card on a target and every recreated card agree |
 | 2026-10-10 | With the list loaded, an unknown name is an error, never guessed as a stream ID; names/numbers are resolved after edit mode, never during |
+| 2026-10-11 | Slow devices get `buffer: stable` per card rather than a global change: phones keep low delay |
 | 2026-10-22 | Now/next is on by default whenever `dispatcharr_url` is set (Declan, 2026-10-22; `epg: false` turns it off): the card reads `/output/epg?days=1` (public like the M3U; Dispatcharr's JSON `current-programs` API needs a login), streams it, keeps titles and times only, and refreshes every 2 h. A failed or empty guide just hides the programme line. Only now/next; no full guide grid |
 | 2026-10-22 | Channel navigation (recents, last channel, number entry, volume, sleep) is logic only; the redesign owns all markup. Sleep timers live in the page controller per target, are saved per device, and stop through `controller.stop()` |
 | 2026-10-22 | 2.0 guide sits under the picture by default; new `guide: open \| closed \| off` option (Declan's pick) |
@@ -75,6 +76,8 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
+- **2026-10-22:** 2.0.0. Merged `buffer: stable` (#2) into 2.0: the redesigned stage shows Buffering while the reserve builds or refills, and multiview tiles use the card's buffer mode too (each tile is a decode on the Fire tablet). Both Live TV cards on Declan's HA already had `buffer: stable`.
+- **2026-10-11:** 1.1.0: `buffer: stable` for slow devices. Declan's Fire HD 8 paused every 2–10 s while other devices played perfectly. The default player settings keep only 1.5–6 s of reserve and jump forward to stay near live, which a slow tablet keeps tripping over. Stable mode turns the jumping off, builds an ~8 s reserve before starting and refills (rather than stutters) if it runs dry; data stopping while it refills still counts as a stall and reconnects. Entry budget raised from 25 to 26 KB gzipped for it. New fake-server mode `gap-N` simulates a network hiccup.
 - **2026-10-22:** CI: ffmpeg now installs through `.github/actions/setup-ffmpeg` from .deb files cached per runner image (the Azure Ubuntu mirror was crawling at ~40 KB/s and stalled e2e jobs for 30+ minutes). Only a cache miss touches the mirror, with retries and timeouts; every job has a 45-minute limit so a stall fails instead of hanging.
 - **2026-10-22:** Merged the 2.0 redesign: #3, #4, #5, #7, #6. Wired #4's `nowNext()` and #5's `navView()`/`navActions()` into #7's templates (dropping its stubs and #5's duplicate nav types), and ported multiview onto the new stage (button through `multiviewAction()`, the grid hides the stage and the guide, 2.0 icons). Updated 1.0-era e2e tests for the guide opening on Recent and the sleep button in the control row. Added `test/e2e/integration.spec.ts` (all three features on one card, counting connections) and 2.0 rows in the device acceptance checklist. README: navigation is on screen now.
 - **2026-10-22:** UI redesign mockup (design canvas, not built): new channel ident with now/next, broadcast-style zap number, last channel, volume, sleep timer, recents, number keypad, wall/phone/TV layouts, redesigned states and a multiview idea. Summary and open decisions in [docs/ui-redesign-2026-10-22.md](docs/ui-redesign-2026-10-22.md).

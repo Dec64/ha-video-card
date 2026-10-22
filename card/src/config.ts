@@ -1,5 +1,6 @@
 import { DEFAULT_TARGET, DEFAULT_URL_TEMPLATE } from './const';
 import type {
+  BufferMode,
   GuideMode,
   ResolvedConfig,
   ResolvedMultiview,
@@ -104,6 +105,11 @@ export function parseAspectRatio(v: string | undefined): string {
   throw new ConfigError('"aspect_ratio" must look like "16:9"');
 }
 
+function bufferMode(v: string | undefined): BufferMode {
+  if (v === undefined || v === 'low' || v === 'stable') return v ?? 'low';
+  throw new ConfigError('"buffer" must be "low" or "stable"');
+}
+
 export const MULTIVIEW_MAX_TILES = 4;
 /** Two tiles unless a card asks for more: Fire HD 8 tablets struggle beyond that. */
 export const MULTIVIEW_DEFAULT_TILES = 2;
@@ -198,6 +204,7 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     channelGroups: optionalStringList(raw, 'channel_groups'),
     favourites: optionalStringList(raw, 'favourites'),
     rememberChannel: optionalBool(raw, 'remember_channel', true),
+    buffer: bufferMode(optionalString(raw, 'buffer')),
     epg: false,
     // days=1: Dispatcharr sends only the next 24 hours, not the whole guide.
     epgUrl: epgUrl ?? (base ? `${normalizeBaseUrl(base)}/output/epg?days=1` : undefined),

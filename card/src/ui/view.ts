@@ -63,6 +63,8 @@ export interface CardView extends NavView {
   muted: boolean;
   mutedByPolicy: boolean;
   needsGesture: boolean;
+  /** `buffer: stable` is building or refilling its reserve. */
+  buffering?: boolean;
   fullscreen: boolean;
   canStep: boolean;
   hasGuide: boolean;

@@ -236,8 +236,12 @@ export function renderCenter(v: CardView, a: CardActions): TemplateResult | type
             : nothing
         }
         <div class="tuning-status">
-          <span class="spinner small" role="progressbar" aria-label="Tuning"></span>
-          <span class="message">Tuning</span>
+          <span
+            class="spinner small"
+            role="progressbar"
+            aria-label=${v.buffering ? 'Buffering' : 'Tuning'}
+          ></span>
+          <span class="message">${v.buffering ? 'Buffering…' : 'Tuning'}</span>
         </div>
       </div>`;
     }
@@ -259,6 +263,12 @@ export function renderCenter(v: CardView, a: CardActions): TemplateResult | type
           <button class="pill glass unmute" @click=${a.unmute} aria-label="Unmute">
             ${icon('volumeOff')} Tap for sound
           </button>
+        </div>`;
+      // buffer: stable refilling its reserve after running dry.
+      if (v.buffering)
+        return html`<div class="layer">
+          <span class="spinner" role="progressbar" aria-label="Buffering"></span>
+          <div class="message">Buffering…</div>
         </div>`;
       return nothing;
     case 'ready':

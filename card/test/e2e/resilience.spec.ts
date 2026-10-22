@@ -137,3 +137,61 @@ test('MPEG-2 video plays sound and warns that there is no picture', async ({ h }
   await h.expectUi('playing');
   await expect(h.frame().locator('.notice')).toContainText('No picture');
 });
+
+/** Counts the card video's `waiting` events (the picture stopping for want of data). */
+async function countWaiting(h: Harness): Promise<void> {
+  await h.page.evaluate(() => {
+    const v = document.querySelector('stream-card')!.shadowRoot!.querySelector('video')!;
+    (window as unknown as { waits: number }).waits = 0;
+    v.addEventListener('waiting', () => (window as unknown as { waits: number }).waits++);
+  });
+}
+const waits = (h: Harness) => h.page.evaluate(() => (window as unknown as { waits: number }).waits);
+const reserve = (h: Harness) =>
+  h.page.evaluate(() => {
+    const v = document.querySelector('stream-card')!.shadowRoot!.querySelector('video')!;
+    const b = v.buffered;
+    return b.length ? b.end(b.length - 1) - v.currentTime : 0;
+  });
+
+test('buffer: stable starts with a reserve and rides through a network gap', async ({ h }) => {
+  test.setTimeout(60_000);
+  await h.load();
+  const ch = h.channel('gap-4');
+  await h.mount({ channel: ch, buffer: 'stable' });
+  await countWaiting(h);
+  await expect(h.frame()).toContainText('Buffering…');
+  await h.expectUi('playing', 'stream-card', 20_000);
+  expect(await reserve(h)).toBeGreaterThan(6);
+  // The fake server holds data back from 12 s to 16 s.
+  await h.page.waitForTimeout(12_000);
+  expect(await waits(h)).toBe(0);
+  const info = await h.info();
+  expect(info.ui).toBe('playing');
+  expect(info.failures).toBe(0);
+  expect((await h.stats(ch)).total).toBe(1);
+});
+
+test('buffer: low stalls on the same network gap (the case stable is for)', async ({ h }) => {
+  test.setTimeout(60_000);
+  await h.load();
+  const ch = h.channel('gap-4');
+  await h.mount({ channel: ch });
+  await h.expectUi('playing');
+  await h.page.waitForTimeout(3000);
+  await countWaiting(h); // only the gap from 12 s counts, not start-up
+  await expect.poll(() => waits(h), { timeout: 20_000 }).toBeGreaterThan(0);
+});
+
+test('buffer: stable reconnects when data stops while it refills, never with two connections', async ({
+  h,
+}) => {
+  test.setTimeout(90_000);
+  await h.load();
+  const ch = h.channel('stall-10');
+  await h.mount({ channel: ch, buffer: 'stable', ...FAST, start_timeout: 20 });
+  await h.expectUi('playing', 'stream-card', 20_000);
+  const max = await maxOpenWhile(h, ch, 28_000);
+  expect(max).toBeLessThanOrEqual(1);
+  expect((await h.stats(ch)).total).toBeGreaterThanOrEqual(2);
+});

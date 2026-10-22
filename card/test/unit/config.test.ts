@@ -275,6 +275,14 @@ describe('isUuid / needsLookup', () => {
   });
 });
 
+describe('buffer', () => {
+  it('defaults to low and accepts stable', () => {
+    expect(normalizeConfig(base).buffer).toBe('low');
+    expect(normalizeConfig({ ...base, buffer: 'stable' }).buffer).toBe('stable');
+    expect(() => normalizeConfig({ ...base, buffer: 'huge' })).toThrow(ConfigError);
+  });
+});
+
 describe('multiview config', () => {
   it('is off by default, two tiles, the card output profile', () => {
     expect(normalizeConfig({ ...base, output_profile: 3 }).multiview).toEqual({

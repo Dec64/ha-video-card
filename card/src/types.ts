@@ -20,6 +20,7 @@ export interface StreamCardConfig {
   channel_groups?: string[];
   favourites?: Array<string | number>;
   remember_channel?: boolean;
+  buffer?: BufferMode;
   epg?: boolean;
   epg_url?: string;
   guide?: GuideMode;
@@ -39,6 +40,9 @@ export interface MultiviewConfig {
 export type GuideMode = 'open' | 'closed' | 'off';
 
 export type SourceType = 'mpegts' | 'native';
+
+/** `low`: stay close to live. `stable`: keep a reserve of several seconds for slow devices. */
+export type BufferMode = 'low' | 'stable';
 
 /** Card config after validation and defaults. */
 export interface ResolvedConfig {
@@ -60,6 +64,7 @@ export interface ResolvedConfig {
   channelGroups: string[];
   favourites: string[];
   rememberChannel: boolean;
+  buffer: BufferMode;
   /** Show now/next programme info from Dispatcharr's XMLTV guide (default on with a list and guide URL). */
   epg: boolean;
   epgUrl?: string;

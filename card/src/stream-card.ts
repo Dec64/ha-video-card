@@ -494,6 +494,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       startTimeoutMs: c.startTimeoutMs,
       maxAttempts: c.maxReconnectAttempts,
       debug: c.debug,
+      buffer: c.buffer,
     };
   }
 
@@ -684,6 +685,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       maxAttempts: this.config.maxReconnectAttempts,
       muted: this.userMuted ?? this.config.muted,
       debug: this.config.debug,
+      buffer: this.config.buffer,
       onStatus: (s) => this.onStatus(session, s),
     });
     this.session = session;
@@ -1146,6 +1148,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       muted: this.effectiveMuted,
       mediaInfo: this.status?.mediaInfo,
       notice: this.status?.notice,
+      buffering: this.status?.buffering ?? false,
       error: this.error,
       lastError: this.status?.lastError,
       channels: { state: this.channelState, count: this.channels?.size ?? 0 },
@@ -1196,6 +1199,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       muted: this.effectiveMuted,
       mutedByPolicy: !!s?.mutedByPolicy && !s.needsGesture,
       needsGesture: !!s?.needsGesture,
+      buffering: !!s?.buffering,
       fullscreen: this.fullscreen,
       canStep: this.channelState === 'ready' && (this.channels?.size ?? 0) > 1,
       hasGuide: this.hasGuide,

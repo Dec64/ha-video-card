@@ -4,7 +4,7 @@ import type { format, PlaybackError } from './errors';
 import type { icon } from './icons';
 import type { PickerState } from './picker';
 import type { PlaybackSession, SessionStatus } from './session';
-import type { StreamRequest, StreamSource } from './types';
+import type { BufferMode, StreamRequest, StreamSource } from './types';
 
 export const MULTIVIEW_TAG = 'stream-card-multiview';
 
@@ -19,6 +19,8 @@ export interface TileSettings {
   startTimeoutMs: number;
   maxAttempts: number;
   debug: boolean;
+  /** The card's `buffer` mode; slow tablets need `stable` in every tile too. */
+  buffer?: BufferMode;
 }
 
 /** Turns a picked channel into what a tile plays; throws an Error with a user message. */
@@ -251,6 +253,7 @@ function createMultiview({
         maxAttempts: this.settings.maxAttempts,
         muted: this.tileMuted(i),
         debug: this.settings.debug,
+        buffer: this.settings.buffer,
         onStatus: (s) => this.onStatus(t, session, s),
       });
       t.session = session;

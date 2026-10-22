@@ -1,5 +1,5 @@
 import type mpegts from 'mpegts.js';
-import type { StreamSource } from '../types';
+import type { BufferMode, StreamSource } from '../types';
 import { immediateAbortLoader } from './fetch-loader';
 import { loadMpegts, type Mpegts } from './load-mpegts';
 import { markVideoBusy } from './video-lock';
@@ -16,7 +16,7 @@ import {
 
 /**
  * Starting profile for live Dispatcharr TS. Tuned for low-RAM tablets: keep ~15-30 s of back
- * buffer and jump forward if we fall more than 6 s behind live.
+ * buffer and (buffer: low) jump forward if we fall more than 6 s behind live.
  */
 const PLAYER_CONFIG: mpegts.Config = {
   enableWorker: false,
@@ -32,6 +32,16 @@ const PLAYER_CONFIG: mpegts.Config = {
   lazyLoad: false,
   statisticsInfoReportInterval: 1000,
 };
+
+/**
+ * buffer: stable never jumps forward to catch up with live: on a slow device the jump itself
+ * empties the reserve and causes the stutter. The session keeps the reserve instead.
+ */
+export function playerConfig(buffer: BufferMode): mpegts.Config {
+  return buffer === 'stable'
+    ? { ...PLAYER_CONFIG, liveBufferLatencyChasing: false, stashInitialSize: 512 * 1024 }
+    : PLAYER_CONFIG;
+}
 
 let loggingConfigured = false;
 
@@ -86,7 +96,10 @@ export class MpegtsEngine implements Engine {
   private speed = 0;
   private loaders = new Set<{ abort(): void }>();
 
-  constructor(private readonly debug = false) {}
+  constructor(
+    private readonly debug = false,
+    private readonly buffer: BufferMode = 'low',
+  ) {}
 
   on(listener: (e: EngineEvent) => void): () => void {
     return this.emitter.on(listener);
@@ -117,7 +130,7 @@ export class MpegtsEngine implements Engine {
       });
     }
     const player = lib.createPlayer({ type: 'mpegts', isLive: true, url: src.url, cors: true }, {
-      ...PLAYER_CONFIG,
+      ...playerConfig(this.buffer),
       // Aborts the fetch immediately on Chrome too; see fetch-loader.ts.
       customLoader: immediateAbortLoader(lib) as mpegts.CustomLoaderConstructor,
       onLoaderCreated: (l: { abort(): void }) => this.loaders.add(l),

@@ -70,7 +70,9 @@ How the card works today and the contracts other code relies on. For using the c
 | `screen-off` | Fully Kiosk `screenOff` or screensaver |
 | `hidden` | IntersectionObserver: the card isn't on screen (`display: none`, scrolled out of a hidden container) |
 
-Any change re-runs `evaluate()`. A hold destroys the session at once: the engine aborts its fetch synchronously (`ImmediateAbortLoader`; mpegts.js's own loader leaves a stalled fetch open on Chrome) and defers the rest of mpegts.js's teardown one tick. The next engine waits on `videoIdle()` before touching the same `<video>`. Coming back plays from the live edge.
+Any change re-runs `evaluate()`.
+
+**Buffering.** `buffer: low` (default) lets mpegts.js jump forward when playback falls more than 6 s behind live. `buffer: stable` turns that off (mpegts sources only: a native source with `preload="none"` never buffers before play, so it plays at once); the session instead holds the picture until about 8 s is buffered, and if the reserve ever drops under 0.3 s it pauses and refills to 5 s before resuming. While it holds, buffered data not growing for the stall timeout counts as a stall and reconnects, so a stalled stream is still released. A hold destroys the session at once: the engine aborts its fetch synchronously (`ImmediateAbortLoader`; mpegts.js's own loader leaves a stalled fetch open on Chrome) and defers the rest of mpegts.js's teardown one tick. The next engine waits on `videoIdle()` before touching the same `<video>`. Coming back plays from the live edge.
 
 ## Multiview
 
@@ -137,6 +139,7 @@ epg: true                           # now/next from Dispatcharr's guide; default
 epg_url: <url>                      # default {base}/output/epg?days=1
 autoplay: true                      # play the chosen channel when shown, unless left stopped
 muted: false                        # start muted; falls back to muted + "tap to unmute" if blocked
+buffer: low                         # low | stable (reserve of ~8 s, no skipping ahead, refills on underrun)
 aspect_ratio: "16:9"
 idle_timeout: 0                     # minutes, 0 = off; counts as a stop
 start_timeout: 20                   # seconds to wait for first data
