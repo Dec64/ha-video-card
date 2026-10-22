@@ -2,8 +2,8 @@
 
 Living document. Newest status at the top; the change log at the bottom keeps the history. Anyone (or any Claude session) picking this up should read this first, then [docs/architecture.md](docs/architecture.md) and [CLAUDE.md](CLAUDE.md).
 
-## Current status (2026-10-11)
-**Phase:** **1.0.0 merged into `main`** (PR #1) **and installed on Declan's HA**, with channel selection. Android and the tablet dashboard play well (the earlier iPhone glitches were the Dispatcharr source, since switched). Waiting on the 1.0 rows of the acceptance checklist.
+## Current status (2026-10-22)
+**Phase:** **2.0 redesign merged into `main`**: card UI 2.0 (#7), now/next from Dispatcharr's guide (#4), channel navigation (#5), multiview (#6) and the mockup summary (#3). Not yet installed on Declan's HA, which still runs 1.0.0. `card/package.json` still says 1.0.0; bump it (2.0.0) when installing or tagging.
 
 **Installed on Declan's HA:**
 - Files in `/config/www/stream-card/`: `stream-card.js`, the lazy chunks (`stream-card-mpegts-engine-*`, `stream-card-video-lock-*`, `stream-card-editor-form-*`) and `mpegts-1.8.2.js`, all byte-identical to the build (checked by SHA-256 through `/local/`). Resource `/local/stream-card/stream-card.js?v=1.0.0-2`.
@@ -14,21 +14,11 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 
 **How to update the card on that HA:** build, commit the changed dist files temporarily under `install/<version>/`, `downloader.download_file` each from `raw.githubusercontent.com/Dec64/ha-video-card/<commit>/...` into subdir `stream-card` with `overwrite: true` (chunks with unchanged hashed names can stay), compare SHA-256 through `https://<ha>/local/stream-card/...`, remove the files in the next commit, then bump `?v=` on the resource. (This session can't push tags.)
 
-**What's verified:** 78 unit, 61 e2e (fake Dispatcharr + MSE shim; `@real` tests in Google Chrome in CI), 11 real-HA tests (HA 2026.10 + Bubble 3.4.1, sections view, visual editor), the picker rendered against the real 226-channel playlist (logos, groups), and an adversarial review of the 1.0 diff (26 confirmed findings, all fixed with regression tests). Not yet verified: the 1.0 rows of [docs/acceptance-v1.md](docs/acceptance-v1.md) on the actual devices.
+**What's verified (2026-10-22, on the merged code):** 124 unit, 100 e2e (fake Dispatcharr + MSE shim, including `test/e2e/integration.spec.ts`, which drives now/next in the ident and guide, Ch+ / Last channel / typed numbers and multiview on one card while counting connections), the `@real` e2e in Google Chrome in CI, and 11 real-HA tests (HA 2026.10 + Bubble 3.4.1). Initial load 34.5 KB gz of the 36 KB budget. Not yet verified on real devices or against a real Dispatcharr guide: see the 2.0 rows in [docs/acceptance-v1.md](docs/acceptance-v1.md).
 
-**Next action (Declan):** open Live TV on each device, pick channels, try up/down, reload; tick the new acceptance rows. Optionally add favourites/groups in the card editor.
+**Next action (Declan):** say when to install 2.0 on HA, then run the 2.0 acceptance rows on the Fire HD 8, phones, desktop and a Chromecast (the 1.0 rows are still open too). PR #2 (1.1.0 buffer for Fire tablets) is still a draft against the 1.0 code.
 
-**Next action (Claude):** fix anything found; then tag v1.0.0 (from GitHub's UI, Releases → Draft a new release → tag `v1.0.0` on `main`, since tag pushes are blocked here; the release workflow attaches the files) and move to Phase 2 or the iPhone fallback.
-
-## In progress (2026-10-22): channel navigation
-Branch `claude/project-thread-4s7k2u` (draft PR): logic for channel up/down from buttons, last channel, recently watched, typed channel numbers, keyboard/remote keys, remembered volume and a sleep timer, plus button actions for all of them and the planned media_player mapping (docs/architecture.md). No on-screen controls: the "Card UI redesign build" thread renders them through `navView()`/`navActions()`. Entry size budget raised from 25 to 32 KB gz (main was at 24.7; this adds 2.5).
-## 2.0 redesign (in progress, 2026-10-22)
-Four branches build the redesign from the mockup (https://claude.ai/artifact/Yc11oyZHocXjME3MaRfpBj, summary in `docs/ui-redesign-2026-10-22.md` on PR #3):
-- **Card UI** (`claude/project-thread-w2drcg`): shell, ident, channel-number OSD, control bar, guide panel, every state, phone / wall / desktop / TV layouts, HA theme tokens, `guide:` option. Templates read `CardView`/`CardActions` (`src/ui/view.ts`).
-- **Navigation** (PR #5, `claude/project-thread-4s7k2u`): recents, last channel, keypad, volume, sleep timer, keyboard. Plugs in through `navView()`/`navActions()`.
-- **Now/next** (PR #4, `claude/project-thread-eu2dyi`): EPG slice, `nowNext(channel)` on the card.
-- **Multiview**: its own lazy element; a `ctl-multiview` button through the `multiview` action.
-Whoever merges second takes the UI branch's `scripts/size-report.mjs` (initial load, 36 KB gz) and moves the nav types into `src/ui/view.ts`.
+**Next action (Claude):** install 2.0 on HA when asked (same procedure; new chunks `stream-card-view-*`, `stream-card-picker-*`, `stream-card-epg-*`, `stream-card-multiview-*`); fix what the device checks find; bring PR #2 up to 2.0.
 
 ## Key facts
 - Docs: user guide in [README.md](README.md); design and contracts in [docs/architecture.md](docs/architecture.md); planning history indexed in [docs/README.md](docs/README.md).
@@ -64,18 +54,17 @@ Whoever merges second takes the UI branch's `scripts/size-report.mjs` (initial l
 | 2026-10-10 | With the list loaded, an unknown name is an error, never guessed as a stream ID; names/numbers are resolved after edit mode, never during |
 | 2026-10-22 | Now/next is on by default whenever `dispatcharr_url` is set (Declan, 2026-10-22; `epg: false` turns it off): the card reads `/output/epg?days=1` (public like the M3U; Dispatcharr's JSON `current-programs` API needs a login), streams it, keeps titles and times only, and refreshes every 2 h. A failed or empty guide just hides the programme line. Only now/next; no full guide grid |
 | 2026-10-22 | Channel navigation (recents, last channel, number entry, volume, sleep) is logic only; the redesign owns all markup. Sleep timers live in the page controller per target, are saved per device, and stop through `controller.stop()` |
-| 2026-10-22 | Entry bundle budget 32 KB gz (was 25) to make room for navigation and the redesign |
 | 2026-10-22 | 2.0 guide sits under the picture by default; new `guide: open \| closed \| off` option (Declan's pick) |
 | 2026-10-22 | The card uses HA's theme font and the system monospace font instead of loading Roboto Flex / JetBrains Mono from Google Fonts (no third-party requests from the card) |
 | 2026-10-22 | Layouts are automatic (card width, pointer, Cast user agent); no layout option |
-| 2026-10-22 | Size budget now counts the entry plus its static imports (36 KB gz), since the guide became a lazy chunk and Lit moved into a shared chunk |
+| 2026-10-22 | Size budget now counts the entry plus its static imports (36 KB gz), since the guide became a lazy chunk and Lit moved into a shared chunk. This replaces the per-branch entry budgets (32 KB in navigation, 26 KB in multiview) |
+| 2026-10-22 | The guide opens on **Recent** once the device has watched something (as in the mockup), otherwise All |
+| 2026-10-22 | 2.0 merged as #3, #4, #5, #7, #6 with merge commits; each branch first got a "merge main" commit so CI ran on the combined code |
 | 2026-10-22 | Multiview (from the redesign mockup) is opt-in per card, 2 tiles by default, `max_tiles` up to 4 (Declan). Each tile is its own Dispatcharr connection; one tile has the sound |
 | 2026-10-22 | In multiview, a button for the target, Stop, a stop button and the idle timeout leave multiview and close every tile; Exit plays the tile with sound full size |
-| 2026-10-22 | Entry size budget raised from 25 to 26 KB gz for multiview's hooks (the grid itself is a lazy chunk) |
 | 2026-10-07 | Code and docs live in the private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card); `C:\Users\Declan\Projects\HA Video Card` is a clone and project files keep a mirror |
 
 ## Open questions
-- UI redesign (2026-10-22 mockup): which parts to build, and whether now/next (EPG slice) and multiview are wanted. See [docs/ui-redesign-2026-10-22.md](docs/ui-redesign-2026-10-22.md).
 - iPhone HA app support for mpegts.js, HA Cast behaviour, YouTube ads per device (checked in T10 and later phases instead of Phase 0).
 
 ## Known risks
@@ -86,6 +75,8 @@ Whoever merges second takes the UI branch's `scripts/size-report.mjs` (initial l
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
+- **2026-10-22:** CI: ffmpeg now installs through `.github/actions/setup-ffmpeg` from .deb files cached per runner image (the Azure Ubuntu mirror was crawling at ~40 KB/s and stalled e2e jobs for 30+ minutes). Only a cache miss touches the mirror, with retries and timeouts; every job has a 45-minute limit so a stall fails instead of hanging.
+- **2026-10-22:** Merged the 2.0 redesign: #3, #4, #5, #7, #6. Wired #4's `nowNext()` and #5's `navView()`/`navActions()` into #7's templates (dropping its stubs and #5's duplicate nav types), and ported multiview onto the new stage (button through `multiviewAction()`, the grid hides the stage and the guide, 2.0 icons). Updated 1.0-era e2e tests for the guide opening on Recent and the sleep button in the control row. Added `test/e2e/integration.spec.ts` (all three features on one card, counting connections) and 2.0 rows in the device acceptance checklist. README: navigation is on screen now.
 - **2026-10-22:** UI redesign mockup (design canvas, not built): new channel ident with now/next, broadcast-style zap number, last channel, volume, sleep timer, recents, number keypad, wall/phone/TV layouts, redesigned states and a multiview idea. Summary and open decisions in [docs/ui-redesign-2026-10-22.md](docs/ui-redesign-2026-10-22.md).
 - **2026-10-22:** Now/next data for the redesign (branch `claude/project-thread-eu2dyi`): `epg` / `epg_url` options, `src/epg.ts` (streaming XMLTV parser, page-wide `GuideFeed`, lazy chunk), `Channel.tvgId`, the card's `nowNext(channel)` for the redesigned templates to render, fake `/output/epg`, unit and e2e tests (no guide download when off or in edit mode; one shared download; failures change nothing). Nothing is drawn yet: the "Card UI redesign build" thread renders it.
 - **2026-10-22:** Channel navigation logic (draft PR): `recents.ts`, `number-entry.ts`, `volume.ts`, `sleep-timer.ts`; button actions `channel_up`, `channel_down`, `last_channel`, `sleep`, `volume`, `mute`, `unmute`; keyboard keys; documented how the companion integration's media_player will map onto `controller.request()`. New unit tests (navigation, controller sleep/commands) and e2e tests including the sleep timer's connection release, also for a closed pop-up. Fixed a unit test that silently replaced `window.addEventListener` for every later test in its file.

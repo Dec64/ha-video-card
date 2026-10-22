@@ -11,6 +11,7 @@ defaults:
 
 jobs:
   check:
+    timeout-minutes: 45
     name: Lint, types, unit tests, build
     runs-on: ubuntu-latest
     steps:
@@ -31,6 +32,7 @@ jobs:
             card/dist/*.txt
 
   e2e:
+    timeout-minutes: 45
     name: E2E (Chromium + MSE shim)
     runs-on: ubuntu-latest
     steps:
@@ -40,7 +42,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: card/package-lock.json
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - uses: ./.github/actions/setup-ffmpeg
+        timeout-minutes: 25
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run build
@@ -52,6 +55,7 @@ jobs:
           path: card/playwright-report/
 
   e2e-chrome:
+    timeout-minutes: 45
     name: E2E (Google Chrome, real decode)
     runs-on: ubuntu-latest
     steps:
@@ -61,7 +65,8 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: card/package-lock.json
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - uses: ./.github/actions/setup-ffmpeg
+        timeout-minutes: 25
       - run: npm ci
       - run: npx playwright install --with-deps chrome
       - run: npm run build
@@ -75,6 +80,7 @@ jobs:
           path: card/playwright-report/
 
   e2e-ha:
+    timeout-minutes: 45
     name: E2E (real Home Assistant + Bubble Card)
     runs-on: ubuntu-latest
     steps:
@@ -85,7 +91,8 @@ jobs:
           cache: npm
           cache-dependency-path: card/package-lock.json
       - uses: astral-sh/setup-uv@v6
-      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - uses: ./.github/actions/setup-ffmpeg
+        timeout-minutes: 25
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run build
