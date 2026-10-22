@@ -148,6 +148,24 @@ export class ChannelList {
     return list[(i + delta + list.length) % list.length];
   }
 
+  /** Channels whose number starts with `digits`, lowest number first (for number entry). */
+  numberMatches(digits: string, limit = 5): Channel[] {
+    if (!/^\d+$/.test(digits)) return [];
+    const exact = this.all.find((c) => c.number === digits);
+    const rest = this.channels.filter((c) => c !== exact && (c.number ?? '').startsWith(digits));
+    return (exact ? [exact, ...rest] : rest).slice(0, limit);
+  }
+
+  /** True when `digits` is a channel number and no longer number starts with it. */
+  numberIsComplete(digits: string): boolean {
+    let exact = false;
+    for (const c of this.all) {
+      if (c.number === digits) exact = true;
+      else if (c.number?.startsWith(digits)) return false;
+    }
+    return exact;
+  }
+
   /** Channels in a group ('' = all, '★' = favourites) matching a search on name or number. */
   filter(query: string, group: string): Channel[] {
     const source =

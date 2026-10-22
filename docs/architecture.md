@@ -48,6 +48,7 @@ How the card works today and the contracts other code relies on. For using the c
 | `epg.ts` | Now/next (`epg`): streaming XMLTV parser and the page-wide `GuideFeed`. A lazy chunk, loaded only by cards with `epg` on. |
 | `picker.ts` | The channel browser element. It only fires events; the card plays. |
 | `memory.ts` | Last channel and play intent per target, per device (localStorage). |
+| `recents.ts`, `number-entry.ts`, `volume.ts`, `sleep-timer.ts` | Channel navigation logic: recently watched per target and device, remote-style number entry, remembered volume, sleep timers (owned by the controller). No markup. |
 | `editor-form.ts` | Schema for HA's visual editor (`getConfigForm`), a lazy chunk. |
 | `errors.ts` | Every user-facing message. The README troubleshooting table must list each one (checked by `scripts/check-messages.mjs`). |
 
@@ -60,7 +61,7 @@ How the card works today and the contracts other code relies on. For using the c
 | `disconnected` | Element removed (closed Bubble pop-up, view switch, dashboard navigation) |
 | `preview` | HA's card editor or dashboard edit mode (`preview` / `editMode`, or inside the editor dialog) |
 | `no-source` | Nothing chosen yet |
-| `stopped` | Stop button, a stop button action, idle timeout, or an error |
+| `stopped` | Stop button, a stop button action, idle timeout, sleep timer, or an error |
 | `page-hidden` | `visibilitychange` hidden or `pagehide` (app backgrounded, tab hidden, screen locked) |
 | `screen-off` | Fully Kiosk `screenOff` or screensaver |
 | `hidden` | IntersectionObserver: the card isn't on screen (`display: none`, scrolled out of a hidden container) |
@@ -131,6 +132,7 @@ tap_action:
     open: "#kitchen-tv"      # optional: Bubble pop-up hash or dashboard path
   # stream_card: { target: kitchen_tv, action: stop }   ← stop button
 ```
+Other actions, which steer the target instead of choosing a channel: `channel_up`, `channel_down`, `last_channel`, `sleep` (with `sleep: <minutes>`, 0 cancels), `volume` (with `volume: 0–100`), `mute`, `unmute`. They never change the target's last channel. With no live card for the target: `sleep` still starts, `volume` is saved to device memory, `last_channel` plays the device's previous recent, `channel_up`/`channel_down` wait in the mailbox (30 s), and `mute`/`unmute` are dropped.
 
 ### Engine
 `card/src/engines/types.ts`. Engines report data, media info and errors; the session watches the `<video>` itself for playing and stalls, so both engines share one watchdog.
@@ -154,10 +156,37 @@ interface EngineError {
 ```
 
 ### Controller (one per page, on `window.__streamCard`)
-`request(req)`, `take(target)`, `lastFor(target)`, `stop(target)`, `stopCount(target)`, `register(card)`, `unregister(card)`, `onFullyEvent(name)`. Pending requests expire after 30 s. Requests without a target go to `default`. `stop` clears the target's pending and last request, marks the device memory stopped, and bumps `stopCount`.
+`request(req)`, `take(target)`, `lastFor(target)`, `stop(target)`, `stopCount(target)`, `setSleep(target, minutes)`, `extendSleep(target, minutes)`, `sleepFor(target)`, `register(card)`, `unregister(card)`, `onFullyEvent(name)`. Pending requests expire after 30 s. Requests without a target go to `default`. `stop` clears the target's pending and last request, cancels its sleep timer, marks the device memory stopped, and bumps `stopCount`.
+
+A registered card implements `ControllerCard`: `target`, `isLive`, `deliver(req)`, `stopFromController()`, `command(req)` (the navigation actions above) and `sleepChanged()`.
+
+`request()` is the one entry point for every way of steering a target: HA buttons, the card's own controls, and later the companion integration (below).
+
+**Sleep timer.** One per target, owned by the controller, so every card on the target shares it and a closed pop-up still stops on time. It wakes once when its last minute starts (`sleepFor(target).warning`, cards repaint each second from then) and once at the deadline, where it calls `stop(target)`: the same release path as a stop button.
 
 ### Device memory
-`localStorage['stream-card:last:<target>']` = `{ channel?, url?, title?, playing }`. `channel` is always the resolved stream ID.
+- `localStorage['stream-card:last:<target>']` = `{ channel?, url?, title?, playing }`. `channel` is always the resolved stream ID.
+- `localStorage['stream-card:recent:<target>']` = up to 8 `{ channel?, url?, title? }`, newest first, no duplicates. Last channel is the newest entry that isn't playing now.
+- `localStorage['stream-card:volume']` = `0`–`1`, for every card on the device.
+- `localStorage['stream-card:sleep:<target>']` = the sleep deadline (epoch ms). One that passed while the page was closed stops the target when the controller next looks at it.
+
+### Card navigation API
+For the templates (`navView()` returns the data, `navActions()` the callbacks; an action left out hides its control): `recents`, `previousChannel`, `numberEntry` (`{ digits, candidates }`), `volume` (0–1), `sleep` (`{ endsAt, remainingMs, warning }`); `lastChannel()`, `pressDigit(d)`, `clearDigits()`, `commitDigits()`, `setVolume(v)`, `setSleep(minutes)`, `extendSleep(minutes)`, plus `channelUp()`, `channelDown()` and `keepWatching()`. Keys (digits, Enter (commits digits, else toggles the guide unless a button has focus), Escape, Backspace, arrows, Page Up/Down, M, F) are handled on the card host and ignored inside the picker and text fields. Number entry tunes after 2 s, on Enter, at 5 digits, or as soon as the channel list has an exact number with no longer one starting with it.
+
+### Companion integration mapping (planned, Phase 3)
+The per-screen `media_player` will call the screen's controller with `request()`, so it needs no new card code paths:
+
+| media_player | Card request |
+|---|---|
+| `play_media` (`media_content_id`: channel name, number or UUID) | `{ action: play, channel }` |
+| `media_stop` / `turn_off` | `{ action: stop }` |
+| `media_next_track` / `media_previous_track` | `channel_up` / `channel_down` |
+| `select_source` (source list = favourites + recents) | `{ action: play, channel }` |
+| `volume_set` (0–1) / `volume_mute` | `{ action: volume, volume: v × 100 }` / `mute` or `unmute` |
+| service `stream_card.sleep_timer` (`minutes`) | `{ action: sleep, sleep }` |
+| service `stream_card.last_channel` | `last_channel` |
+
+State reported back (title, channel number, volume, muted, sleep deadline) comes from the same card getters.
 
 ## Errors
 
@@ -165,7 +194,7 @@ Engines report `EngineError`s; the session decides retry or stop: network drops,
 
 ## Build and packaging
 
-Vite library build in `card/dist/`: `stream-card.js` (entry, budget 25 KB gzipped, enforced by `npm run check`), hashed lazy chunks for the mpegts engine, the video lock and the editor form, and `mpegts-<version>.js` copied unmodified from npm with its licence. Every file sits in one folder; chunks load relative to the entry, so `/local/…` and `/hacsfiles/…` both work. A `v*` tag runs `.github/workflows/release.yml`, which checks the tag matches `package.json` and attaches a zip (for HACS) and the loose files.
+Vite library build in `card/dist/`: `stream-card.js` (entry, budget 32 KB gzipped, enforced by `npm run check`), hashed lazy chunks for the mpegts engine, the video lock and the editor form, and `mpegts-<version>.js` copied unmodified from npm with its licence. Every file sits in one folder; chunks load relative to the entry, so `/local/…` and `/hacsfiles/…` both work. A `v*` tag runs `.github/workflows/release.yml`, which checks the tag matches `package.json` and attaches a zip (for HACS) and the loose files.
 
 ## Testing
 
