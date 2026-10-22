@@ -1,18 +1,29 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { PENDING_TTL_MS, StreamController, type ControllerCard } from '../../src/controller';
+import { writeRemembered } from '../../src/memory';
+import { pushRecent } from '../../src/recents';
 import type { StreamRequest } from '../../src/types';
+import { readVolume } from '../../src/volume';
 
 function fakeCard(target: string, live = true) {
   const card = {
     target,
     isLive: live,
     got: [] as StreamRequest[],
+    commands: [] as StreamRequest[],
     stopped: 0,
+    sleepChanges: 0,
     deliver(r: StreamRequest) {
       card.got.push(r);
     },
     stopFromController() {
       card.stopped++;
+    },
+    command(r: StreamRequest) {
+      card.commands.push(r);
+    },
+    sleepChanged() {
+      card.sleepChanges++;
     },
   };
   return card satisfies ControllerCard;
@@ -26,6 +37,7 @@ const press = (stream_card: unknown) =>
 describe('StreamController', () => {
   let c: StreamController;
   beforeEach(() => {
+    localStorage.clear();
     c = new StreamController(window);
     c.install();
     history.replaceState(null, '', '/dash');
@@ -131,6 +143,11 @@ describe('StreamController', () => {
 
   it('binds Fully events when the Fully JS interface exists', () => {
     const bound: Record<string, string> = {};
+    // happy-dom's window setters can write through to the real window; put it back afterwards.
+    const realAdd = window.addEventListener;
+    onTestFinished(() => {
+      window.addEventListener = realAdd;
+    });
     const win = Object.assign(Object.create(window), {
       fully: { bind: (e: string, code: string) => (bound[e] = code) },
       addEventListener: () => {},
@@ -143,5 +160,108 @@ describe('StreamController', () => {
       'screenOn',
     ]);
     expect(bound.screenOff).toContain('onFullyEvent("screenOff")');
+  });
+
+  describe('navigation actions', () => {
+    it('sends channel up/down, last channel, volume and mute to live cards', () => {
+      const tv = fakeCard('tv');
+      c.register(tv);
+      for (const action of ['channel_up', 'channel_down', 'last_channel', 'mute', 'unmute']) {
+        press({ target: 'tv', action });
+      }
+      press({ target: 'tv', action: 'volume', volume: 40 });
+      expect(tv.commands.map((r) => r.action)).toEqual([
+        'channel_up',
+        'channel_down',
+        'last_channel',
+        'mute',
+        'unmute',
+        'volume',
+      ]);
+      expect(tv.got).toHaveLength(0);
+      // Commands never replace the target's last channel.
+      expect(c.lastFor('tv')).toBeUndefined();
+    });
+
+    it('remembers a volume set while no card is on the page', () => {
+      press({ target: 'tv', action: 'volume', volume: 25 });
+      expect(readVolume()).toBe(0.25);
+    });
+
+    it('keeps channel up/down in the mailbox for a card that mounts later', () => {
+      press({ target: 'popup', action: 'channel_up', open: '#tv' });
+      expect(c.take('popup')?.action).toBe('channel_up');
+    });
+
+    it('plays the previous recent for last channel when no card is on the page', () => {
+      pushRecent('tv', { channel: 'aaa' });
+      pushRecent('tv', { channel: 'bbb' });
+      writeRemembered('tv', { channel: 'bbb', playing: true });
+      press({ target: 'tv', action: 'last_channel' });
+      expect(c.take('tv')).toMatchObject({ channel: 'aaa', action: 'play' });
+    });
+
+    it('rejects invalid sleep and volume payloads', () => {
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      press({ target: 'tv', action: 'sleep' });
+      press({ target: 'tv', action: 'volume', volume: 101 });
+      expect(warn).toHaveBeenCalledTimes(2);
+      warn.mockRestore();
+    });
+  });
+
+  describe('sleep timer', () => {
+    it('stops the target when it runs out, with a warning first', () => {
+      vi.useFakeTimers();
+      const tv = fakeCard('tv');
+      c.register(tv);
+      c.request({ target: 'tv', channel: 'a' });
+      press({ target: 'tv', action: 'sleep', sleep: 2 });
+      expect(c.sleepFor('tv')).toMatchObject({ warning: false });
+      expect(tv.sleepChanges).toBe(1);
+      vi.advanceTimersByTime(60_000);
+      expect(c.sleepFor('tv')?.warning).toBe(true);
+      expect(tv.sleepChanges).toBe(2);
+      expect(tv.stopped).toBe(0);
+      vi.advanceTimersByTime(60_000);
+      expect(tv.stopped).toBe(1);
+      expect(c.sleepFor('tv')).toBeUndefined();
+      expect(c.lastFor('tv')).toBeUndefined();
+    });
+
+    it('stops a target whose card is off the page, so it comes back stopped', () => {
+      vi.useFakeTimers();
+      writeRemembered('popup', { channel: 'a', playing: true });
+      c.setSleep('popup', 1);
+      vi.advanceTimersByTime(60_000);
+      expect(c.stopCount('popup')).toBe(1);
+      expect(JSON.parse(localStorage.getItem('stream-card:last:popup')!).playing).toBe(false);
+    });
+
+    it('cancels, extends, and is cancelled by a stop', () => {
+      vi.useFakeTimers();
+      c.setSleep('tv', 10);
+      const end = c.sleepFor('tv')!.endsAt;
+      c.extendSleep('tv', 30);
+      expect(c.sleepFor('tv')!.endsAt).toBe(end + 30 * 60_000);
+      press({ target: 'tv', action: 'sleep', sleep: 0 });
+      expect(c.sleepFor('tv')).toBeUndefined();
+      c.setSleep('tv', 10);
+      c.stop('tv');
+      expect(c.sleepFor('tv')).toBeUndefined();
+      vi.advanceTimersByTime(11 * 60_000);
+      expect(c.stopCount('tv')).toBe(1);
+    });
+
+    it('survives a reload, and one that ran out meanwhile stops on load', () => {
+      vi.useFakeTimers();
+      c.setSleep('tv', 5);
+      const reloaded = new StreamController(window);
+      expect(reloaded.sleepFor('tv')?.remainingMs).toBe(5 * 60_000);
+      vi.setSystemTime(Date.now() + 6 * 60_000);
+      const later = new StreamController(window);
+      expect(later.sleepFor('tv')).toBeUndefined();
+      expect(later.stopCount('tv')).toBe(1);
+    });
   });
 });

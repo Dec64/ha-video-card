@@ -2,6 +2,7 @@ import { DEFAULT_TARGET, DEFAULT_URL_TEMPLATE } from './const';
 import type {
   ResolvedConfig,
   SourceType,
+  StreamAction,
   StreamCardConfig,
   StreamRequest,
   StreamSource,
@@ -213,6 +214,23 @@ export function resolveSource(req: StreamRequest, cfg: ResolvedConfig): StreamSo
   return { url: url.href, type: req.type ?? 'mpegts', title: req.title, channel };
 }
 
+const ACTIONS = new Set<string>([
+  'play',
+  'stop',
+  'channel_up',
+  'channel_down',
+  'last_channel',
+  'sleep',
+  'volume',
+  'mute',
+  'unmute',
+] satisfies StreamAction[]);
+
+function optionalNumberField(v: unknown): number | undefined {
+  const n = typeof v === 'string' && v.trim() ? Number(v) : v;
+  return typeof n === 'number' && Number.isFinite(n) ? n : undefined;
+}
+
 /**
  * Validates a button's `stream_card:` block. Returns undefined (and the caller logs) when the
  * payload is unusable, so one bad button can't break the page.
@@ -226,7 +244,7 @@ export function parseRequest(input: unknown): StreamRequest | undefined {
     return undefined;
   };
   const action = pick('action');
-  if (action !== undefined && action !== 'play' && action !== 'stop') return undefined;
+  if (action !== undefined && !ACTIONS.has(action)) return undefined;
   const type = pick('type');
   if (type !== undefined && type !== 'mpegts' && type !== 'native') return undefined;
   const req: StreamRequest = {
@@ -239,5 +257,15 @@ export function parseRequest(input: unknown): StreamRequest | undefined {
     open: pick('open'),
   };
   if (req.action === 'play' && !req.channel && !req.url) return undefined;
+  if (req.action === 'sleep') {
+    const m = optionalNumberField(input.sleep);
+    if (m === undefined || m < 0) return undefined;
+    req.sleep = m;
+  }
+  if (req.action === 'volume') {
+    const v = optionalNumberField(input.volume);
+    if (v === undefined || v < 0 || v > 100) return undefined;
+    req.volume = v;
+  }
   return req;
 }

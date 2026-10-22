@@ -8,9 +8,33 @@ import { icon } from './icons';
 import { readRemembered, writeRemembered } from './memory';
 import type { PickerState } from './picker';
 import { holdReason, LifecycleWatcher, type HoldReason } from './lifecycle';
+import { NumberEntry } from './number-entry';
+import { previousRecent, pushRecent, readRecents, type RecentEntry } from './recents';
 import { PlaybackSession, type SessionStatus } from './session';
+import type { SleepState } from './sleep-timer';
 import { styles } from './styles';
 import type { ResolvedConfig, StreamCardConfig, StreamRequest, StreamSource } from './types';
+import { clampVolume, readVolume, writeVolume } from './volume';
+
+/** Channel navigation state for the templates (recents, last channel, keypad, volume, sleep). */
+export interface NavView {
+  recents?: Channel[];
+  previousChannel?: Channel;
+  numberEntry?: { digits: string; candidates: Channel[] };
+  volume?: number;
+  sleep?: SleepState;
+}
+
+/** Channel navigation actions for the templates. A missing action hides its control. */
+export interface NavActions {
+  lastChannel?: () => void;
+  pressDigit?: (d: string) => void;
+  clearDigits?: () => void;
+  commitDigits?: () => void;
+  setVolume?: (v: number) => void;
+  setSleep?: (minutes: number) => void;
+  extendSleep?: (minutes: number) => void;
+}
 
 type UiState = 'preview' | 'empty' | 'ready' | 'connecting' | 'reconnecting' | 'playing' | 'error';
 
@@ -78,6 +102,13 @@ export class StreamCard extends LitElement implements ControllerCard {
   private lookupPlay = false;
   /** The controller's stop count for this target when this card last took a request or stop. */
   private stopGen?: number;
+  private readonly numbers = new NumberEntry(
+    (digits) => this.tuneNumber(digits),
+    () => this.refresh(),
+    (digits) => this.channels?.numberIsComplete(digits) ?? false,
+  );
+  /** Repaints the sleep countdown once a second during its last minute. */
+  private sleepTicker?: ReturnType<typeof setInterval>;
 
   constructor() {
     super();
@@ -92,6 +123,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.video.preload = 'none';
     this.video.controls = false;
     this.video.muted = true;
+    this.video.volume = readVolume() ?? 1;
     (this.video as HTMLVideoElement & { disableRemotePlayback: boolean }).disableRemotePlayback =
       true;
     this.watcher = new LifecycleWatcher(
@@ -164,8 +196,42 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.wantPlaying = false;
     this.lookupPlay = false;
     this.stopGen = this.controller.stopCount(this.target);
+    this.numbers.clear();
     this.remember();
     this.evaluate();
+  }
+
+  command(req: StreamRequest): void {
+    switch (req.action) {
+      case 'channel_up':
+        return this.channelUp();
+      case 'channel_down':
+        return this.channelDown();
+      case 'last_channel':
+        return this.lastChannel();
+      case 'volume':
+        if (req.volume !== undefined) this.setVolume(req.volume / 100);
+        return;
+      case 'mute':
+        if (!this.effectiveMuted) this.toggleMute();
+        return;
+      case 'unmute':
+        // Unmuting without a tap would pause a stream the browser only allowed muted.
+        if (this.status?.mutedByPolicy) this.userMuted = false;
+        else if (this.effectiveMuted) this.toggleMute();
+        return;
+    }
+  }
+
+  sleepChanged(): void {
+    const s = this.sleep;
+    if (s?.warning && this.isConnected && !this.sleepTicker) {
+      this.sleepTicker = setInterval(() => this.sleepChanged(), 1000);
+    } else if (!s?.warning && this.sleepTicker) {
+      clearInterval(this.sleepTicker);
+      this.sleepTicker = undefined;
+    }
+    this.refresh();
   }
 
   // ---- lifecycle ----
@@ -188,6 +254,8 @@ export class StreamCard extends LitElement implements ControllerCard {
     }
     this.ensureChannels();
     if (this.config?.debug) this.debugTimer = setInterval(() => this.refresh(), 1000);
+    this.addEventListener('keydown', this.onKeyDown);
+    this.sleepChanged();
     this.evaluate();
   }
 
@@ -198,6 +266,10 @@ export class StreamCard extends LitElement implements ControllerCard {
     document.removeEventListener('webkitfullscreenchange', this.onFullscreenChange);
     clearInterval(this.debugTimer);
     clearTimeout(this.controlsTimer);
+    clearInterval(this.sleepTicker);
+    this.sleepTicker = undefined;
+    this.removeEventListener('keydown', this.onKeyDown);
+    this.numbers.clear();
     super.disconnectedCallback();
     this.evaluate();
   }
@@ -276,25 +348,31 @@ export class StreamCard extends LitElement implements ControllerCard {
   private pickInitialRequest(): void {
     if (!this.config) return;
     const pending = this.controller.take(this.target);
-    if (pending) {
+    if (pending && (pending.action ?? 'play') === 'play') {
       this.applyRequest(pending, true);
       return;
     }
+    this.pickStartingChannel(this.config);
+    // Channel up/down pressed while this card was off the page: step from where it starts,
+    // before the card connects to that channel.
+    if (pending) this.command(pending);
+  }
+
+  private pickStartingChannel(config: ResolvedConfig): void {
     if (this.request) return;
     const last = this.controller.lastFor(this.target);
     if (last) {
-      this.applyRequest(last, this.config.autoplay);
+      this.applyRequest(last, config.autoplay);
       return;
     }
     // A channel this device left stopped comes back stopped.
-    const saved = this.config.rememberChannel ? readRemembered(this.target) : undefined;
+    const saved = config.rememberChannel ? readRemembered(this.target) : undefined;
     if (saved) {
       const req = { channel: saved.channel, url: saved.url, title: saved.title };
-      this.applyRequest(req, this.config.autoplay && saved.playing !== false);
+      this.applyRequest(req, config.autoplay && saved.playing !== false);
       return;
     }
-    if (this.config.defaultRequest)
-      this.applyRequest(this.config.defaultRequest, this.config.autoplay);
+    if (config.defaultRequest) this.applyRequest(config.defaultRequest, config.autoplay);
   }
 
   private refresh(): void {
@@ -363,8 +441,17 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.source = { ...src, title: req.title ?? src.title };
     this.error = undefined;
     if (play) this.wantPlaying = true;
+    if (!this.isPreview) pushRecent(this.target, this.recentEntry(req) ?? {});
     this.remember();
     this.evaluate();
+  }
+
+  /** What recents store for a request: the resolved stream ID, or the full URL. */
+  private recentEntry(req: StreamRequest | undefined): RecentEntry | undefined {
+    if (!req || !this.source) return undefined;
+    return this.source.channel
+      ? { channel: this.source.channel, title: req.title }
+      : { url: req.url, title: req.title };
   }
 
   /** Saves the current channel and play intent for this target on this device. */
@@ -514,19 +601,179 @@ export class StreamCard extends LitElement implements ControllerCard {
   };
 
   private channelStep(delta: 1 | -1): void {
-    const ch = this.channels?.neighbour(this.currentChannel?.id, delta);
+    if (!this.channels) {
+      // A remote press can come before the list is loaded.
+      void this.ensureChannels().then((list) => list && this.channelStep(delta));
+      return;
+    }
+    const ch = this.channels.neighbour(this.currentChannel?.id, delta);
     if (ch) this.playChannel(ch);
     this.showControls();
   }
 
-  private channelUp = (e?: Event): void => {
+  channelUp = (e?: Event): void => {
     e?.stopPropagation();
     this.channelStep(1);
   };
 
-  private channelDown = (e?: Event): void => {
+  channelDown = (e?: Event): void => {
     e?.stopPropagation();
     this.channelStep(-1);
+  };
+
+  // ---- channel navigation: recents, last channel, number entry, volume, sleep ----
+
+  /** The key recents use for what's selected now. */
+  private get currentKey(): string | undefined {
+    return this.source?.channel ?? this.request?.url;
+  }
+
+  /** This device's recently watched channels for the target, newest first, current included. */
+  get recents(): Channel[] {
+    const list = this.channels;
+    if (!list || this.isPreview) return [];
+    return readRecents(this.target)
+      .map((e) => list.find(e.channel ?? e.url))
+      .filter((c): c is Channel => !!c);
+  }
+
+  private get previousEntry(): RecentEntry | undefined {
+    return this.isPreview ? undefined : previousRecent(this.target, this.currentKey);
+  }
+
+  /** The channel "Last channel" goes back to. */
+  get previousChannel(): Channel | undefined {
+    const e = this.previousEntry;
+    return e ? this.channels?.find(e.channel ?? e.url) : undefined;
+  }
+
+  /** Flips back to the previous channel, like a remote's Last/Recall key. */
+  lastChannel = (e?: Event): void => {
+    e?.stopPropagation();
+    const prev = this.previousEntry;
+    if (!prev) return;
+    this.controller.request({
+      target: this.target,
+      action: 'play',
+      channel: prev.channel,
+      url: prev.url,
+      title: prev.title,
+    });
+    this.showControls();
+  };
+
+  /** Digits typed so far and the channels they could become; undefined when not typing. */
+  get numberEntry(): { digits: string; candidates: Channel[] } | undefined {
+    const digits = this.numbers.digits;
+    if (!digits) return undefined;
+    return { digits, candidates: this.channels?.numberMatches(digits) ?? [] };
+  }
+
+  pressDigit = (d: string): void => {
+    if (!this.channels || this.isPreview) return;
+    this.numbers.press(d);
+    this.showControls();
+  };
+
+  clearDigits = (): void => this.numbers.clear();
+
+  commitDigits = (): void => this.numbers.commit();
+
+  /** Deletes the last typed digit. */
+  deleteDigit = (): void => this.numbers.delete();
+
+  private tuneNumber(digits: string): void {
+    const ch = this.channels?.numberMatches(digits, 1)[0];
+    if (ch?.number === digits) this.playChannel(ch);
+  }
+
+  /** This device's volume, 0..1 (the mute button is separate). */
+  get volume(): number {
+    return this.video.volume;
+  }
+
+  /** Sets and remembers this device's volume. Raising it above 0 also unmutes. */
+  setVolume = (v: number): void => {
+    const vol = clampVolume(v);
+    this.video.volume = vol;
+    writeVolume(vol);
+    if (vol > 0 && this.effectiveMuted && !this.status?.mutedByPolicy) this.toggleMute();
+    else this.refresh();
+  };
+
+  get sleep(): SleepState | undefined {
+    return this.isPreview ? undefined : this.controller.sleepFor(this.target);
+  }
+
+  /** Stops this target in `minutes` (0 cancels). Every card on the target shares the timer. */
+  setSleep = (minutes: number): void => {
+    this.controller.setSleep(this.target, minutes);
+  };
+
+  extendSleep = (minutes: number): void => {
+    this.controller.extendSleep(this.target, minutes);
+  };
+
+  /** Cancels the sleep timer from its last-minute warning. */
+  keepWatching = (): void => this.setSleep(0);
+
+  /** Data the navigation controls render from. */
+  navView(): NavView {
+    if (this.isPreview) return {};
+    const list = !!this.channels;
+    return {
+      recents: list ? this.recents : undefined,
+      previousChannel: this.previousChannel,
+      numberEntry: this.numberEntry,
+      volume: this.volume,
+      sleep: this.sleep,
+    };
+  }
+
+  /** Callbacks for the navigation controls; ones that can't work now are left out. */
+  navActions(): NavActions {
+    if (this.isPreview) return {};
+    const list = this.channelState === 'ready' && !!this.channels?.size;
+    return {
+      lastChannel: this.previousEntry ? this.lastChannel : undefined,
+      pressDigit: list ? this.pressDigit : undefined,
+      clearDigits: list ? this.clearDigits : undefined,
+      commitDigits: list ? this.commitDigits : undefined,
+      setVolume: this.setVolume,
+      setSleep: this.setSleep,
+      extendSleep: this.extendSleep,
+    };
+  }
+
+  /** Remote and keyboard keys while focus is in the card (never in the picker or a text field). */
+  private onKeyDown = (e: KeyboardEvent): void => {
+    if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || this.isPreview) return;
+    const path = e.composedPath();
+    const inField = path.some(
+      (n) =>
+        n instanceof HTMLElement &&
+        (n.tagName === 'INPUT' ||
+          n.tagName === 'TEXTAREA' ||
+          n.tagName === 'SELECT' ||
+          n.tagName === 'STREAM-CARD-PICKER' ||
+          n.isContentEditable),
+    );
+    if (inField) return;
+    const typing = !!this.numbers.digits;
+    let handled = true;
+    if (/^\d$/.test(e.key)) this.pressDigit(e.key);
+    else if (e.key === 'Enter' && typing) this.commitDigits();
+    else if (e.key === 'Escape' && typing) this.clearDigits();
+    else if (e.key === 'Backspace') {
+      if (typing) this.deleteDigit();
+      else this.lastChannel();
+    } else if (e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'ChannelUp') this.channelUp();
+    else if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.key === 'ChannelDown')
+      this.channelDown();
+    else if (e.key === 'm' || e.key === 'M' || e.key === 'AudioVolumeMute') this.toggleMute();
+    else if (e.key === 'f' || e.key === 'F') void this.toggleFullscreen();
+    else handled = false;
+    if (handled) e.preventDefault();
   };
 
   /** Stops the target like a stop button, so a recreated card or a reload stays stopped. */
@@ -661,6 +908,9 @@ export class StreamCard extends LitElement implements ControllerCard {
       lastError: this.status?.lastError,
       channels: { state: this.channelState, count: this.channels?.size ?? 0 },
       pickerOpen: this.showPicker,
+      volume: this.video.volume,
+      sleep: this.sleep,
+      typed: this.numbers.digits,
       stats,
     };
   }

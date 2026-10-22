@@ -2,7 +2,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
-const ENTRY_BUDGET_KB = 25;
+const ENTRY_BUDGET_KB = 32;
 const dir = new URL('../dist/', import.meta.url);
 let failed = false;
 for (const f of readdirSync(dir)

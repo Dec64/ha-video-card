@@ -46,15 +46,33 @@ export interface ResolvedConfig {
   rememberChannel: boolean;
 }
 
-/** A play/stop request, from a button's `stream_card:` block or the card's own config. */
+export type StreamAction =
+  | 'play'
+  | 'stop'
+  | 'channel_up'
+  | 'channel_down'
+  | 'last_channel'
+  | 'sleep'
+  | 'volume'
+  | 'mute'
+  | 'unmute';
+
+/** Actions that steer whatever the target is playing rather than choosing a channel. */
+export type NavAction = Exclude<StreamAction, 'play' | 'stop'>;
+
+/** A request from a button's `stream_card:` block, the card's own config, or the card itself. */
 export interface StreamRequest {
   target?: string;
-  action?: 'play' | 'stop';
+  action?: StreamAction;
   channel?: string;
   url?: string;
   type?: SourceType;
   title?: string;
   open?: string;
+  /** `action: sleep`: minutes until the target stops; 0 cancels. */
+  sleep?: number;
+  /** `action: volume`: 0–100. */
+  volume?: number;
 }
 
 /** Something the card can hand to an engine. */
