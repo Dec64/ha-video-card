@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Engine, EngineEvent } from '../../src/engines/types';
+import type { StreamSource } from '../../src/types';
 import {
   PlaybackSession,
   reserveAhead,
@@ -54,24 +55,23 @@ const flush = async () => {
   for (let i = 0; i < 5; i++) await Promise.resolve();
 };
 
-function setup(over: Partial<ConstructorParameters<typeof PlaybackSession>[2]> = {}) {
+function setup(
+  over: Partial<ConstructorParameters<typeof PlaybackSession>[2]> = {},
+  source: StreamSource = { url: 'https://d.example/proxy/ts/stream/a', type: 'mpegts' },
+) {
   const video = fakeVideo();
   const statuses: SessionStatus[] = [];
-  const s = new PlaybackSession(
-    video,
-    { url: 'https://d.example/proxy/ts/stream/a', type: 'mpegts' },
-    {
-      startTimeoutMs: 5000,
-      maxAttempts: 3,
-      muted: false,
-      backoffMs: [100, 200],
-      stallTimeoutMs: 2000,
-      createEngine: async () => new FakeEngine(),
-      diagnose: async () => 'unreachable',
-      onStatus: (st) => statuses.push(st),
-      ...over,
-    },
-  );
+  const s = new PlaybackSession(video, source, {
+    startTimeoutMs: 5000,
+    maxAttempts: 3,
+    muted: false,
+    backoffMs: [100, 200],
+    stallTimeoutMs: 2000,
+    createEngine: async () => new FakeEngine(),
+    diagnose: async () => 'unreachable',
+    onStatus: (st) => statuses.push(st),
+    ...over,
+  });
   return { s, video, statuses, engine: () => FakeEngine.created.at(-1)! };
 }
 
@@ -275,6 +275,20 @@ describe('PlaybackSession with buffer: stable', () => {
     expect(video.paused).toBe(false);
     expect(statuses.at(-1)?.buffering).toBe(false);
     expect(FakeEngine.created).toHaveLength(1);
+    void s.destroy();
+  });
+
+  it('plays a native source at once: with preload none it would never build a reserve', async () => {
+    const { s, video, statuses, engine } = setup(
+      { buffer: 'stable' },
+      { url: 'https://d.example/live.m3u8', type: 'native' },
+    );
+    s.start();
+    await flush();
+    engine().emit({ type: 'data' });
+    await vi.advanceTimersByTimeAsync(600);
+    expect(video.paused).toBe(false);
+    expect(statuses.some((st) => st.buffering)).toBe(false);
     void s.destroy();
   });
 

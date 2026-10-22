@@ -195,8 +195,12 @@ export class PlaybackSession {
     await this.play(id);
   }
 
+  /**
+   * The reserve logic is for mpegts.js, which buffers into MSE whatever the video is doing. A
+   * native source with `preload="none"` wouldn't buffer before play(), so it never holds.
+   */
   private get stable(): boolean {
-    return this.opts.buffer === 'stable';
+    return this.opts.buffer === 'stable' && this.source.type === 'mpegts';
   }
 
   /** Pause the picture until the reserve is built (start) or refilled (after running dry). */
