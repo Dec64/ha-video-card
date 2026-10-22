@@ -2,6 +2,7 @@ import { DEFAULT_TARGET, DEFAULT_URL_TEMPLATE } from './const';
 import type {
   GuideMode,
   ResolvedConfig,
+  ResolvedMultiview,
   SourceType,
   StreamAction,
   StreamCardConfig,
@@ -103,17 +104,42 @@ export function parseAspectRatio(v: string | undefined): string {
   throw new ConfigError('"aspect_ratio" must look like "16:9"');
 }
 
+export const MULTIVIEW_MAX_TILES = 4;
+/** Two tiles unless a card asks for more: Fire HD 8 tablets struggle beyond that. */
+export const MULTIVIEW_DEFAULT_TILES = 2;
+
+function profileId(raw: Record<string, unknown>, key: string, label: string): string | undefined {
+  const v = optionalString(raw, key);
+  if (v !== undefined && !/^\d+$/.test(v)) {
+    throw new ConfigError(`"${label}" must be the numeric ID of a Dispatcharr output profile`);
+  }
+  return v;
+}
+
+function normalizeMultiview(v: unknown, outputProfile: string | undefined): ResolvedMultiview {
+  if (v === undefined || v === null || typeof v === 'boolean') {
+    return { enabled: v === true, maxTiles: MULTIVIEW_DEFAULT_TILES, outputProfile };
+  }
+  if (!isPlainObject(v)) {
+    throw new ConfigError('"multiview" must be true, false or an object, e.g. { enabled: true }');
+  }
+  const maxTiles = optionalNumber(v, 'max_tiles', MULTIVIEW_DEFAULT_TILES, 2);
+  if (!Number.isInteger(maxTiles) || maxTiles > MULTIVIEW_MAX_TILES) {
+    throw new ConfigError(`"max_tiles" must be a whole number from 2 to ${MULTIVIEW_MAX_TILES}`);
+  }
+  return {
+    enabled: optionalBool(v, 'enabled', false),
+    maxTiles,
+    outputProfile: profileId(v, 'output_profile', 'multiview.output_profile') ?? outputProfile,
+  };
+}
+
 export function normalizeConfig(input: unknown): ResolvedConfig {
   if (!isPlainObject(input)) throw new ConfigError('Card config must be an object');
   const raw = input as Record<string, unknown> & Partial<StreamCardConfig>;
 
   const base = optionalString(raw, 'dispatcharr_url');
-  const outputProfile = optionalString(raw, 'output_profile');
-  if (outputProfile !== undefined && !/^\d+$/.test(outputProfile)) {
-    throw new ConfigError(
-      '"output_profile" must be the numeric ID of a Dispatcharr output profile',
-    );
-  }
+  const outputProfile = profileId(raw, 'output_profile', 'output_profile');
   const urlTemplate = optionalString(raw, 'url_template') ?? DEFAULT_URL_TEMPLATE;
   if (!urlTemplate.includes('{channel}')) {
     throw new ConfigError('"url_template" must contain {channel}');
@@ -176,6 +202,7 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     // days=1: Dispatcharr sends only the next 24 hours, not the whole guide.
     epgUrl: epgUrl ?? (base ? `${normalizeBaseUrl(base)}/output/epg?days=1` : undefined),
     guide: guide as GuideMode,
+    multiview: normalizeMultiview(raw.multiview, outputProfile),
   };
   // On by default whenever there's a channel list and a guide to read (dispatcharr_url set).
   resolved.epg = optionalBool(raw, 'epg', resolved.channelList && !!resolved.epgUrl);

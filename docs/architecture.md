@@ -4,7 +4,7 @@ How the card works today and the contracts other code relies on. For using the c
 
 ## The one rule
 
-**Nobody watching means no Dispatcharr connection.** Every design choice below serves it: a card holds at most one stream, releases it synchronously on every "not visible" signal, and never opens one in the dashboard editor. Every release path has an e2e test that counts open connections on a fake Dispatcharr server, not client state.
+**Nobody watching means no Dispatcharr connection.** Every design choice below serves it: a card holds at most one stream (one per tile in opt-in multiview), releases it synchronously on every "not visible" signal, and never opens one in the dashboard editor. Every release path has an e2e test that counts open connections on a fake Dispatcharr server, not client state.
 
 ## Pieces
 
@@ -53,6 +53,7 @@ How the card works today and the contracts other code relies on. For using the c
 | `memory.ts` | Last channel and play intent per target, per device (localStorage). |
 | `recents.ts`, `number-entry.ts`, `volume.ts`, `sleep-timer.ts` | Channel navigation logic: recently watched per target and device, remote-style number entry, remembered volume, sleep timers (owned by the controller). No markup. |
 | `editor-form.ts` | Schema for HA's visual editor (`getConfigForm`), a lazy chunk. |
+| `multiview.ts` | The multiview grid (`stream-card-multiview`), a lazy chunk. It borrows Lit, `PlaybackSession` and the icons from the entry (`defineMultiview(deps)`) so the build doesn't split them into a shared chunk. |
 | `errors.ts` | Every user-facing message. The README troubleshooting table must list each one (checked by `scripts/check-messages.mjs`). |
 
 ## When the card plays
@@ -70,6 +71,17 @@ How the card works today and the contracts other code relies on. For using the c
 | `hidden` | IntersectionObserver: the card isn't on screen (`display: none`, scrolled out of a hidden container) |
 
 Any change re-runs `evaluate()`. A hold destroys the session at once: the engine aborts its fetch synchronously (`ImmediateAbortLoader`; mpegts.js's own loader leaves a stalled fetch open on Chrome) and defers the rest of mpegts.js's teardown one tick. The next engine waits on `videoIdle()` before touching the same `<video>`. Coming back plays from the live edge.
+
+## Multiview
+
+Opt-in per card (`multiview.enabled`, needs the channel list). The grid has 2–4 tiles (`max_tiles`, default 2); each tile owns a `<video>` created once (never in a template) and at most one `PlaybackSession`, so **each tile is one Dispatcharr connection** and the header says how many are open.
+
+- **Who decides.** While multiview is on, `evaluate()` treats the grid as the source, stops the single session (`lastRelease: multiview`) and calls `grid.setAllowed(hold === null)`. The grid starts tiles only while allowed and destroys every tile session synchronously when not, so every hold reason above releases every tile. The grid also halts itself in `disconnectedCallback`. Preview/edit mode hides the grid and shows the editing placeholder.
+- **Within the grid.** Changing or removing a tile, or shrinking the layout, destroys that tile's session before anything else starts on it. A tile that fails shows its own error and Retry; the other tiles keep playing.
+- **Sound.** One tile has the sound (`audio`); the rest are muted with `PlaybackSession.setMuted()`, which also survives reconnects. Moving the sound is a tap, so it also clears a browser's autoplay mute.
+- **Leaving.** Exit and a tile's Full size hand that tile's request to the controller (so the target's last channel follows); a button request for the target, the Stop button, a stop button and the idle timeout leave multiview first. The idle timer runs while the grid is allowed to play.
+- **Decoder load.** Every 2 s the grid sums decoded and dropped frames over playing tiles (`getStats`); two samples in a row with more than a quarter dropped show `multiviewStruggling`. Tiles use `multiview.output_profile` (default the card's) so tablets can get a lower-resolution profile.
+- Tiles are not remembered per device yet; a reload comes back to the single picture.
 
 ## Choosing what to play
 
@@ -129,6 +141,10 @@ aspect_ratio: "16:9"
 idle_timeout: 0                     # minutes, 0 = off; counts as a stop
 start_timeout: 20                   # seconds to wait for first data
 reconnect: { max_attempts: 5 }      # backoff 1, 2, 4, 8, 15 s
+multiview:                          # off by default; `multiview: true` = { enabled: true }
+  enabled: true                     # the multiview button (needs the channel list)
+  max_tiles: 2                      # 2–4; each tile is its own Dispatcharr connection
+  output_profile: 5                 # optional: profile for tiles; default the card's
 debug: false
 ```
 
@@ -206,7 +222,7 @@ Engines report `EngineError`s; the session decides retry or stop: network drops,
 
 ## Build and packaging
 
-Vite library build in `card/dist/`: `stream-card.js` (entry) and the chunks it imports statically (shared code such as Lit), budget 36 KB gzipped for that initial load, enforced by `npm run check`; hashed lazy chunks for the mpegts engine, the guide, the now/next feed (`epg.ts`), the video lock and the editor form; and `mpegts-<version>.js` copied unmodified from npm with its licence. Every file sits in one folder; chunks load relative to the entry, so `/local/…` and `/hacsfiles/…` both work. A `v*` tag runs `.github/workflows/release.yml`, which checks the tag matches `package.json` and attaches a zip (for HACS) and the loose files.
+Vite library build in `card/dist/`: `stream-card.js` (entry) and the chunks it imports statically (shared code such as Lit), budget 36 KB gzipped for that initial load, enforced by `npm run check`; hashed lazy chunks for the mpegts engine, the guide, the now/next feed (`epg.ts`), the video lock, the editor form and the multiview grid; and `mpegts-<version>.js` copied unmodified from npm with its licence. Every file sits in one folder; chunks load relative to the entry, so `/local/…` and `/hacsfiles/…` both work. A `v*` tag runs `.github/workflows/release.yml`, which checks the tag matches `package.json` and attaches a zip (for HACS) and the loose files.
 
 ## Testing
 

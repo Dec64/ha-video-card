@@ -23,6 +23,16 @@ export interface StreamCardConfig {
   epg?: boolean;
   epg_url?: string;
   guide?: GuideMode;
+  multiview?: boolean | MultiviewConfig;
+}
+
+/** The card's `multiview:` block. `multiview: true` is short for `{ enabled: true }`. */
+export interface MultiviewConfig {
+  enabled?: boolean;
+  /** Most tiles at once, 2–4. Each tile is its own Dispatcharr connection. */
+  max_tiles?: number;
+  /** Output profile for tiles (e.g. a lower resolution); default the card's `output_profile`. */
+  output_profile?: number | string;
 }
 
 /** The channel guide under the picture: shown, collapsed until Channels is pressed, or never. */
@@ -54,6 +64,14 @@ export interface ResolvedConfig {
   epg: boolean;
   epgUrl?: string;
   guide: GuideMode;
+  multiview: ResolvedMultiview;
+}
+
+export interface ResolvedMultiview {
+  enabled: boolean;
+  maxTiles: number;
+  /** The output profile tiles use (the card's own unless `multiview.output_profile` is set). */
+  outputProfile?: string;
 }
 
 export type StreamAction =

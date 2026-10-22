@@ -21,6 +21,8 @@ const P = {
   fullscreenExit: { d: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5' },
   guide: { d: 'M4 6h16M4 12h16M4 18h10' },
   grid: { d: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
+  multiview: { d: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z' },
+  list: { d: 'M4 6h16M4 12h16M4 18h10' },
   search: { d: 'M18 11a7 7 0 1 1-14 0 7 7 0 0 1 14 0zM20 20l-3.5-3.5' },
   keypad: {
     d: 'M6 5h.01M12 5h.01M18 5h.01M6 11h.01M12 11h.01M18 11h.01M6 17h.01M12 17h.01M18 17h.01M12 22h.01',
