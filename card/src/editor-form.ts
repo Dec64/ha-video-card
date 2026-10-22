@@ -44,6 +44,7 @@ const schema: FormField[] = [
       { name: 'favourites', selector: { text: { multiple: true } } },
       { name: 'channel', selector: text },
       { name: 'remember_channel', ...on },
+      { name: 'epg', ...on },
     ],
   },
   {
@@ -94,6 +95,7 @@ const schema: FormField[] = [
       { name: 'url', selector: text },
       { name: 'title', selector: text },
       { name: 'm3u_url', selector: { text: { type: 'url' } } },
+      { name: 'epg_url', selector: { text: { type: 'url' } } },
       { name: 'url_template', default: '{base}/proxy/ts/stream/{channel}', selector: text },
     ],
   },
@@ -118,6 +120,8 @@ const LABELS: Record<string, string> = {
   url: 'Stream URL instead of a channel',
   title: 'Title for the default channel',
   m3u_url: 'Channel list (M3U) URL',
+  epg: 'Now and next',
+  epg_url: 'Guide (XMLTV) URL',
   url_template: 'Channel URL template',
 };
 
@@ -134,6 +138,8 @@ const HELPERS: Record<string, string> = {
   idle_timeout: '0 = never.',
   start_timeout: 'Seconds to wait for the first data.',
   m3u_url: 'Default: <Dispatcharr URL>/output/m3u',
+  epg: "Show what's on now and next from Dispatcharr's guide. Downloads the next 24 hours of the guide every 2 hours while a dashboard with the card is open.",
+  epg_url: 'Default: <Dispatcharr URL>/output/epg?days=1',
   url_template: 'Default: {base}/proxy/ts/stream/{channel}',
 };
 
