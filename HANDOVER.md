@@ -55,6 +55,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 | 2026-10-07 | Code and docs live in the private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card); `C:\Users\Declan\Projects\HA Video Card` is a clone and project files keep a mirror |
 
 ## Open questions
+- UI redesign (2026-10-22 mockup): which parts to build, and whether now/next (EPG slice) and multiview are wanted. See [docs/ui-redesign-2026-10-22.md](docs/ui-redesign-2026-10-22.md).
 - iPhone HA app support for mpegts.js, HA Cast behaviour, YouTube ads per device (checked in T10 and later phases instead of Phase 0).
 
 ## Known risks
@@ -65,6 +66,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
+- **2026-10-22:** UI redesign mockup (design canvas, not built): new channel ident with now/next, broadcast-style zap number, last channel, volume, sleep timer, recents, number keypad, wall/phone/TV layouts, redesigned states and a multiview idea. Summary and open decisions in [docs/ui-redesign-2026-10-22.md](docs/ui-redesign-2026-10-22.md).
 - **2026-10-11:** Merged PR #1 into `main`. Rewrote the docs: README as a 1.0 user guide (setup, install, add the card, using it, buttons and pop-ups, options, troubleshooting); new [docs/architecture.md](docs/architecture.md) with the design and the contracts (moved from build-plan §4); [docs/README.md](docs/README.md) index marking the planning docs as history; acceptance checklist made per-release.
 - **2026-10-11:** Installed 1.0.0 on Declan's HA and created the Live TV dashboard. Rendering the picker against the real playlist found two more issues (long group names widened the card; white logos vanished on light themes), both fixed with a test.
 - **2026-10-10:** Built 1.0 channel selection (channel list, picker, up/down, names/numbers, per-device memory, visual editor via `getConfigForm`, lazy editor chunk). An adversarial review workflow confirmed 26 findings (edit-mode lookups, stop vs pending lookup, stale `lastFor` after picks, a stop missed by a closed pop-up, phone-width overlaps, a flaky connection sampler, no playlist timeout, docs); all fixed with regression tests.
