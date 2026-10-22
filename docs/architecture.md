@@ -45,7 +45,7 @@ How the card works today and the contracts other code relies on. For using the c
 | `session.ts` | One source on one `<video>`: start timeout, stall watchdog, reconnect with backoff, error classification. Tears down its engine before every retry. |
 | `engines/` | `mpegts-engine.ts` (lazy chunk; loads the vendored `mpegts-<version>.js`), `native-engine.ts` (MP4/HLS where the browser plays them), `fetch-loader.ts` (`ImmediateAbortLoader`), `video-lock.ts`. |
 | `channels.ts` | M3U parsing, `ChannelList`, page-wide playlist cache. |
-| `epg.ts` | Now/next (opt-in `epg`): streaming XMLTV parser and the page-wide `GuideFeed`. A lazy chunk, loaded only by cards with `epg: true`. |
+| `epg.ts` | Now/next (`epg`): streaming XMLTV parser and the page-wide `GuideFeed`. A lazy chunk, loaded only by cards with `epg` on. |
 | `picker.ts` | The channel browser element. It only fires events; the card plays. |
 | `memory.ts` | Last channel and play intent per target, per device (localStorage). |
 | `editor-form.ts` | Schema for HA's visual editor (`getConfigForm`), a lazy chunk. |
@@ -85,7 +85,7 @@ Names and numbers become the stream UUID before a URL is built, so playback and 
 
 ## Now and next
 
-Off by default (`epg: false`): Dispatcharr's whole guide is 8.7 MB on a real server. With `epg: true` a card subscribes to a page-wide `GuideFeed` for `epg_url` (default `{base}/output/epg?days=1`, the next 24 hours) while it is connected and not in preview/edit mode. The feed streams the body through `XmltvParser`, which keeps only channel, start, stop and title, for programmes that haven't ended and start within 12 hours, at most 8 per channel. It reloads every 2 hours while the page is visible, retries 5 minutes after a failure, and aborts a download when its last card goes away. It wakes its cards at each programme boundary so they re-render.
+On by default when the card has a channel list and a guide URL (`dispatcharr_url` or `epg_url`); `epg: false` turns it off. Dispatcharr's whole guide is 8.7 MB on a real server, so it is fetched carefully: a card subscribes to a page-wide `GuideFeed` for `epg_url` (default `{base}/output/epg?days=1`, the next 24 hours) while it is connected and not in preview/edit mode. The feed streams the body through `XmltvParser`, which keeps only channel, start, stop and title, for programmes that haven't ended and start within 12 hours, at most 8 per channel. It reloads every 2 hours while the page is visible, retries 5 minutes after a failure, and aborts a download when its last card goes away. It wakes its cards at each programme boundary so they re-render.
 
 A playlist channel finds its programmes by `tvg-id` (falling back to its number), which Dispatcharr sets to the channel number in both the M3U and the XMLTV unless `tvg_id_source` says otherwise. The card's `nowNext(channel)` returns `{ now?, next? }` (`Programme = { title, start?, end? }`, epoch ms) or `undefined` when the guide is off, loading, failed or has nothing for the channel; the UI then shows no programme line. The guide never affects playback or release.
 
@@ -108,7 +108,7 @@ m3u_url: <url>                      # default {base}/output/m3u
 channel_groups: ["UK: News"]        # optional: only these groups, in this order
 favourites: [BBC One HD, "101"]     # optional: names, numbers or UUIDs under ★ Favourites
 remember_channel: true              # start on this device's last channel for the target
-epg: false                          # now/next from Dispatcharr's guide (opt-in)
+epg: true                           # now/next from Dispatcharr's guide; default on with the channel list and a guide URL
 epg_url: <url>                      # default {base}/output/epg?days=1
 autoplay: true                      # play the chosen channel when shown, unless left stopped
 muted: false                        # start muted; falls back to muted + "tap to unmute" if blocked

@@ -51,10 +51,10 @@ test('epg on: now and next for each channel from one shared download', async ({ 
   expect((await h.stats(s.epgKey)).total).toBe(1);
 });
 
-test('epg is off by default and never downloads the guide', async ({ h }) => {
+test('epg: false never downloads the guide', async ({ h }) => {
   await h.load();
   const s = sources(h);
-  await h.mount({ m3u_url: s.m3u_url, epg_url: s.epg_url, channel: '101' });
+  await h.mount({ m3u_url: s.m3u_url, epg_url: s.epg_url, epg: false, channel: '101' });
   await h.expectUi('playing');
   await h.page.waitForTimeout(500);
   expect(await nowNext(h, '1')).toBeNull();
@@ -84,6 +84,14 @@ test('edit mode never downloads the guide; leaving it does', async ({ h }) => {
   await h.page.evaluate(() => {
     (document.querySelector('stream-card') as HTMLElement & { editMode: boolean }).editMode = false;
   });
+  await expect.poll(async () => (await nowNext(h, '1'))?.now?.title).toBe('News & Weather');
+  expect((await h.stats(s.epgKey)).total).toBe(1);
+});
+
+test('on by default with dispatcharr_url', async ({ h }) => {
+  await h.load();
+  const s = sources(h);
+  await h.mount({ m3u_url: s.m3u_url, epg_url: s.epg_url, channel: '101' });
   await expect.poll(async () => (await nowNext(h, '1'))?.now?.title).toBe('News & Weather');
   expect((await h.stats(s.epgKey)).total).toBe(1);
 });

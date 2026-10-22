@@ -46,7 +46,7 @@ export interface ResolvedConfig {
   channelGroups: string[];
   favourites: string[];
   rememberChannel: boolean;
-  /** Show now/next programme info from Dispatcharr's XMLTV guide (opt-in). */
+  /** Show now/next programme info from Dispatcharr's XMLTV guide (default on with a list and guide URL). */
   epg: boolean;
   epgUrl?: string;
 }

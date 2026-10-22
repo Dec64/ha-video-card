@@ -165,10 +165,12 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     channelGroups: optionalStringList(raw, 'channel_groups'),
     favourites: optionalStringList(raw, 'favourites'),
     rememberChannel: optionalBool(raw, 'remember_channel', true),
-    epg: optionalBool(raw, 'epg', false),
+    epg: false,
     // days=1: Dispatcharr sends only the next 24 hours, not the whole guide.
     epgUrl: epgUrl ?? (base ? `${normalizeBaseUrl(base)}/output/epg?days=1` : undefined),
   };
+  // On by default whenever there's a channel list and a guide to read (dispatcharr_url set).
+  resolved.epg = optionalBool(raw, 'epg', resolved.channelList && !!resolved.epgUrl);
   if (resolved.epg && !resolved.channelList) {
     throw new ConfigError('"epg" needs the channel list ("channel_list" can\'t be false)');
   }

@@ -52,7 +52,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 | 2026-10-10 | Each device remembers each target's last channel and whether it was left playing (localStorage); Stop, a stop button and the idle timeout all count as "left stopped" |
 | 2026-10-10 | In-card picks, up/down and Stop go through the page controller like buttons, so every card on a target and every recreated card agree |
 | 2026-10-10 | With the list loaded, an unknown name is an error, never guessed as a stream ID; names/numbers are resolved after edit mode, never during |
-| 2026-10-22 | Now/next is opt-in (`epg: false` by default, pending Declan's confirmation): the card reads `/output/epg?days=1` (public like the M3U; Dispatcharr's JSON `current-programs` API needs a login), streams it, keeps titles and times only, and refreshes every 2 h. A failed or empty guide just hides the programme line. Only now/next; no full guide grid |
+| 2026-10-22 | Now/next is on by default whenever `dispatcharr_url` is set (Declan, 2026-10-22; `epg: false` turns it off): the card reads `/output/epg?days=1` (public like the M3U; Dispatcharr's JSON `current-programs` API needs a login), streams it, keeps titles and times only, and refreshes every 2 h. A failed or empty guide just hides the programme line. Only now/next; no full guide grid |
 | 2026-10-07 | Code and docs live in the private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card); `C:\Users\Declan\Projects\HA Video Card` is a clone and project files keep a mirror |
 
 ## Open questions

@@ -159,7 +159,7 @@ describe('channel list options', () => {
       channelGroups: [],
       favourites: [],
       rememberChannel: true,
-      epg: false,
+      epg: true,
       epgUrl: 'https://dispatcharr.example/output/epg?days=1',
     });
   });
@@ -217,10 +217,21 @@ describe('channel list options', () => {
 describe('normalizeConfig: now/next (epg)', () => {
   const base = { type: 'custom:stream-card', dispatcharr_url: 'https://dispatcharr.example/' };
 
-  it('is off by default, with the guide URL ready for when it is turned on', () => {
+  it('is on by default with dispatcharr_url, and can be turned off', () => {
     const c = normalizeConfig(base);
-    expect(c.epg).toBe(false);
+    expect(c.epg).toBe(true);
     expect(c.epgUrl).toBe('https://dispatcharr.example/output/epg?days=1');
+    expect(normalizeConfig({ ...base, epg: false }).epg).toBe(false);
+  });
+
+  it('is off by default without a channel list or a guide URL', () => {
+    expect(normalizeConfig({ ...base, channel_list: false }).epg).toBe(false);
+    const m3uOnly = { type: 'custom:stream-card', m3u_url: 'https://lists.example/a.m3u' };
+    expect(normalizeConfig(m3uOnly).epg).toBe(false);
+    expect(normalizeConfig({ ...m3uOnly, epg_url: 'https://guide.example/x.xml' }).epg).toBe(true);
+    expect(normalizeConfig({ type: 'custom:stream-card', url: 'https://x.example/a.ts' }).epg).toBe(
+      false,
+    );
   });
 
   it('takes an explicit guide URL', () => {

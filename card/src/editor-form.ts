@@ -44,7 +44,7 @@ const schema: FormField[] = [
       { name: 'favourites', selector: { text: { multiple: true } } },
       { name: 'channel', selector: text },
       { name: 'remember_channel', ...on },
-      { name: 'epg', selector: bool },
+      { name: 'epg', ...on },
     ],
   },
   {

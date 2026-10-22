@@ -57,8 +57,8 @@ It should print `access-control-allow-origin: *`. If you add a header rule in Cl
 ### Channel list
 The card reads `<dispatcharr_url>/output/m3u`, the same playlist IPTV apps use. It needs no login, but Dispatcharr's **network access** settings for M3U/EPG must allow the devices that show the card. Channel numbers, names, groups and logos come from Dispatcharr, so set them there.
 
-### Now and next (optional)
-With `epg: true` the card also reads `<dispatcharr_url>/output/epg?days=1`, the next 24 hours of Dispatcharr's guide, to show what's on now and next. It's off by default because the guide is large (several MB on a big channel list): the card downloads it once per dashboard page, keeps only titles and times, and refreshes it every 2 hours while a dashboard with the card is open (never in edit mode or while the page is hidden). Channels need guide data assigned in Dispatcharr. If the guide can't be loaded, or has nothing for a channel, the card simply shows no programme line.
+### Now and next
+With `dispatcharr_url` set, the card also reads `<dispatcharr_url>/output/epg?days=1`, the next 24 hours of Dispatcharr's guide, to show what's on now and next. The guide is large (several MB on a big channel list), so the card downloads it once per dashboard page, keeps only titles and times, and refreshes it every 2 hours while a dashboard with the card is open (never in edit mode or while the page is hidden). Channels need guide data assigned in Dispatcharr. If the guide can't be loaded, or has nothing for a channel, the card simply shows no programme line. Set `epg: false` to never download it.
 
 ## 2. Install
 
@@ -240,7 +240,7 @@ cards:
 | `channel_groups` | all | Only these Dispatcharr groups, in this order |
 | `favourites` | none | Names, numbers or UUIDs shown first under ★ Favourites |
 | `remember_channel` | `true` | Start on this device's last channel for the target, playing or stopped as it was left |
-| `epg` | `false` | Show what's on now and next from Dispatcharr's guide (see [Now and next](#now-and-next-optional)) |
+| `epg` | on with `dispatcharr_url` | Show what's on now and next from Dispatcharr's guide (see [Now and next](#now-and-next)). Needs the channel list |
 | `epg_url` | `<dispatcharr_url>/output/epg?days=1` | A different XMLTV guide. Its channel IDs must match the playlist's `tvg-id` (Dispatcharr's default: the channel number) |
 | `m3u_url` | `<dispatcharr_url>/output/m3u` | A different playlist for the list. Playing Dispatcharr channels from it still needs `dispatcharr_url` |
 | `autoplay` | `true` | Start playing when the card appears, unless this device left it stopped |
