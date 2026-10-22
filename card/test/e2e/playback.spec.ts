@@ -23,5 +23,5 @@ test('a button plays a channel in a card on the page @real', async ({ h, page })
       )
       .toBe(320);
   }
-  await expect(h.frame().locator('.badge')).toContainText('Test Channel');
+  await expect(h.frame().locator('.ident')).toContainText('Test Channel');
 });

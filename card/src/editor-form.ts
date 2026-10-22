@@ -40,6 +40,20 @@ const schema: FormField[] = [
     title: 'Channels',
     schema: [
       { name: 'channel_list', ...on },
+      {
+        name: 'guide',
+        default: 'open',
+        selector: {
+          select: {
+            mode: 'dropdown',
+            options: [
+              { value: 'open', label: 'Open under the picture' },
+              { value: 'closed', label: 'Closed until Channels is pressed' },
+              { value: 'off', label: 'Off (Channels opens it over the picture)' },
+            ],
+          },
+        },
+      },
       { name: 'channel_groups', selector: { text: { multiple: true } } },
       { name: 'favourites', selector: { text: { multiple: true } } },
       { name: 'channel', selector: text },
@@ -104,6 +118,7 @@ const LABELS: Record<string, string> = {
   output_profile: 'Output profile ID',
   target: 'Target name',
   channel_list: 'Channel list',
+  guide: 'Channel guide',
   channel_groups: 'Group',
   favourites: 'Favourite',
   channel: 'Default channel',
@@ -127,6 +142,7 @@ const HELPERS: Record<string, string> = {
     'The AAC output profile from the README. Leave empty to play streams as they are.',
   target: 'Buttons with the same target play on this card.',
   channel_list: 'Load every Dispatcharr channel for the picker and channel up/down.',
+  guide: 'Recent, favourites, groups, search and the number keypad.',
   channel_groups: 'Only show these Dispatcharr groups, in this order. None = every group.',
   favourites: 'Channel names or numbers, shown first under ★ Favourites.',
   channel: 'Name, number or UUID to play when the card appears.',

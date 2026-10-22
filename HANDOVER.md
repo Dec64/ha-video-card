@@ -20,6 +20,14 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 
 **Next action (Claude):** fix anything found; then tag v1.0.0 (from GitHub's UI, Releases → Draft a new release → tag `v1.0.0` on `main`, since tag pushes are blocked here; the release workflow attaches the files) and move to Phase 2 or the iPhone fallback.
 
+## 2.0 redesign (in progress, 2026-10-22)
+Four branches build the redesign from the mockup (https://claude.ai/artifact/Yc11oyZHocXjME3MaRfpBj, summary in `docs/ui-redesign-2026-10-22.md` on PR #3):
+- **Card UI** (`claude/project-thread-w2drcg`): shell, ident, channel-number OSD, control bar, guide panel, every state, phone / wall / desktop / TV layouts, HA theme tokens, `guide:` option. Templates read `CardView`/`CardActions` (`src/ui/view.ts`).
+- **Navigation** (PR #5, `claude/project-thread-4s7k2u`): recents, last channel, keypad, volume, sleep timer, keyboard. Plugs in through `navView()`/`navActions()`.
+- **Now/next** (PR #4, `claude/project-thread-eu2dyi`): EPG slice, `nowNext(channel)` on the card.
+- **Multiview**: its own lazy element; a `ctl-multiview` button through the `multiview` action.
+Whoever merges second takes the UI branch's `scripts/size-report.mjs` (initial load, 36 KB gz) and moves the nav types into `src/ui/view.ts`.
+
 ## Key facts
 - Docs: user guide in [README.md](README.md); design and contracts in [docs/architecture.md](docs/architecture.md); planning history indexed in [docs/README.md](docs/README.md).
 - The PC clone at `C:\Users\Declan\Projects\HA Video Card` tracks this repo; `git pull` on `main` gets the latest.
@@ -52,6 +60,10 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 | 2026-10-10 | Each device remembers each target's last channel and whether it was left playing (localStorage); Stop, a stop button and the idle timeout all count as "left stopped" |
 | 2026-10-10 | In-card picks, up/down and Stop go through the page controller like buttons, so every card on a target and every recreated card agree |
 | 2026-10-10 | With the list loaded, an unknown name is an error, never guessed as a stream ID; names/numbers are resolved after edit mode, never during |
+| 2026-10-22 | 2.0 guide sits under the picture by default; new `guide: open \| closed \| off` option (Declan's pick) |
+| 2026-10-22 | The card uses HA's theme font and the system monospace font instead of loading Roboto Flex / JetBrains Mono from Google Fonts (no third-party requests from the card) |
+| 2026-10-22 | Layouts are automatic (card width, pointer, Cast user agent); no layout option |
+| 2026-10-22 | Size budget now counts the entry plus its static imports (36 KB gz), since the guide became a lazy chunk and Lit moved into a shared chunk |
 | 2026-10-07 | Code and docs live in the private repo [Dec64/ha-video-card](https://github.com/Dec64/ha-video-card); `C:\Users\Declan\Projects\HA Video Card` is a clone and project files keep a mirror |
 
 ## Open questions
@@ -65,6 +77,7 @@ Living document. Newest status at the top; the change log at the bottom keeps th
 - Ad-free YouTube in the embedded player is unlikely on iPhone (Safari blocks the needed cookies) and uncertain in Fully.
 
 ## Change log
+- **2026-10-22:** Built the 2.0 card UI from the redesign mockup: stage with channel ident (logo, number, name, programme and progress), broadcast-style channel number on every change and while typing digits, glass control bar (stop, last channel, up/down, "Next", mute + volume, sleep menu, guide, multiview, full screen), guide panel under the picture (Recent first, keypad, programme lines, lazy chunk), redesigned tuning / reconnecting (with countdown) / error (Back to last channel) / muted / sleep-ending / edit-mode states, phone / wall / desktop / TV layouts and HA theme tokens. New `guide` option. Stroke icon set. Session reports `retryAt`. Tests: 13 new e2e (guide modes, seams, states, light theme, phone, TV), unit tests for the view helpers.
 - **2026-10-11:** Merged PR #1 into `main`. Rewrote the docs: README as a 1.0 user guide (setup, install, add the card, using it, buttons and pop-ups, options, troubleshooting); new [docs/architecture.md](docs/architecture.md) with the design and the contracts (moved from build-plan §4); [docs/README.md](docs/README.md) index marking the planning docs as history; acceptance checklist made per-release.
 - **2026-10-11:** Installed 1.0.0 on Declan's HA and created the Live TV dashboard. Rendering the picker against the real playlist found two more issues (long group names widened the card; white logos vanished on light themes), both fixed with a test.
 - **2026-10-10:** Built 1.0 channel selection (channel list, picker, up/down, names/numbers, per-device memory, visual editor via `getConfigForm`, lazy editor chunk). An adversarial review workflow confirmed 26 findings (edit-mode lookups, stop vs pending lookup, stale `lastFor` after picks, a stop missed by a closed pop-up, phone-width overlaps, a flaky connection sampler, no playlist timeout, docs); all fixed with regression tests.

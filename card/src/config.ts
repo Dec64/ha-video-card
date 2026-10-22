@@ -1,5 +1,6 @@
 import { DEFAULT_TARGET, DEFAULT_URL_TEMPLATE } from './const';
 import type {
+  GuideMode,
   ResolvedConfig,
   SourceType,
   StreamCardConfig,
@@ -130,6 +131,11 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     }
   }
 
+  const guide = optionalString(raw, 'guide') ?? 'open';
+  if (guide !== 'open' && guide !== 'closed' && guide !== 'off') {
+    throw new ConfigError('"guide" must be open, closed or off');
+  }
+
   const channel = optionalString(raw, 'channel');
   const url = optionalString(raw, 'url');
   const title = optionalString(raw, 'title');
@@ -156,6 +162,7 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     channelGroups: optionalStringList(raw, 'channel_groups'),
     favourites: optionalStringList(raw, 'favourites'),
     rememberChannel: optionalBool(raw, 'remember_channel', true),
+    guide: guide as GuideMode,
   };
   if (resolved.channelList && !resolved.m3uUrl) {
     throw new ConfigError('"channel_list" needs "dispatcharr_url" or "m3u_url"');

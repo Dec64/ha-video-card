@@ -20,7 +20,11 @@ export interface StreamCardConfig {
   channel_groups?: string[];
   favourites?: Array<string | number>;
   remember_channel?: boolean;
+  guide?: GuideMode;
 }
+
+/** The channel guide under the picture: shown, collapsed until Channels is pressed, or never. */
+export type GuideMode = 'open' | 'closed' | 'off';
 
 export type SourceType = 'mpegts' | 'native';
 
@@ -44,6 +48,7 @@ export interface ResolvedConfig {
   channelGroups: string[];
   favourites: string[];
   rememberChannel: boolean;
+  guide: GuideMode;
 }
 
 /** A play/stop request, from a button's `stream_card:` block or the card's own config. */

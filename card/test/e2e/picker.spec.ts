@@ -51,7 +51,7 @@ async function shot(h: Harness, name: string) {
 test('an empty card lists every channel; picking one plays it', async ({ h }) => {
   await h.load();
   const pl = playlist(h);
-  await h.mount({ m3u_url: pl.m3u_url, target: 'tv' });
+  await h.mount({ m3u_url: pl.m3u_url, guide: 'closed', target: 'tv' });
   await h.expectUi('empty');
   await expect(h.frame()).toContainText('Choose a channel below');
   await expect(picker(h).locator('.tile')).toHaveCount(6);
@@ -67,8 +67,8 @@ test('an empty card lists every channel; picking one plays it', async ({ h }) =>
   await h.expectOpen(pl.id(3), 1);
   await h.expectUi('playing');
   await expect(picker(h)).toHaveCount(0);
-  await expect(h.frame().locator('.badge')).toContainText('103');
-  await expect(h.frame().locator('.badge')).toContainText('Sports Live HD');
+  await expect(h.frame().locator('.ident')).toContainText('103');
+  await expect(h.frame().locator('.ident')).toContainText('Sports Live HD');
   expect((await h.stats(pl.statsKey)).total).toBe(1);
 });
 
@@ -81,7 +81,8 @@ test('search, groups and favourites', async ({ h }) => {
     favourites: ['Sport Extra', '101', 'Not A Channel'],
   });
   const p = picker(h);
-  await expect(p.locator('.chip')).toHaveText(['All', '★ Favourites', 'Sport', 'News']);
+  await expect(p.locator('.chip')).toHaveText(['★ Favourites', 'All', 'Sport', 'News']);
+  await expect(p.locator('.chip', { hasText: 'All' })).toHaveAttribute('aria-pressed', 'true');
   await expect(p.locator('.tile .name')).toHaveText([
     'News One HD',
     'Sports Live HD',
@@ -104,7 +105,7 @@ test('search, groups and favourites', async ({ h }) => {
 test('switching from the picker and channel up/down never holds two connections', async ({ h }) => {
   await h.load();
   const pl = playlist(h);
-  await h.mount({ m3u_url: pl.m3u_url });
+  await h.mount({ m3u_url: pl.m3u_url, guide: 'closed' });
   await tile(h, '101 News One HD').click();
   await h.expectOpen(pl.id(1), 1);
   await h.expectUi('playing');
@@ -151,7 +152,7 @@ test('buttons play channels by name or number; unknown names say so', async ({ h
   await h.mount({ m3u_url: pl.m3u_url, target: 'tv' });
   await (await h.button('By name', { target: 'tv', channel: 'sports live hd' })).click();
   await h.expectOpen(pl.id(3), 1);
-  await expect(h.frame().locator('.badge')).toContainText('Sports Live HD');
+  await expect(h.frame().locator('.ident')).toContainText('Sports Live HD');
   await (await h.button('By number', { target: 'tv', channel: '105' })).click();
   await h.expectOpen(pl.id(5), 1);
   await h.expectOpen(pl.id(3), 0, 2000);
@@ -193,7 +194,7 @@ test('remembers the last channel per target across reloads', async ({ h }) => {
   await h.load();
   await h.mount(cfg);
   await h.expectUi('ready');
-  await expect(h.frame().locator('.badge')).toContainText('Movies Plus');
+  await expect(h.frame().locator('.ident')).toContainText('Movies Plus');
   await h.page.waitForTimeout(1000);
   expect((await h.stats(pl.id(2))).open).toBe(0);
   await h.frame().locator('button.big-play').click();
@@ -222,8 +223,8 @@ test('a failed channel list says why and can be retried', async ({ h }) => {
 test('cards on one page share one playlist download', async ({ h }) => {
   await h.load();
   const pl = playlist(h, { delay: 300 });
-  await h.mount({ m3u_url: pl.m3u_url, target: 'a' }, { id: 'a' });
-  await h.mount({ m3u_url: pl.m3u_url, target: 'b' }, { id: 'b' });
+  await h.mount({ m3u_url: pl.m3u_url, guide: 'closed', target: 'a' }, { id: 'a' });
+  await h.mount({ m3u_url: pl.m3u_url, guide: 'closed', target: 'b' }, { id: 'b' });
   await expect(picker(h, '#a').locator('.tile')).toHaveCount(6);
   await expect(picker(h, '#b').locator('.tile')).toHaveCount(6);
   expect((await h.stats(pl.statsKey)).total).toBe(1);
@@ -293,6 +294,7 @@ test('a name or number set while in edit mode is looked up when edit mode ends',
         card.id = cid;
         card.editMode = true;
         card.setConfig({
+          guide: 'closed',
           type: 'custom:stream-card',
           dispatcharr_url: base,
           m3u_url: url,
@@ -321,7 +323,7 @@ test('a name or number set while in edit mode is looked up when edit mode ends',
 test('a stop while a channel name is still being looked up wins', async ({ h }) => {
   await h.load();
   const pl = playlist(h, { delay: 1500 });
-  await h.mount({ m3u_url: pl.m3u_url, target: 'tv', remember_channel: true });
+  await h.mount({ m3u_url: pl.m3u_url, guide: 'closed', target: 'tv', remember_channel: true });
   await (await h.button('Kids', { target: 'tv', channel: 'Kids Time' })).click();
   // While the list loads the card says it's connecting, not "choose a channel".
   await h.expectUi('connecting');
@@ -359,7 +361,7 @@ test('HA re-sending the config during a lookup keeps autoplay', async ({ h }) =>
 test('a recreated card resumes the picked channel, and stays stopped after Stop', async ({ h }) => {
   await h.load();
   const pl = playlist(h);
-  const cfg = { m3u_url: pl.m3u_url, target: 'tv' };
+  const cfg = { m3u_url: pl.m3u_url, guide: 'closed', target: 'tv' };
   await h.mount(cfg, { id: 'one' });
   await (await h.button('Button 1', { target: 'tv', channel: pl.id(1) })).click();
   await h.expectOpen(pl.id(1), 1);
@@ -473,7 +475,7 @@ test('logos stay visible as tiles are filtered; Escape clears the search, not th
 test('focus moves to the Channels button after picking from the keyboard', async ({ h }) => {
   await h.load();
   const pl = playlist(h);
-  await h.mount({ m3u_url: pl.m3u_url });
+  await h.mount({ m3u_url: pl.m3u_url, guide: 'closed' });
   await tile(h, '102 Movies Plus').focus();
   await h.page.keyboard.press('Enter');
   await h.expectOpen(pl.id(2), 1);
@@ -489,7 +491,7 @@ test('focus moves to the Channels button after picking from the keyboard', async
 test('entering full screen closes an open channel panel', async ({ h }) => {
   await h.load();
   const pl = playlist(h);
-  await h.mount({ m3u_url: pl.m3u_url, channel: '101' });
+  await h.mount({ m3u_url: pl.m3u_url, guide: 'closed', channel: '101' });
   await h.expectUi('playing');
   await ctl(h, 'ctl-channels');
   await expect(picker(h)).toBeVisible();
@@ -516,7 +518,7 @@ test.describe('at phone width', () => {
     });
   }
 
-  test('Retry and Tap to unmute are not covered by the control row', async ({ h }) => {
+  test('Retry and Tap for sound are not covered by the control row', async ({ h }) => {
     await h.page.evaluate(() => (window.__mseShimBlockUnmuted = true));
     await h.load();
     const pl = playlist(h, { modes: 'status-404,ok' });

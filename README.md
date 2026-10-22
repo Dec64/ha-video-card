@@ -118,22 +118,33 @@ channel: BBC One HD
 
 ## 4. Using it
 
-**Picking a channel.** With nothing playing, every channel is shown under the picture: tap a logo.
-- **Search** matches names and numbers; Enter plays the first match, and Escape clears the search.
-- **Chips** filter by Dispatcharr group. **★ Favourites** shows your `favourites` in the order you listed them.
-- A channel with no logo shows its initials.
+**The guide.** Under the picture sits the channel guide (`guide: open`, the default). It opens on **Recent** (this device's last channels), then **★ Favourites** (your `favourites`, in the order you listed them), **All** and one chip per Dispatcharr group.
+- **Search** matches names and numbers across every channel; Enter plays the first match, and Escape clears the search.
+- **123** opens a number keypad: type a channel number and it tunes.
+- Each tile shows the logo (or initials), number and name; with guide data, also what's on now and how far through it is. The playing channel is outlined.
+- Picking a tile plays it and leaves the guide open. The guide button in the control bar collapses it. `guide: closed` starts it collapsed; `guide: off` never puts it under the picture, and the button opens it over the picture instead (as full screen and TVs always do).
 
-**While playing**, tap the picture to show the controls:
+**While playing**, the channel ident in the top left shows the logo, number, name and, with guide data, the programme and its progress. A big channel number flashes up on every change. Tap the picture to show or hide the ident and controls:
 
 | Button | Does |
 |---|---|
 | ■ | Stop (frees the connection) |
+| ↺ | Last channel, like a remote's Recall |
 | ⌄ ⌃ | Previous / next channel, in channel-number order, wrapping round |
-| ▦ | Open the channel grid (over the picture in full screen) |
-| 🔈 | Mute / unmute |
-| ⛶ | Full screen |
+| 🔈 and slider | Mute / unmute, and volume |
+| ☾ | Sleep timer: stop after 15, 30, 60 or 90 minutes |
+| ☰ | Show or hide the guide |
+| ⛶ | Full screen (the ident and controls come along) |
 
-The badge shows the live dot, logo, number and name. If the browser blocks sound, playback starts muted with a **Tap to unmute** button. If something fails, the card says what's wrong, with **Retry** and **Channels** buttons.
+**States.** While tuning, the new channel's logo and name show before any video arrives. If the picture drops, the card says it's reconnecting, which try it's on and when the next one starts. If the browser blocks sound, playback starts muted with a **Tap for sound** button. If something fails, the card says what's wrong and offers **Back to** the previous channel first, then **Retry** and **Channels**. A minute before the sleep timer ends, **Keep watching** and **+30 min** appear. In the dashboard editor the card shows its target, output profile and number of favourites instead of playing.
+
+**On each screen.** The layout follows the card's width and the device, with no settings:
+- **Phones and Bubble pop-ups** (under 520 px wide): the ident and big round controls sit below the picture, in reach of a thumb, and the guide lists one channel per row.
+- **Wall panels** (touch screens 900 px and wider, such as a Fire HD 8 in Fully Kiosk): 56 px buttons and bigger guide tiles for arm's-length taps.
+- **Desktop**: everything floats over the picture, with "Next" in the control bar.
+- **TV** (HA Cast to a Chromecast or Google TV): a 10-foot layout inside the TV-safe area with no tap controls; the clock shows, and remote-key hints appear once a key is pressed.
+
+**Theme.** The card uses your Home Assistant theme (card background, text colours, primary colour, corner radius), light or dark. The picture area is always dark.
 
 **What it remembers.** Each device remembers the last channel on each target and whether it was left playing.
 - Next time, it starts on that channel: playing if you left it playing, or stopped with a play button if you stopped it (Stop, a stop button or the idle timeout).
@@ -232,8 +243,9 @@ cards:
 | `output_profile` | none | Output profile ID, sent as `?output_profile=<id>` |
 | `channel` | none | Channel for the first visit (name, number or UUID). After that, the remembered channel wins |
 | `url` | none | A full stream URL instead of a channel (MPEG-TS, or MP4/HLS on browsers that play them natively) |
-| `title` | channel name | Title shown on the badge |
-| `channel_list` | on with `dispatcharr_url` | Load the channel list: grid, up/down, names in buttons |
+| `title` | channel name | Title shown in the channel ident |
+| `channel_list` | on with `dispatcharr_url` | Load the channel list: guide, up/down, names in buttons |
+| `guide` | `open` | The channel guide: `open` under the picture, `closed` until the guide button is pressed, or `off` (only ever over the picture) |
 | `channel_groups` | all | Only these Dispatcharr groups, in this order |
 | `favourites` | none | Names, numbers or UUIDs shown first under ★ Favourites |
 | `remember_channel` | `true` | Start on this device's last channel for the target, playing or stopped as it was left |
@@ -248,7 +260,9 @@ cards:
 | `debug` | `false` | Overlay with engine, codecs, buffer, frames, channel list state and the last error |
 
 Theme variables:
-- `--stream-card-picker-max-height`: height of the channel grid under the picture. Default `min(60vh, 440px)`.
+- `--stream-card-picker-max-height`: height of the channel grid under the picture. Default `min(60vh, 460px)`.
+- `--stream-card-accent`: colour for the selected tab, playing channel and phone Stop button. Default the theme's `--primary-color`.
+- `--stream-card-font`, `--stream-card-mono-font`: text and number fonts. Default the theme's font and the system monospace font.
 - `--stream-card-logo-background`: plate behind channel logos. Default dark, because most IPTV logos are white.
 
 ## 7. Troubleshooting

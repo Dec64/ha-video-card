@@ -7,6 +7,7 @@ const SHIM = fileURLToPath(new URL('./mse-shim.js', import.meta.url));
 
 export interface CardInfo {
   ui: string;
+  layout?: string;
   hold: string | null;
   lastRelease?: string;
   url?: string;
@@ -89,9 +90,9 @@ export class Harness {
     await expect.poll(async () => (await this.info(sel))?.ui, { timeout }).toBe(ui);
   }
 
-  /** The card's shadow-DOM frame, for clicks and screenshots. */
+  /** The picture with its ident and controls (`.stage`). */
   frame(sel = 'stream-card') {
-    return this.page.locator(sel).locator('.frame');
+    return this.page.locator(sel).locator('.stage');
   }
 }
 
