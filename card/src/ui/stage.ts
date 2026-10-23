@@ -342,6 +342,7 @@ export function renderControls(v: CardView, a: CardActions): TemplateResult | ty
               </button>`
           : nothing
       }
+      <span class="row-break" aria-hidden="true"></span>
     </div>
     <div class="group upnext ${next ? '' : 'empty'}">
       ${
