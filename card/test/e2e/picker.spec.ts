@@ -537,8 +537,8 @@ test.describe('at phone width', () => {
     await h.mount({ m3u_url: pl.m3u_url, channel: '102', target: 'b' }, { id: 'b' });
     await h.expectUi('playing', '#b');
     await expect(h.frame('#b').locator('.controls')).not.toHaveClass(/hidden/);
-    // 1.0's six plus the sleep timer (Last channel stays hidden: nothing was watched before).
-    await expect(h.frame('#b').locator('.controls button')).toHaveCount(7);
+    // 1.0's six plus the sleep timer and settings (Last channel stays hidden: nothing was watched before).
+    await expect(h.frame('#b').locator('.controls button')).toHaveCount(8);
     expect(await reachable(h.frame('#b').locator('button.unmute'))).toBe(true);
   });
 });

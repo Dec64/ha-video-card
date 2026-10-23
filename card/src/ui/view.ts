@@ -1,4 +1,5 @@
 import type { Channel } from '../channels';
+import type { BufferMode } from '../types';
 
 /**
  * What the templates in src/ui/ read. The card builds a CardView and CardActions on every
@@ -82,6 +83,8 @@ export interface CardView extends NavView {
   notice?: string;
   debugText?: string;
   sleepMenuOpen: boolean;
+  /** The settings panel; absent with `settings: false`. */
+  settings?: SettingsView;
   /** For the edit-mode summary. */
   edit?: { target: string; profile?: string; favourites: number };
   /** Current time for progress bars and countdowns. */
@@ -100,6 +103,27 @@ export interface CardActions extends NavActions {
   toggleSleepMenu: (e?: Event) => void;
   /** Multiview thread: shown only when set. */
   multiview?: () => void;
+  settings?: SettingsActions;
+}
+
+/** What the settings panel shows: the values in effect on this device. */
+export interface SettingsView {
+  open: boolean;
+  buffer: BufferMode;
+  /** Programme info on screen; absent when the card has no guide (`epg: false`). */
+  nowNext?: boolean;
+  stats: boolean;
+  /** Something here differs from the card's YAML on this device. */
+  custom: boolean;
+}
+
+export interface SettingsActions {
+  toggle: (e?: Event) => void;
+  setBuffer: (mode: BufferMode) => void;
+  setNowNext: (on: boolean) => void;
+  setStats: (on: boolean) => void;
+  /** Forgets this device's choices; the card's YAML applies again. */
+  reset: () => void;
 }
 
 /** "Sports Live HD" → "SL": a stand-in for a missing logo. */

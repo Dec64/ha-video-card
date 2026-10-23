@@ -24,6 +24,8 @@ export interface StreamCardConfig {
   epg?: boolean;
   epg_url?: string;
   guide?: GuideMode;
+  /** The settings button in the control bar (default on). */
+  settings?: boolean;
   multiview?: boolean | MultiviewConfig;
 }
 
@@ -69,6 +71,8 @@ export interface ResolvedConfig {
   epg: boolean;
   epgUrl?: string;
   guide: GuideMode;
+  /** Show the settings button, whose choices override this config per device. */
+  settings: boolean;
   multiview: ResolvedMultiview;
 }
 

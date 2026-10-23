@@ -12,9 +12,16 @@ import { holdReason, LifecycleWatcher, type HoldReason } from './lifecycle';
 import { NumberEntry } from './number-entry';
 import { previousRecent, pushRecent, readRecents, type RecentEntry } from './recents';
 import { PlaybackSession, type SessionStatus } from './session';
+import { readSettings, SETTINGS_EVENT, writeSettings, type DeviceSettings } from './settings';
 import type { SleepState } from './sleep-timer';
 import { styles } from './styles';
-import type { ResolvedConfig, StreamCardConfig, StreamRequest, StreamSource } from './types';
+import type {
+  BufferMode,
+  ResolvedConfig,
+  StreamCardConfig,
+  StreamRequest,
+  StreamSource,
+} from './types';
 import { clampVolume, readVolume, writeVolume } from './volume';
 import {
   renderCenter,
@@ -32,6 +39,7 @@ import {
   type NavActions,
   type NavView,
   type NowNext,
+  type SettingsActions,
   type UiState,
 } from './ui/view';
 import type { StreamCardMultiview, TileItem } from './multiview';
@@ -108,6 +116,9 @@ export class StreamCard extends LitElement implements ControllerCard {
   private overlayOpen = false;
   private guideMode?: string;
   private sleepMenuOpen = false;
+  private settingsOpen = false;
+  /** This device's choices from the settings panel for this target (see settings.ts). */
+  private deviceSettings: DeviceSettings = {};
   private osdUntil = 0;
   private osdPending = false;
   private tickTimer?: ReturnType<typeof setTimeout>;
@@ -168,6 +179,9 @@ export class StreamCard extends LitElement implements ControllerCard {
   setConfig(raw: StreamCardConfig): void {
     const prevTarget = this.config?.target;
     this.config = normalizeConfig(raw);
+    this.deviceSettings = readSettings(this.config.target);
+    if (!this.config.settings) this.settingsOpen = false;
+    this.syncStatsTimer();
     if (this.config.guide !== this.guideMode) {
       this.guideMode = this.config.guide;
       this.guideOpen = this.config.guide === 'open';
@@ -298,7 +312,9 @@ export class StreamCard extends LitElement implements ControllerCard {
     }
     this.ensureChannels();
     this.syncGuide();
-    if (this.config?.debug) this.debugTimer = setInterval(() => this.refresh(), 1000);
+    window.addEventListener(SETTINGS_EVENT, this.onSettingsEvent);
+    if (this.config) this.deviceSettings = readSettings(this.config.target);
+    this.syncStatsTimer();
     this.addEventListener('keydown', this.onKeyDown);
     this.sleepChanged();
     this.evaluate();
@@ -309,7 +325,9 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.controller.unregister(this);
     document.removeEventListener('fullscreenchange', this.onFullscreenChange);
     document.removeEventListener('webkitfullscreenchange', this.onFullscreenChange);
+    window.removeEventListener(SETTINGS_EVENT, this.onSettingsEvent);
     clearInterval(this.debugTimer);
+    this.debugTimer = undefined;
     clearTimeout(this.controlsTimer);
     this.syncGuide();
     clearInterval(this.sleepTicker);
@@ -411,6 +429,7 @@ export class StreamCard extends LitElement implements ControllerCard {
    * The card re-renders when guide data arrives and when a programme starts or ends.
    */
   nowNext(channel: Channel | undefined): NowNext | undefined {
+    if (!this.showNowNext) return undefined;
     return channel && this.guide ? this.guide.nowNext(channel) : undefined;
   }
 
@@ -494,7 +513,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       startTimeoutMs: c.startTimeoutMs,
       maxAttempts: c.maxReconnectAttempts,
       debug: c.debug,
-      buffer: c.buffer,
+      buffer: this.bufferMode,
     };
   }
 
@@ -614,8 +633,9 @@ export class StreamCard extends LitElement implements ControllerCard {
       return;
     }
     if (this.session && this.session.source.url !== src.url) this.stopSession('switch');
-    // The buffer mode is fixed for a session's life; a new one restarts the stream.
-    else if (this.session && this.session.buffer !== this.config.buffer) this.stopSession('config');
+    // The buffer mode (YAML or this device's choice) is fixed for a session's life; a new one
+    // restarts the stream.
+    else if (this.session && this.session.buffer !== this.bufferMode) this.stopSession('config');
     // The big number shows once the new channel's picture arrives (tuning has its own layer).
     if (this.source?.url !== src.url) this.osdPending = true;
     this.source = { ...src, title: req.title ?? src.title };
@@ -687,7 +707,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       maxAttempts: this.config.maxReconnectAttempts,
       muted: this.userMuted ?? this.config.muted,
       debug: this.config.debug,
-      buffer: this.config.buffer,
+      buffer: this.bufferMode,
       onStatus: (s) => this.onStatus(session, s),
     });
     this.session = session;
@@ -984,7 +1004,10 @@ export class StreamCard extends LitElement implements ControllerCard {
     else if (e.key === 'Enter' && !path.some((n) => n instanceof HTMLButtonElement))
       this.togglePicker();
     else if (e.key === 'Escape' && typing) this.clearDigits();
-    else if (e.key === 'Backspace') {
+    else if (e.key === 'Escape' && (this.settingsOpen || this.sleepMenuOpen)) {
+      this.settingsOpen = this.sleepMenuOpen = false;
+      this.showControls();
+    } else if (e.key === 'Backspace') {
       if (typing) this.deleteDigit();
       else this.lastChannel();
     } else if (e.key === 'ArrowUp' || e.key === 'PageUp' || e.key === 'ChannelUp') this.channelUp();
@@ -1028,8 +1051,78 @@ export class StreamCard extends LitElement implements ControllerCard {
   private toggleSleepMenu = (e?: Event): void => {
     e?.stopPropagation();
     this.sleepMenuOpen = !this.sleepMenuOpen;
+    if (this.sleepMenuOpen) this.settingsOpen = false;
     this.showControls();
   };
+
+  // ---- settings panel ----
+
+  /** The buffer mode in effect: this device's choice, else the card's YAML. */
+  private get bufferMode(): BufferMode {
+    return this.deviceSettings.buffer ?? this.config?.buffer ?? 'low';
+  }
+
+  private get showNowNext(): boolean {
+    return this.deviceSettings.nowNext ?? true;
+  }
+
+  private get showStats(): boolean {
+    return this.deviceSettings.stats ?? this.config?.debug ?? false;
+  }
+
+  private toggleSettings = (e?: Event): void => {
+    e?.stopPropagation();
+    this.settingsOpen = !this.settingsOpen;
+    if (this.settingsOpen) this.sleepMenuOpen = false;
+    this.showControls();
+  };
+
+  /** Saves a change for this target on this device; every card for the target applies it. */
+  private changeSettings(patch: DeviceSettings): void {
+    const c = this.config;
+    if (!c) return;
+    const next = { ...this.deviceSettings, ...patch };
+    // A choice that matches the YAML isn't kept, so the card follows later YAML edits.
+    if (next.buffer === c.buffer) next.buffer = undefined;
+    if (next.nowNext === true) next.nowNext = undefined;
+    if (next.stats === c.debug) next.stats = undefined;
+    writeSettings(c.target, next);
+    this.showControls();
+  }
+
+  private readonly settingsActions: SettingsActions = {
+    toggle: this.toggleSettings,
+    setBuffer: (buffer) => this.changeSettings({ buffer }),
+    setNowNext: (nowNext) => this.changeSettings({ nowNext }),
+    setStats: (stats) => this.changeSettings({ stats }),
+    reset: () => this.config && writeSettings(this.config.target, {}),
+  };
+
+  private onSettingsEvent = (e: Event): void => {
+    const d = (e as CustomEvent<{ target: string; settings: DeviceSettings }>).detail;
+    if (!this.config || d.target !== this.config.target) return;
+    const before = this.bufferMode;
+    this.deviceSettings = d.settings;
+    this.configureMultiview();
+    this.syncStatsTimer();
+    // The player's buffering is fixed when it starts, so a new mode needs a new connection:
+    // the old one closes first (stopSession aborts its fetch), then evaluate() opens the next.
+    if (this.bufferMode !== before && this.session?.source.type === 'mpegts') {
+      this.stopSession('settings');
+      this.evaluate();
+    }
+    this.refresh();
+  };
+
+  /** The stats overlay repaints every second while it shows. */
+  private syncStatsTimer(): void {
+    const want = this.showStats && this.isConnected;
+    if (want && !this.debugTimer) this.debugTimer = setInterval(() => this.refresh(), 1000);
+    else if (!want && this.debugTimer) {
+      clearInterval(this.debugTimer);
+      this.debugTimer = undefined;
+    }
+  }
 
   private onKeySeen = (): void => {
     if (this.keysSeen) return;
@@ -1038,8 +1131,9 @@ export class StreamCard extends LitElement implements ControllerCard {
   };
 
   private onFrameClick = (): void => {
-    if (this.sleepMenuOpen) {
+    if (this.sleepMenuOpen || this.settingsOpen) {
       this.sleepMenuOpen = false;
+      this.settingsOpen = false;
       this.showControls();
       return;
     }
@@ -1065,7 +1159,7 @@ export class StreamCard extends LitElement implements ControllerCard {
   private scheduleHideControls(): void {
     clearTimeout(this.controlsTimer);
     this.controlsTimer = setTimeout(() => {
-      if (this.status?.state === 'playing' && !this.sleepMenuOpen) {
+      if (this.status?.state === 'playing' && !this.sleepMenuOpen && !this.settingsOpen) {
         this.controlsVisible = false;
         this.refresh();
       }
@@ -1151,6 +1245,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       mediaInfo: this.status?.mediaInfo,
       notice: this.status?.notice,
       buffering: this.status?.buffering ?? false,
+      buffer: this.bufferMode,
       error: this.error,
       lastError: this.status?.lastError,
       channels: { state: this.channelState, count: this.channels?.size ?? 0 },
@@ -1216,8 +1311,18 @@ export class StreamCard extends LitElement implements ControllerCard {
         ? `Stopped after ${idleMinutes} minute${idleMinutes === 1 ? '' : 's'} without interaction`
         : undefined,
       notice: ui === 'playing' ? s?.notice : undefined,
-      debugText: c?.debug && ui !== 'preview' && ui !== 'empty' ? this.debugText() : undefined,
+      debugText:
+        this.showStats && ui !== 'preview' && ui !== 'empty' ? this.debugText() : undefined,
       sleepMenuOpen: this.sleepMenuOpen,
+      settings: c?.settings
+        ? {
+            open: this.settingsOpen,
+            buffer: this.bufferMode,
+            nowNext: c.epg ? this.showNowNext : undefined,
+            stats: this.showStats,
+            custom: Object.keys(this.deviceSettings).length > 0,
+          }
+        : undefined,
       edit: c
         ? { target: c.target, profile: c.outputProfile, favourites: c.favourites.length }
         : undefined,
@@ -1238,6 +1343,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       toggleGuide: this.togglePicker,
       toggleSleepMenu: this.toggleSleepMenu,
       multiview: this.multiviewAction(),
+      settings: this.config?.settings ? this.settingsActions : undefined,
     };
   }
 

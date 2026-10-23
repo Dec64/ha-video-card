@@ -209,6 +209,7 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     // days=1: Dispatcharr sends only the next 24 hours, not the whole guide.
     epgUrl: epgUrl ?? (base ? `${normalizeBaseUrl(base)}/output/epg?days=1` : undefined),
     guide: guide as GuideMode,
+    settings: optionalBool(raw, 'settings', true),
     multiview: normalizeMultiview(raw.multiview, outputProfile),
   };
   // On by default whenever there's a channel list and a guide to read (dispatcharr_url set).

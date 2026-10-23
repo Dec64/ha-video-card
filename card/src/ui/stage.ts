@@ -300,6 +300,62 @@ function sleepMenu(v: CardView, a: CardActions): TemplateResult | typeof nothing
   </div>`;
 }
 
+function settingsPanel(v: CardView, a: CardActions): TemplateResult | typeof nothing {
+  const s = v.settings;
+  const act = a.settings;
+  if (!s?.open || !act) return nothing;
+  const seg = (mode: 'low' | 'stable', label: string) =>
+    html`<button
+      class="seg-option buffer-${mode}"
+      role="radio"
+      aria-checked=${s.buffer === mode ? 'true' : 'false'}
+      @click=${() => act.setBuffer(mode)}
+    >
+      ${label}
+    </button>`;
+  const toggle = (cls: string, name: string, on: boolean, set: (on: boolean) => void) =>
+    html`<button
+      class="setting toggle ${cls}"
+      role="switch"
+      aria-checked=${on ? 'true' : 'false'}
+      @click=${() => set(!on)}
+    >
+      <span class="setting-name">${name}</span>
+      <span class="switch" aria-hidden="true"></span>
+    </button>`;
+  return html`<div class="glass menu settings-panel" role="group" aria-label="Settings">
+    <div class="menu-head">
+      <span class="menu-label">On this device</span>
+      ${
+        s.custom
+          ? html`<button
+              class="reset-settings"
+              @click=${() => act.reset()}
+              title="Use the dashboard's settings"
+            >
+              Reset
+            </button>`
+          : nothing
+      }
+    </div>
+    <div class="setting">
+      <span class="setting-name">Buffering</span>
+      <div class="seg" role="radiogroup" aria-label="Buffering">
+        ${seg('low', 'Low delay')} ${seg('stable', 'Stable')}
+      </div>
+      <span class="setting-hint">
+        ${s.buffer === 'stable' ? 'Smoother on slow devices, a few seconds behind' : 'Starts fast, stays close to live'}
+      </span>
+    </div>
+    ${
+      s.nowNext !== undefined
+        ? toggle('set-nownext', 'Now and next', s.nowNext, act.setNowNext)
+        : nothing
+    }
+    ${toggle('set-stats', 'Stats overlay', s.stats, act.setStats)}
+  </div>`;
+}
+
 /** The control bar: transport on the left, what's next in the middle, sound and view on the right. */
 export function renderControls(v: CardView, a: CardActions): TemplateResult | typeof nothing {
   // The error layer has its own buttons; nothing to control in preview or empty states.
@@ -408,6 +464,18 @@ export function renderControls(v: CardView, a: CardActions): TemplateResult | ty
             </button>`
           : nothing
       }
+      ${
+        v.settings && a.settings
+          ? html`<button
+              class="ctl ctl-settings ${v.settings.open ? 'on' : ''}"
+              @click=${a.settings.toggle}
+              aria-label="Settings"
+              aria-expanded=${v.settings.open ? 'true' : 'false'}
+            >
+              ${icon('settings')}
+            </button>`
+          : nothing
+      }
       <button
         class="ctl ctl-fullscreen"
         @click=${a.toggleFullscreen}
@@ -415,7 +483,7 @@ export function renderControls(v: CardView, a: CardActions): TemplateResult | ty
       >
         ${icon(v.fullscreen ? 'fullscreenExit' : 'fullscreen')}
       </button>
-      ${sleepMenu(v, a)}
+      ${sleepMenu(v, a)} ${settingsPanel(v, a)}
     </div>
   </div>`;
 }

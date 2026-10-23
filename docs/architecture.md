@@ -50,6 +50,7 @@ How the card works today and the contracts other code relies on. For using the c
 | `ui/view.ts` | `CardView` and `CardActions`: what the templates read. Also the seams other features fill: `NavView`/`NavActions` (recents, last channel, keypad, volume, sleep timer) and `NowNext` (guide data). |
 | `ui/stage.ts` | Templates for the picture: channel ident, channel-number OSD, state layers, control bar, TV hints. Pure functions of `CardView` + `CardActions`. |
 | `ui/theme.ts` | Design tokens mapped from the HA theme (`--sc-*`); the picture area is always dark. |
+| `settings.ts` | The settings panel's per-device choices (buffer mode, now/next, stats overlay) per target, and the page event that keeps every card for the target in step. |
 | `memory.ts` | Last channel and play intent per target, per device (localStorage). |
 | `recents.ts`, `number-entry.ts`, `volume.ts`, `sleep-timer.ts` | Channel navigation logic: recently watched per target and device, remote-style number entry, remembered volume, sleep timers (owned by the controller). No markup. |
 | `editor-form.ts` | Schema for HA's visual editor (`getConfigForm`), a lazy chunk. |
@@ -140,6 +141,7 @@ epg_url: <url>                      # default {base}/output/epg?days=1
 autoplay: true                      # play the chosen channel when shown, unless left stopped
 muted: false                        # start muted; falls back to muted + "tap to unmute" if blocked
 buffer: low                         # low | stable (reserve of ~8 s, no skipping ahead, refills on underrun)
+settings: true                      # the settings button; its per-device choices override buffer and debug's overlay
 aspect_ratio: "16:9"
 idle_timeout: 0                     # minutes, 0 = off; counts as a stop
 start_timeout: 20                   # seconds to wait for first data
@@ -199,6 +201,7 @@ A registered card implements `ControllerCard`: `target`, `isLive`, `deliver(req)
 - `localStorage['stream-card:last:<target>']` = `{ channel?, url?, title?, playing }`. `channel` is always the resolved stream ID.
 - `localStorage['stream-card:recent:<target>']` = up to 8 `{ channel?, url?, title? }`, newest first, no duplicates. Last channel is the newest entry that isn't playing now.
 - `localStorage['stream-card:volume']` = `0`–`1`, for every card on the device.
+- `localStorage['stream-card:settings:<target>']` = `{ buffer?: 'low' | 'stable', nowNext?: boolean, stats?: boolean }` from the settings panel. A field is present only when it differs from the card's YAML (`nowNext` defaults to on, `stats` to `debug`); Reset removes the key. Each write fires `stream-card-settings` on `window` with `{ target, settings }`, and every card for that target applies it. A new buffer mode while a TS session runs stops that session (closing its connection) and lets `evaluate()` start the next. Multiview tiles get the mode when they next start.
 - `localStorage['stream-card:sleep:<target>']` = the sleep deadline (epoch ms). One that passed while the page was closed stops the target when the controller next looks at it.
 
 ### Card navigation API
