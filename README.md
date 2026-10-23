@@ -145,6 +145,7 @@ channel: BBC One HD
 **On each screen.** The layout follows the card's width and the device, with no settings:
 - **Phones and Bubble pop-ups** (under 520 px wide): the ident and big round controls sit below the picture, in reach of a thumb, and the guide lists one channel per row.
 - **Wall panels** (touch screens 900 px and wider, such as a Fire HD 8 in Fully Kiosk): 56 px buttons and bigger guide tiles for arm's-length taps.
+- **Narrower cards** (under 680 px) drop the volume slider (the mute button stays) and use 44 px buttons, so every control fits on the bar. If a bar still doesn't fit (for example full screen on a phone held upright), it wraps onto a second row instead of pushing buttons off the edge.
 - **Desktop**: everything floats over the picture, with "Next" in the control bar.
 - **TV** (HA Cast to a Chromecast or Google TV): a 10-foot layout inside the TV-safe area with no tap controls; the clock shows, and remote-key hints appear once a key is pressed.
 

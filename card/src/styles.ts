@@ -11,8 +11,12 @@ const card = css`
   :host {
     display: block;
   }
+  /* When the dashboard makes the card taller than its content (a sections row next to a taller
+     column, a theme's min-height), the picture takes the extra height, letterboxed like full
+     screen, instead of leaving a bar of card background under it. */
   ha-card {
-    display: block;
+    display: flex;
+    flex-direction: column;
     overflow: hidden;
     height: 100%;
     font-family: var(--sc-font);
@@ -39,9 +43,15 @@ const card = css`
   .stage[hidden] {
     display: none;
   }
+  ha-card > * {
+    flex: none;
+  }
   .stage {
     position: relative;
     container: stage / inline-size;
+    display: flex;
+    flex-direction: column;
+    flex: 1 0 auto;
   }
   .stage:fullscreen {
     display: flex;
@@ -57,6 +67,7 @@ const card = css`
   }
   .frame {
     position: relative;
+    flex: 1 0 auto;
     width: 100%;
     background: var(--sc-pic);
     color: var(--sc-pic-text);
@@ -534,6 +545,10 @@ const card = css`
     right: 12px;
     bottom: 12px;
     display: flex;
+    /* A bar that doesn't fit wraps upwards over the picture rather than pushing buttons (full
+       screen among them) off the card, which clips them. */
+    flex-wrap: wrap;
+    justify-content: flex-end;
     align-items: center;
     gap: 10px;
     color: var(--sc-pic-text);
@@ -541,6 +556,8 @@ const card = css`
   }
   .group {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     align-items: center;
     gap: 2px;
     padding: 4px;
@@ -550,12 +567,15 @@ const card = css`
     backdrop-filter: blur(18px) saturate(160%);
     border: 1px solid var(--sc-glass-line);
   }
+  .group.transport {
+    margin-right: auto;
+  }
   .group.sound {
     position: relative;
-    margin-left: auto;
   }
   .upnext {
-    flex: 1 1 auto;
+    /* A zero basis, so a long title never wraps the bar; it shrinks and ellipsises instead. */
+    flex: 1 1 0;
     min-width: 0;
     height: calc(var(--sc-target) + 8px);
     box-sizing: border-box;
@@ -678,13 +698,24 @@ const card = css`
     color: #111318;
   }
 
-  /* Narrow cards: hide the "Next" line and drop the volume slider's width first. */
+  /* Narrow cards: hide the "Next" line, then the volume slider (mute stays), so the floating
+     bar fits on one row down to the phone layout, settings button included. */
   @container stage (max-width: 760px) {
     .upnext {
       display: none;
     }
     .vol-slider {
       width: 72px;
+    }
+  }
+  @container stage (max-width: 679px) {
+    .vol-slider,
+    .sep {
+      display: none;
+    }
+    /* Wall panels' 56 px targets don't fit in a card this narrow; 44 px is still finger-sized. */
+    .controls {
+      --sc-target: 44px;
     }
   }
 
@@ -757,20 +788,21 @@ const card = css`
       background: var(--sc-accent);
       color: var(--sc-on-accent);
     }
-    /* Row 1: last, down, stop, up, sleep. Row 2: mute, volume, channels, multiview, full screen. */
-    .ctl-last {
+    /* Row 1: last, down, stop, up, sleep. Row 2: mute, volume, channels, multiview, full screen.
+       Orders on row 2 are spaced so another button can slot in. */
+    .stage:not(.fs):not(.tv) .ctl-last {
       order: 1;
     }
-    .ctl-down {
+    .stage:not(.fs):not(.tv) .ctl-down {
       order: 2;
     }
-    .ctl-stop {
+    .stage:not(.fs):not(.tv) .ctl-stop {
       order: 3;
     }
-    .ctl-up {
+    .stage:not(.fs):not(.tv) .ctl-up {
       order: 4;
     }
-    .ctl-sleep {
+    .stage:not(.fs):not(.tv) .ctl-sleep {
       order: 5;
     }
     .stage:not(.fs):not(.tv) .row-break {
@@ -779,20 +811,20 @@ const card = css`
       flex-basis: 100%;
       height: 0;
     }
-    .ctl-mute {
+    .stage:not(.fs):not(.tv) .ctl-mute {
       order: 7;
     }
-    .vol-slider {
+    .stage:not(.fs):not(.tv) .vol-slider {
       order: 8;
     }
-    .ctl-channels {
-      order: 9;
-    }
-    .ctl-multiview {
+    .stage:not(.fs):not(.tv) .ctl-channels {
       order: 10;
     }
-    .ctl-fullscreen {
-      order: 11;
+    .stage:not(.fs):not(.tv) .ctl-multiview {
+      order: 12;
+    }
+    .stage:not(.fs):not(.tv) .ctl-fullscreen {
+      order: 14;
     }
     .stage:not(.fs):not(.tv) .ctl-mute,
     .stage:not(.fs):not(.tv) .ctl-channels,
@@ -803,6 +835,7 @@ const card = css`
       background: none;
     }
     .stage:not(.fs):not(.tv) .vol-slider {
+      display: block;
       flex: 1;
       width: auto;
       min-width: 60px;
@@ -820,6 +853,33 @@ const card = css`
     .stage:not(.fs):not(.tv) .chips-top {
       top: 10px;
       right: 10px;
+    }
+  }
+  /* Full screen on a phone: the bar can take two rows, so the channel number sits above them. */
+  @container stage (max-width: 519px) {
+    .stage.fs .osd {
+      bottom: 156px;
+    }
+    .stage.fs .frame[data-state] .layer {
+      padding-bottom: 140px;
+    }
+  }
+  /* Small phones: smaller buttons and no slider, so each row stays one row. */
+  @container stage (max-width: 359px) {
+    .stage:not(.fs):not(.tv) .controls {
+      column-gap: 6px;
+      padding: 12px 12px 4px;
+    }
+    .stage:not(.fs):not(.tv) .ctl {
+      width: 44px;
+      height: 44px;
+    }
+    .stage:not(.fs):not(.tv) .ctl-stop {
+      width: 56px;
+      height: 56px;
+    }
+    .stage:not(.fs):not(.tv) .vol-slider {
+      display: none;
     }
   }
 
