@@ -8,6 +8,7 @@
 //   window.__mseShimCodecs = ['avc1', 'mp4a']   codec prefixes this "device" supports
 //   window.__mseShimBlockUnmuted = true          play() with sound rejects (autoplay policy)
 //   window.__mseShimAppendMs = 600               each append takes this long (a slow device)
+//   window.__mseShimGap = [3, 3.2]               a hole in the buffer; playback stops at it
 (() => {
   if (window.__mseShimInstalled) return;
   window.__mseShimInstalled = true;
@@ -202,7 +203,11 @@
           let t = this.base;
           if (!this.paused && this.startedAt)
             t += ((performance.now() - this.startedAt) / 1000) * this.rate;
-          return Math.min(t, Math.max(this.base, this.ms._bufferedEnd()));
+          t = Math.min(t, Math.max(this.base, this.ms._bufferedEnd()));
+          // Like a real browser, playback stops at a hole in the buffer until something seeks.
+          const gap = window.__mseShimGap;
+          if (gap && this.base < gap[1] && t > gap[0]) t = Math.max(this.base, gap[0]);
+          return t;
         },
         _onBuffer() {
           if (!this.ms) return;
@@ -336,6 +341,13 @@
       const s = state(this);
       const end = s.ms._bufferedEnd();
       const start = s.ms._bufferedStart();
+      const gap = window.__mseShimGap;
+      if (gap && start < gap[0] && gap[1] < end) {
+        return new FakeTimeRanges([
+          [start, gap[0]],
+          [gap[1], end],
+        ]);
+      }
       return new FakeTimeRanges(end > start ? [[start, end]] : []);
     },
   });

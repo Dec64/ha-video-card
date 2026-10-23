@@ -105,6 +105,42 @@ test('search, groups and favourites', async ({ h }) => {
   await h.expectOpen(pl.id(4), 1);
 });
 
+test('quick channel up presses release at once and tune only the channel landed on', async ({
+  h,
+}) => {
+  await h.load();
+  const pl = playlist(h);
+  await h.mount({ m3u_url: pl.m3u_url, guide: 'closed' });
+  await tile(h, '101 News One HD').click();
+  await h.expectOpen(pl.id(1), 1);
+  await h.expectUi('playing');
+
+  // One press on the control bar, then three more 200 ms apart (quicker than the settle time).
+  await ctl(h, 'ctl-up');
+  await h.expectOpen(pl.id(1), 0, 500);
+  await h.page.evaluate(async () => {
+    const card = document.querySelector('stream-card') as unknown as { channelUp(): void };
+    for (let i = 0; i < 3; i++) {
+      await new Promise((r) => setTimeout(r, 200));
+      card.channelUp();
+    }
+  });
+  await expect(h.frame()).toContainText('Kids Time');
+  await h.expectOpen(pl.id(5), 1);
+  await h.expectUi('playing');
+  for (const n of [2, 3, 4]) expect((await h.stats(pl.id(n))).total).toBe(0);
+  expect((await h.stats(pl.id(5))).total).toBe(1);
+  // Last channel goes back to where the zapping started, not to a channel skipped past.
+  expect(
+    await h.page.evaluate(() => {
+      const card = document.querySelector('stream-card') as unknown as {
+        previousChannel?: { name: string };
+      };
+      return card.previousChannel?.name;
+    }),
+  ).toBe('News One HD');
+});
+
 test('switching from the picker and channel up/down never holds two connections', async ({ h }) => {
   await h.load();
   const pl = playlist(h);

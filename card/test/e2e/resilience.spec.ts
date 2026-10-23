@@ -267,3 +267,28 @@ test('changing the buffer mode while playing restarts with one connection at a t
   expect((await h.stats(ch)).total).toBe(4);
   expect((await h.info()).failures).toBe(0);
 });
+
+// Live TS often buffers in pieces. The browser stops at a hole; buffer: low gets past it with
+// mpegts.js's catch-up jump, stable mode used to sit on Buffering for ever.
+for (const [buffer, gap] of [
+  ['stable', [0.5, 0.6]],
+  ['stable', [3, 3.4]],
+  ['low', [3, 3.4]],
+] as const) {
+  test(`buffer: ${buffer} plays past a hole in the buffer at ${gap[0]} s`, async ({ h }) => {
+    test.setTimeout(60_000);
+    await h.load();
+    await h.page.evaluate((g) => (window.__mseShimGap = [g[0], g[1]]), gap);
+    const ch = h.channel();
+    await h.mount({ channel: ch, buffer });
+    await h.expectUi('playing', 'stream-card', 20_000);
+    const time = () =>
+      h.page.evaluate(
+        () =>
+          document.querySelector('stream-card')!.shadowRoot!.querySelector('video')!.currentTime,
+      );
+    await expect.poll(time, { timeout: 15_000 }).toBeGreaterThan(gap[1] + 1);
+    expect((await h.info()).failures).toBe(0);
+    expect((await h.stats(ch)).total).toBe(1);
+  });
+}
