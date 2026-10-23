@@ -122,6 +122,10 @@ export class PlaybackSession {
     sessionCounters.sessions++;
   }
 
+  get buffer(): BufferMode {
+    return this.opts.buffer ?? 'low';
+  }
+
   get stallTimeoutMs(): number {
     return this.opts.stallTimeoutMs ?? 8000;
   }
@@ -150,6 +154,7 @@ export class PlaybackSession {
       state: this.status.failures > 0 ? 'reconnecting' : 'connecting',
       notice: undefined,
       retryAt: undefined,
+      buffering: false,
     });
 
     let engine: Engine;
@@ -289,7 +294,11 @@ export class PlaybackSession {
   private onEngineEvent(id: number, ev: EngineEvent): void {
     if (!this.isCurrent(id)) return;
     if (ev.type === 'data') {
+      // The stall clock starts with the first data. Waiting for it is the start timeout's job:
+      // a cold Dispatcharr channel can take longer than the stall timeout to send anything, and
+      // counting that wait as a stall dropped the connection the moment the stream arrived.
       this.gotData = true;
+      this.lastProgressAt = Date.now();
       return;
     }
     if (ev.type === 'media-info') {

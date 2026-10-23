@@ -131,5 +131,6 @@ declare global {
     };
     __mseShimCodecs?: string[];
     __mseShimBlockUnmuted?: boolean;
+    __mseShimAppendMs?: number;
   }
 }

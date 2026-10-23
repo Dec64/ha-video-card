@@ -7,6 +7,7 @@
 // Knobs (set before the card loads):
 //   window.__mseShimCodecs = ['avc1', 'mp4a']   codec prefixes this "device" supports
 //   window.__mseShimBlockUnmuted = true          play() with sound rejects (autoplay policy)
+//   window.__mseShimAppendMs = 600               each append takes this long (a slow device)
 (() => {
   if (window.__mseShimInstalled) return;
   window.__mseShimInstalled = true;
@@ -69,7 +70,7 @@
         this.dispatchEvent(new Event('update'));
         this.dispatchEvent(new Event('updateend'));
         this.ms._onBufferChange();
-      }, 0);
+      }, window.__mseShimAppendMs ?? 0);
     }
     appendBuffer(data) {
       if (this.ms.readyState !== 'open') throw new DOMException('closed', 'InvalidStateError');
