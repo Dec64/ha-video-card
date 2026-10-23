@@ -137,6 +137,7 @@ channel: BBC One HD
 | 🔈 and slider | Mute / unmute, and volume |
 | ☾ | Sleep timer: stop after 15, 30, 60 or 90 minutes |
 | ☰ | Show or hide the guide |
+| ⚙ (sliders) | Settings for this device: buffering, now and next, stats overlay (see below) |
 | ⛶ | Full screen (the ident and controls come along) |
 | ▦ | Multiview (only with `multiview` turned on) |
 
@@ -177,6 +178,13 @@ Keys typed in the channel search box stay in the search box.
 - **Exit** goes back to one picture, playing the tile that had the sound.
 - A button for this card's target, Stop, a stop button and the idle timeout all leave multiview and close every tile. Everything under "When it lets go" below releases every tile at once.
 - Fire HD 8 tablets: keep `max_tiles` at 2. Each tile is a separate video decode, and these tablets run out of hardware decoders quickly. If a tile stutters, the card says the device can't keep up; a lower-resolution Dispatcharr output profile for tiles (`multiview.output_profile`, e.g. one that scales to 540p) helps, at the cost of Dispatcharr transcoding each tile.
+
+**Settings.** The sliders button in the control bar opens a small panel for this device:
+- **Buffering**: Low delay or Stable (the same as the `buffer` option). Changing it while playing reconnects once: the old connection closes before the new one opens.
+- **Now and next**: hide or show the programme info in the ident, the control bar and the guide (only with guide data). The guide keeps downloading while it's hidden; `epg: false` stops that.
+- **Stats overlay**: the codecs, buffer, speed and dropped frames over the picture (the overlay part of `debug`).
+
+Choices are saved on this device for this card's target and override the card's YAML there, so a Fire tablet can use Stable while phones stay on Low delay with the same dashboard. Every card for the target on the page follows a change. **Reset** in the panel forgets them and goes back to the YAML. `settings: false` hides the button (e.g. on a shared wall panel).
 
 **What it remembers.** Each device remembers the last channel on each target and whether it was left playing.
 - Next time, it starts on that channel: playing if you left it playing, or stopped with a play button if you stopped it (Stop, a stop button or the idle timeout).
@@ -278,7 +286,7 @@ cards:
 - Web Content Settings → **Autoplay Videos**: on. Otherwise playback starts muted.
 - Advanced Web Settings → **Enable JavaScript Interface**: on. The card then stops when the screen turns off or the screensaver starts, and resumes after.
 - Advanced Web Settings → hardware acceleration: on.
-- If playback pauses every few seconds, set the tablet's card to **Buffering: Stable** (`buffer: stable`). The picture starts after about 8 s of buffering and runs a few seconds behind live, but rides through the tablet's hiccups. If it still stutters with the debug overlay showing dropped frames climbing, the tablet can't decode the channel's video fast enough; a Dispatcharr output profile that converts to 720p for that tablet is the fix.
+- If playback pauses every few seconds, set **Buffering** to **Stable** in the card's settings panel on that tablet (or `buffer: stable` on its card). The picture starts after about 8 s of buffering and runs a few seconds behind live, but rides through the tablet's hiccups. If it still stutters with the debug overlay showing dropped frames climbing, the tablet can't decode the channel's video fast enough; a Dispatcharr output profile that converts to 720p for that tablet is the fix.
 
 ## 6. All options
 
@@ -306,6 +314,7 @@ cards:
 | `start_timeout` | `20` | Seconds to wait for the first data before showing an error |
 | `reconnect.max_attempts` | `5` | Reconnects after stalls or drops before giving up (backoff 1, 2, 4, 8, 15 s) |
 | `url_template` | `{base}/proxy/ts/stream/{channel}` | How channel URLs are built |
+| `settings` | `true` | The settings button in the control bar. Its choices are saved per device and override `buffer` and `debug`'s overlay there |
 | `debug` | `false` | Overlay with engine, codecs, buffer, frames, channel list state and the last error |
 | `multiview` | off | `true`, or `{ enabled: true, max_tiles: 2, output_profile: <id> }`: the multiview button (needs the channel list). Each tile is its own Dispatcharr connection |
 | `multiview.max_tiles` | `2` | Most tiles at once, 2 to 4. More than 2 adds the 2 × 2 layout |

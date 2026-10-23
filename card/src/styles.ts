@@ -640,7 +640,8 @@ const card = css`
     border-radius: 50%;
     background: #fff;
   }
-  .sleep-menu {
+  .sleep-menu,
+  .settings-panel {
     position: absolute;
     right: 0;
     bottom: calc(100% + 10px);
@@ -676,6 +677,92 @@ const card = css`
   .sleep-option[aria-pressed='true'] {
     background: #fff;
     color: #111318;
+  }
+  .settings-panel {
+    width: 280px;
+    max-width: calc(100cqw - 24px);
+    gap: 12px;
+    z-index: 3;
+  }
+  .menu-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 24px;
+  }
+  .reset-settings {
+    padding: 4px 10px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--sc-pic-text);
+    background: rgba(255, 255, 255, 0.12);
+  }
+  .setting {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    text-align: left;
+  }
+  .setting.toggle {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    min-height: 36px;
+    width: 100%;
+  }
+  .setting-name {
+    font-size: 14px;
+    font-weight: 650;
+  }
+  .setting-hint {
+    font-size: 12px;
+    color: var(--sc-pic-text-2);
+  }
+  .seg {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 4px;
+    padding: 3px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .seg-option {
+    height: 34px;
+    border-radius: 9px;
+    font-size: 13px;
+    font-weight: 650;
+  }
+  .seg-option[aria-checked='true'] {
+    background: #fff;
+    color: #111318;
+  }
+  .switch {
+    position: relative;
+    flex: none;
+    width: 42px;
+    height: 24px;
+    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.2);
+    transition: background 0.15s;
+  }
+  .switch::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.15s var(--sc-ease);
+  }
+  .setting[aria-checked='true'] .switch {
+    background: var(--sc-accent);
+  }
+  .setting[aria-checked='true'] .switch::after {
+    transform: translateX(18px);
   }
 
   /* Narrow cards: hide the "Next" line and drop the volume slider's width first. */
@@ -791,12 +878,16 @@ const card = css`
     .ctl-multiview {
       order: 10;
     }
-    .ctl-fullscreen {
+    .ctl-settings {
       order: 11;
+    }
+    .ctl-fullscreen {
+      order: 12;
     }
     .stage:not(.fs):not(.tv) .ctl-mute,
     .stage:not(.fs):not(.tv) .ctl-channels,
     .stage:not(.fs):not(.tv) .ctl-multiview,
+    .stage:not(.fs):not(.tv) .ctl-settings,
     .stage:not(.fs):not(.tv) .ctl-fullscreen {
       width: 44px;
       height: 44px;
@@ -807,7 +898,8 @@ const card = css`
       width: auto;
       min-width: 60px;
     }
-    .stage:not(.fs):not(.tv) .sleep-menu {
+    .stage:not(.fs):not(.tv) .sleep-menu,
+    .stage:not(.fs):not(.tv) .settings-panel {
       right: 16px;
       bottom: calc(100% - 4px);
     }
