@@ -8,6 +8,7 @@
 //   drop-N    send for N s, then cut the connection
 //   gap-N     from 12 s in, hold the data back for N s, then send it all at once (a network hiccup)
 //   hang      accept the request and never answer (a broken output profile does this)
+//   slow-N    answer at once but send the first byte after N s (a cold Dispatcharr channel start)
 //   status-N  answer with HTTP status N
 //   flaky-N   first N requests get 503, later ones stream normally
 //   nocors    stream without Access-Control-Allow-Origin
@@ -299,14 +300,22 @@ export async function startFakeDispatcharr({ port = 0, appPort = 0, host = '127.
       'Content-Type': 'video/mp2t',
       'Cache-Control': 'no-cache',
     });
-    ff = spawn('ffmpeg', ffmpegArgs(mode), { stdio: ['ignore', 'pipe', 'inherit'] });
     let paused = false;
     let held = null;
-    ff.stdout.on('data', (chunk) => {
-      if (closed || paused) return;
-      if (held) held.push(chunk);
-      else res.write(chunk);
-    });
+    const begin = () => {
+      if (closed) return;
+      ff = spawn('ffmpeg', ffmpegArgs(mode), { stdio: ['ignore', 'pipe', 'inherit'] });
+      ff.stdout.on('data', (chunk) => {
+        if (closed || paused) return;
+        if (held) held.push(chunk);
+        else res.write(chunk);
+      });
+      ff.on('exit', () => {
+        if (!closed && mode !== 'stall') res.end();
+      });
+    };
+    if (mode === 'slow') timers.push(setTimeout(begin, (arg ?? 5) * 1000));
+    else begin();
     if (mode === 'gap') {
       timers.push(setTimeout(() => (held = []), 12_000));
       timers.push(
@@ -320,9 +329,6 @@ export async function startFakeDispatcharr({ port = 0, appPort = 0, host = '127.
         ),
       );
     }
-    ff.on('exit', () => {
-      if (!closed && mode !== 'stall') res.end();
-    });
     if (mode === 'stall') timers.push(setTimeout(() => (paused = true), (arg ?? 3) * 1000));
     if (mode === 'drop') timers.push(setTimeout(() => res.destroy(), (arg ?? 3) * 1000));
   });

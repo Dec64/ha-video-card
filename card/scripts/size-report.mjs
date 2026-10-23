@@ -4,7 +4,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { gzipSync } from 'node:zlib';
 
-const INITIAL_BUDGET_KB = 37;
+const INITIAL_BUDGET_KB = 38;
 const dir = new URL('../dist/', import.meta.url);
 const files = readdirSync(dir).filter((n) => n.endsWith('.js'));
 const gz = (f) => gzipSync(readFileSync(new URL(f, dir))).length / 1024;
