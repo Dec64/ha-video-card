@@ -135,3 +135,31 @@ test('without a guide the panel has no programme info row', async ({ h }) => {
   await expect(h.frame().locator('.settings-panel .setting')).toHaveCount(2); // buffering and stats
   await expect(h.frame().locator('.settings-panel .set-nownext')).toHaveCount(0);
 });
+
+test("a device's buffer choice survives a config update without reconnecting", async ({ h }) => {
+  await h.load();
+  const ch = h.channel();
+  await h.mount({ channel: ch });
+  await h.expectUi('playing');
+  await h.frame().locator('button.ctl-settings').click();
+  await h.frame().locator('.buffer-stable').click();
+  await h.expectUi('playing', 'stream-card', 20_000);
+  expect((await h.stats(ch)).total).toBe(2);
+  // HA re-sends the same YAML (buffer: low): the device's Stable still applies.
+  await h.page.evaluate(
+    ([url, c]) =>
+      (
+        document.querySelector('stream-card') as HTMLElement & { setConfig(c: unknown): void }
+      ).setConfig({
+        type: 'custom:stream-card',
+        dispatcharr_url: url,
+        channel_list: false,
+        channel: c,
+      }),
+    [STREAM, ch] as const,
+  );
+  await h.page.waitForTimeout(1500);
+  expect(await buffer(h)).toBe('stable');
+  expect((await h.stats(ch)).total).toBe(2);
+  await h.expectOpen(ch, 1);
+});

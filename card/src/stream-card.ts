@@ -633,8 +633,9 @@ export class StreamCard extends LitElement implements ControllerCard {
       return;
     }
     if (this.session && this.session.source.url !== src.url) this.stopSession('switch');
-    // The buffer mode is fixed for a session's life; a new one restarts the stream.
-    else if (this.session && this.session.buffer !== this.config.buffer) this.stopSession('config');
+    // The buffer mode (YAML or this device's choice) is fixed for a session's life; a new one
+    // restarts the stream.
+    else if (this.session && this.session.buffer !== this.bufferMode) this.stopSession('config');
     // The big number shows once the new channel's picture arrives (tuning has its own layer).
     if (this.source?.url !== src.url) this.osdPending = true;
     this.source = { ...src, title: req.title ?? src.title };
