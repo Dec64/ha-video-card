@@ -4,6 +4,7 @@ import type { StreamSource } from '../../src/types';
 import {
   PlaybackSession,
   reserveAhead,
+  skipGap,
   sessionCounters,
   STABLE_RESUME_S,
   STABLE_START_S,
@@ -44,6 +45,7 @@ function fakeVideo() {
     paused: true,
     muted: false,
     videoWidth: 1920,
+    buffered: { length: 0, start: () => 0, end: () => 0 },
     async play() {
       v.paused = false;
     },
@@ -278,6 +280,47 @@ describe('PlaybackSession with buffer: stable', () => {
     void s.destroy();
   });
 
+  it('starts across a small hole at the start of the buffer instead of holding for ever', async () => {
+    const { s, video, statuses, engine, v } = stableSetup();
+    s.start();
+    await flush();
+    engine().emit({ type: 'data' });
+    // [0, 0.5] then [0.6, bufEnd]: the browser would stop at 0.5.
+    (v as Record<string, unknown>).buffered = {
+      length: 2,
+      start: (i: number) => (i ? 0.6 : 0),
+      end: (i: number) => (i ? v.bufEnd : 0.5),
+    };
+    v.bufEnd = STABLE_START_S + 1;
+    await vi.advanceTimersByTimeAsync(600);
+    expect(video.paused).toBe(false);
+    expect(statuses.at(-1)?.buffering).toBe(false);
+    void s.destroy();
+  });
+
+  it('starts from the newest data if a big hole keeps the reserve from building', async () => {
+    const { s, video, statuses, engine, v } = stableSetup();
+    s.start();
+    await flush();
+    engine().emit({ type: 'data' });
+    // [0, 0.5], then data from 10 s on that keeps growing.
+    (v as Record<string, unknown>).buffered = {
+      length: 2,
+      start: (i: number) => (i ? 10 : 0),
+      end: (i: number) => (i ? v.bufEnd : 0.5),
+    };
+    for (let t = 0; t < 21_000; t += 500) {
+      v.bufEnd = 10.5 + t / 1000;
+      await vi.advanceTimersByTimeAsync(500);
+    }
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(video.currentTime).toBeGreaterThan(10);
+    expect(video.paused).toBe(false);
+    expect(statuses.at(-1)?.buffering).toBe(false);
+    expect(FakeEngine.created).toHaveLength(1);
+    void s.destroy();
+  });
+
   it('plays a native source at once: with preload none it would never build a reserve', async () => {
     const { s, video, statuses, engine } = setup(
       { buffer: 'stable' },
@@ -323,5 +366,63 @@ describe('reserveAhead', () => {
     expect(reserveAhead(vid(0, [[0.5, 6]]))).toBe(5.5);
     expect(reserveAhead(vid(12, [[0, 10]]))).toBe(0);
     expect(reserveAhead(vid(0, []))).toBe(0);
+  });
+  it('counts small holes as reserve, not big ones', () => {
+    expect(
+      reserveAhead(
+        vid(0, [
+          [0, 0.5],
+          [0.6, 9],
+        ]),
+      ),
+    ).toBe(9);
+    expect(
+      reserveAhead(
+        vid(0, [
+          [0, 0.5],
+          [5, 9],
+        ]),
+      ),
+    ).toBe(0.5);
+  });
+});
+
+describe('skipGap', () => {
+  const vid = (t: number, ranges: Array<[number, number]>) =>
+    ({
+      currentTime: t,
+      buffered: {
+        length: ranges.length,
+        start: (i: number) => ranges[i][0],
+        end: (i: number) => ranges[i][1],
+      },
+    }) as unknown as HTMLVideoElement & { currentTime: number };
+  it('jumps a hole at or just ahead of the playhead', () => {
+    const atEnd = vid(0.45, [
+      [0, 0.5],
+      [0.6, 9],
+    ]);
+    expect(skipGap(atEnd)).toBe(true);
+    expect(atEnd.currentTime).toBeCloseTo(0.61);
+    const inHole = vid(0, [[1.2, 9]]);
+    expect(skipGap(inHole)).toBe(true);
+    expect(inHole.currentTime).toBeCloseTo(1.21);
+  });
+  it('leaves the playhead alone mid-range, at the live edge, or before a big hole', () => {
+    for (const v of [
+      vid(2, [
+        [0, 0.5],
+        [0.6, 9],
+      ]),
+      vid(8.95, [[0, 9]]),
+      vid(0.45, [
+        [0, 0.5],
+        [10, 19],
+      ]),
+    ]) {
+      const t = v.currentTime;
+      expect(skipGap(v)).toBe(false);
+      expect(v.currentTime).toBe(t);
+    }
   });
 });

@@ -35,7 +35,7 @@ A Home Assistant Lovelace card (`custom:stream-card`) that plays Dispatcharr MPE
 - New user-facing message → add it to `MESSAGES` and to the README troubleshooting table.
 
 ## Testing notes
-- Playwright's Chromium (and cloud containers) can't decode H.264/AAC. `test/e2e/mse-shim.js` replaces MediaSource so mpegts.js still fetches, demuxes and remuxes real TS while playback time is simulated. Knobs: `window.__mseShimCodecs`, `window.__mseShimBlockUnmuted`, `window.__mseShimAppendMs` (slow appends).
+- Playwright's Chromium (and cloud containers) can't decode H.264/AAC. `test/e2e/mse-shim.js` replaces MediaSource so mpegts.js still fetches, demuxes and remuxes real TS while playback time is simulated. Knobs: `window.__mseShimCodecs`, `window.__mseShimBlockUnmuted`, `window.__mseShimAppendMs` (slow appends), `window.__mseShimGap` (a hole in the buffer).
 - The fake server picks behaviour from the channel ID (`stall-3--x`, `hang--x`, `slow-10--x`, `status-404--x`, `ac3--x`, ...); see the header of `test/fake-dispatcharr/server.mjs`. `Harness.channel(mode)` makes IDs unique per test. `/output/m3u?prefix=…` serves a per-test playlist (`playlist()` in `test/e2e/picker.spec.ts`).
 - `test/ha/` runs against real HA 2026.10 + Bubble Card 3.4.1; prefer adding a case there when a behaviour depends on HA or Bubble internals. Bubble buttons: `tap_action` is the icon only, `button_action` the body.
 - `test/e2e/pages/harness.js` fakes HA buttons (`ll-custom`) and Bubble Card ≥ 3.2.4 pop-ups (shell detached while closed, same element re-attached on open).

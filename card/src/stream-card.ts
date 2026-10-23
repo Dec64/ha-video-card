@@ -47,6 +47,11 @@ import type { StreamCardMultiview, TileItem } from './multiview';
 const CONTROLS_HIDE_MS = 4000;
 /** How long the big channel number stays up after a change. */
 const OSD_MS = 2600;
+/**
+ * Channel up/down tunes once presses stop for this long. Each press releases the old stream at
+ * once and shows the new channel, but only the one you land on opens a Dispatcharr connection.
+ */
+export const ZAP_SETTLE_MS = 800;
 const PREVIEW_HOSTS = new Set([
   'HUI-CARD-PREVIEW',
   'HUI-CARD-PICKER',
@@ -102,6 +107,8 @@ export class StreamCard extends LitElement implements ControllerCard {
   private userMuted?: boolean;
   private controlsVisible = true;
   private controlsTimer?: ReturnType<typeof setTimeout>;
+  /** Set while channel up/down presses are settling; no session starts until it fires. */
+  private zapTimer?: ReturnType<typeof setTimeout>;
   private debugTimer?: ReturnType<typeof setInterval>;
   private inEditor = false;
   private fullscreen = false;
@@ -329,6 +336,8 @@ export class StreamCard extends LitElement implements ControllerCard {
     clearInterval(this.debugTimer);
     this.debugTimer = undefined;
     clearTimeout(this.controlsTimer);
+    clearTimeout(this.zapTimer);
+    this.zapTimer = undefined;
     this.syncGuide();
     clearInterval(this.sleepTicker);
     this.sleepTicker = undefined;
@@ -641,7 +650,8 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.source = { ...src, title: req.title ?? src.title };
     this.error = undefined;
     if (play) this.wantPlaying = true;
-    if (!this.isPreview) pushRecent(this.target, this.recentEntry(req) ?? {});
+    // Channels skipped past while zapping don't count as watched.
+    if (!this.isPreview && !this.zapTimer) pushRecent(this.target, this.recentEntry(req) ?? {});
     this.remember();
     this.evaluate();
   }
@@ -692,7 +702,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       }
       mv.setAllowed(allowed);
     } else if (reason === null) {
-      if (!this.session) this.startSession();
+      if (!this.session && !this.zapTimer) this.startSession();
     } else if (this.session) {
       this.stopSession(reason);
     }
@@ -844,7 +854,17 @@ export class StreamCard extends LitElement implements ControllerCard {
       return;
     }
     const ch = this.channels.neighbour(this.currentChannel?.id, delta);
-    if (ch) this.playChannel(ch);
+    if (ch) {
+      clearTimeout(this.zapTimer);
+      this.zapTimer = setTimeout(() => {
+        this.zapTimer = undefined;
+        if (!this.isPreview && this.source) {
+          pushRecent(this.target, this.recentEntry(this.request) ?? {});
+        }
+        this.evaluate();
+      }, ZAP_SETTLE_MS);
+      this.playChannel(ch);
+    }
     this.showControls();
   }
 
@@ -1221,6 +1241,7 @@ export class StreamCard extends LitElement implements ControllerCard {
         : this.status.state;
     }
     if (!this.source && this.lookupPending) return this.lookupPlay ? 'connecting' : 'ready';
+    if (this.zapTimer && this.source && this.wantPlaying && this.hold === null) return 'connecting';
     return this.source ? 'ready' : 'empty';
   }
 

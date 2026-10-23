@@ -65,14 +65,50 @@ const UNDERRUN_S = 0.3;
 /** If the reserve grows but never reaches the target (a slow link), start anyway after this. */
 const MAX_HOLD_MS = 20_000;
 
-/** Seconds buffered ahead of the playhead (from the next range if the playhead sits in a gap). */
+/**
+ * Largest hole in the buffer that counts as reserve and that the session jumps over. A live TS
+ * stream often buffers in pieces (audio and video don't start or line up exactly), and the
+ * browser stops at any hole. In `buffer: low` mpegts.js's catch-up jump gets past them; stable
+ * mode has no catch-up, so without this the picture could sit on Buffering for ever.
+ */
+export const MAX_GAP_S = 3;
+
+/**
+ * Seconds buffered ahead of the playhead, from the next range if the playhead sits in a gap, and
+ * across holes up to MAX_GAP_S (which skipGap() jumps).
+ */
 export function reserveAhead(video: HTMLVideoElement): number {
   const b = video.buffered;
   const t = video.currentTime;
   for (let i = 0; i < b.length; i++) {
-    if (b.end(i) > t) return b.end(i) - Math.max(t, b.start(i));
+    if (b.end(i) <= t) continue;
+    const from = Math.max(t, b.start(i));
+    let end = b.end(i);
+    for (let j = i + 1; j < b.length && b.start(j) - end <= MAX_GAP_S; j++) end = b.end(j);
+    return end - from;
   }
   return 0;
+}
+
+/**
+ * Moves the playhead over a hole in the buffer: when it sits in one, or is at the end of a range
+ * with more data a little later. Returns true if it moved.
+ */
+export function skipGap(video: HTMLVideoElement): boolean {
+  const b = video.buffered;
+  const t = video.currentTime;
+  for (let i = 0; i < b.length; i++) {
+    let next: number | undefined;
+    if (t < b.start(i)) next = b.start(i);
+    else if (t <= b.end(i)) {
+      if (b.end(i) - t >= 0.15 || i + 1 >= b.length) return false;
+      next = b.start(i + 1);
+    } else continue;
+    if (next - t > MAX_GAP_S + 0.15) return false;
+    video.currentTime = next + 0.01;
+    return true;
+  }
+  return false;
 }
 
 function bufferedEnd(video: HTMLVideoElement): number {
@@ -236,7 +272,15 @@ export class PlaybackSession {
     }
     const ahead = reserveAhead(v);
     const target = this.holdIsStart ? STABLE_START_S : STABLE_RESUME_S;
-    if (ahead >= target || (ahead > 1 && now - this.holdStartedAt > MAX_HOLD_MS)) {
+    const overdue = now - this.holdStartedAt > MAX_HOLD_MS;
+    if (overdue && ahead <= 1 && end - v.currentTime > STABLE_RESUME_S) {
+      // Data keeps coming but never lines up into a reserve where the playhead is (a big hole
+      // in the buffer): start from the newest data instead of holding for ever.
+      v.currentTime = end - STABLE_RESUME_S;
+      return;
+    }
+    if (ahead >= target || (ahead > 1 && overdue)) {
+      skipGap(v);
       this.holding = false;
       this.lastTime = -1;
       this.lastProgressAt = now;
@@ -323,6 +367,8 @@ export class PlaybackSession {
     }
     const v = this.video;
     const now = Date.now();
+    // Playing into a hole in the buffer: jump it (the browser waits there for ever otherwise).
+    if (this.source.type === 'mpegts' && !v.paused && skipGap(v)) return;
     if (
       this.stable &&
       this.status.state === 'playing' &&
