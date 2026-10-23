@@ -1,4 +1,4 @@
-import { expect, test, type Harness } from './fixtures';
+import { expect, STREAM, test, type Harness } from './fixtures';
 
 const FAST = { reconnect: { max_attempts: 3 }, start_timeout: 3 };
 
@@ -194,4 +194,76 @@ test('buffer: stable reconnects when data stops while it refills, never with two
   const max = await maxOpenWhile(h, ch, 28_000);
   expect(max).toBeLessThanOrEqual(1);
   expect((await h.stats(ch)).total).toBeGreaterThanOrEqual(2);
+});
+
+// A cold Dispatcharr channel can take longer than the 8 s stall timeout to send its first byte.
+// The stall clock used to start before any data, so the stream was dropped the moment it arrived
+// (on a device slow to append it) and every retry started cold again until the card gave up.
+for (const buffer of ['low', 'stable']) {
+  test(`buffer: ${buffer} waits for a slow channel start instead of calling it a stall`, async ({
+    h,
+  }) => {
+    test.setTimeout(60_000);
+    await h.load();
+    await h.page.evaluate(() => (window.__mseShimAppendMs = 700));
+    const ch = h.channel('slow-10');
+    await h.mount({ channel: ch, buffer });
+    await h.expectUi('playing', 'stream-card', 30_000);
+    const info = await h.info();
+    expect(info.failures).toBe(0);
+    expect((await h.stats(ch)).total).toBe(1);
+  });
+}
+
+test('buffer: stable switching to a slow channel plays it on the first connection', async ({
+  h,
+}) => {
+  test.setTimeout(90_000);
+  await h.load();
+  await h.page.evaluate(() => (window.__mseShimAppendMs = 700));
+  const a = h.channel();
+  const b = h.channel('slow-10');
+  await h.mount({ target: 'tv', buffer: 'stable' });
+  await (await h.button('A', { target: 'tv', channel: a })).click();
+  await h.expectUi('playing', 'stream-card', 20_000);
+  await (await h.button('B', { target: 'tv', channel: b })).click();
+  let max = 0;
+  let playing = false;
+  const end = Date.now() + 45_000;
+  while (!playing && Date.now() < end) {
+    max = Math.max(max, await h.openSum([a, b]));
+    const info = await h.info();
+    playing = info.url?.endsWith(b) === true && info.ui === 'playing';
+    await h.page.waitForTimeout(150);
+  }
+  expect(playing, JSON.stringify(await h.info())).toBe(true);
+  expect(max).toBeLessThanOrEqual(1);
+  expect((await h.stats(a)).open).toBe(0);
+  expect((await h.stats(b)).total).toBe(1);
+  expect((await h.info()).failures).toBe(0);
+});
+
+test('changing the buffer mode while playing restarts with one connection at a time', async ({
+  h,
+}) => {
+  test.setTimeout(60_000);
+  await h.load();
+  const ch = h.channel();
+  const base = { type: 'custom:stream-card', dispatcharr_url: STREAM, channel_list: false };
+  await h.mount({ channel: ch, buffer: 'stable' });
+  await h.expectUi('playing', 'stream-card', 20_000);
+  for (const buffer of ['low', 'stable', 'low']) {
+    await h.page.evaluate(
+      (c) =>
+        (
+          document.querySelector('stream-card') as unknown as { setConfig(c: unknown): void }
+        ).setConfig(c),
+      { ...base, channel: ch, buffer },
+    );
+    expect(await maxOpenWhile(h, ch, 1500)).toBeLessThanOrEqual(1);
+    await h.expectUi('playing', 'stream-card', 20_000);
+    expect((await h.stats(ch)).open).toBe(1);
+  }
+  expect((await h.stats(ch)).total).toBe(4);
+  expect((await h.info()).failures).toBe(0);
 });
