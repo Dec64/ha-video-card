@@ -56,6 +56,43 @@ test('chrome: app channels from the Channels view play one at a time', async ({ 
   await h.expectOpen(s.id(2), 1);
 });
 
+test('chrome: app chip rows scroll sideways with a mouse wheel and drag', async ({ h }) => {
+  await h.load();
+  const s = sources(h);
+  await h.page.setViewportSize({ width: 1280, height: 800 });
+  await h.mount({
+    m3u_url: `${s.m3u_url}&longgroups=1`,
+    epg_url: s.epg_url,
+    chrome: 'app',
+    channel: '101',
+  });
+  await h.expectOpen(s.id(1), 1);
+  const card = h.page.locator('stream-card');
+  await card.locator('.over').getByRole('button', { name: 'Full screen' }).click();
+  await card.locator('.t-ctl').getByRole('button', { name: 'Channels' }).click();
+  const row = card.locator('.rail .gchips');
+  await expect(row).toBeVisible();
+  const left = () => row.evaluate((el) => el.scrollLeft);
+  expect(await row.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(true);
+  expect(await left()).toBe(0);
+
+  await row.hover();
+  await h.page.mouse.wheel(0, 200);
+  await expect.poll(left).toBeGreaterThan(0);
+
+  // Drag back to the start; letting go over a chip doesn't pick it.
+  const pressed = () => row.locator('[aria-pressed="true"]').innerText();
+  const before = await pressed();
+  const box = (await row.boundingBox())!;
+  await h.page.mouse.move(box.x + 40, box.y + box.height / 2);
+  await h.page.mouse.down();
+  await h.page.mouse.move(box.x + 400, box.y + box.height / 2, { steps: 5 });
+  await h.page.mouse.up();
+  expect(await left()).toBe(0);
+  expect(await pressed()).toBe(before);
+  await h.expectOpen(s.id(1), 1);
+});
+
 test('chrome: app in the editor stays the standard preview and opens nothing', async ({ h }) => {
   await h.load();
   const s = sources(h);

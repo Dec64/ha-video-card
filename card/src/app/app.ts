@@ -730,12 +730,53 @@ export class AppShell {
     </div>`;
   }
 
+  /** A mouse wheel turns the chip row sideways: it has no scrollbar and only scrolls across. */
+  private readonly chipWheel = (e: WheelEvent): void => {
+    const el = e.currentTarget as HTMLElement;
+    if (el.scrollWidth <= el.clientWidth || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+    const max = el.scrollWidth - el.clientWidth;
+    const to = Math.max(0, Math.min(max, el.scrollLeft + e.deltaY));
+    if (to === el.scrollLeft) return;
+    e.preventDefault();
+    el.scrollLeft = to;
+  };
+
+  /** Mouse drag scrolls the chip row too; a drag never counts as a click on the chip under it. */
+  private readonly chipDrag = (e: PointerEvent): void => {
+    if (e.pointerType !== 'mouse' || e.button !== 0) return;
+    const el = e.currentTarget as HTMLElement;
+    if (el.scrollWidth <= el.clientWidth) return;
+    const x0 = e.clientX;
+    const s0 = el.scrollLeft;
+    let moved = false;
+    const move = (m: PointerEvent) => {
+      const dx = m.clientX - x0;
+      if (!moved && Math.abs(dx) < 5) return;
+      moved = true;
+      el.scrollLeft = s0 - dx;
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      if (!moved) return;
+      const eat = (c: Event) => (c.stopPropagation(), c.preventDefault());
+      el.addEventListener('click', eat, { capture: true, once: true });
+      setTimeout(() => el.removeEventListener('click', eat, { capture: true }), 0);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
   private chips(
     groups: string[],
     current: string,
     set: (g: string) => void,
     label: (g: string) => string = groupLabel,
   ): TemplateResult[] {
+    // "Sky: Entertainment" and "Virgin: Entertainment" would both read "Entertainment".
+    const short = groups.map(label);
+    const name = (g: string, i: number) =>
+      short.indexOf(short[i]) !== short.lastIndexOf(short[i]) ? g : short[i];
     return [
       html`<button
         class="gc"
@@ -752,13 +793,13 @@ export class AppShell {
         ${icon('star')} Favourites
       </button>`,
       ...groups.map(
-        (g) =>
+        (g, i) =>
           html`<button
             class="gc"
             aria-pressed=${current === g ? 'true' : 'false'}
             @click=${() => set(g)}
           >
-            ${label(g)}
+            ${name(g, i)}
           </button>`,
       ),
     ];
@@ -787,7 +828,7 @@ export class AppShell {
         <button class="gc" @click=${() => this.jump(at - 20 * MIN, v)}>Now</button>
         ${marks.map((m) => html`<button class="gc" @click=${() => this.jump(m - 10 * MIN, v)}>${hm(m)}</button>`)}
       </div>
-      <div class="gchips">
+      <div class="gchips" @wheel=${this.chipWheel} @pointerdown=${this.chipDrag}>
         ${this.chips(
           KINDS,
           this.guideGroup,
@@ -956,7 +997,7 @@ export class AppShell {
           this.chQuery = s;
           this.host.refresh();
         })}
-        <div class="gchips">
+        <div class="gchips" @wheel=${this.chipWheel} @pointerdown=${this.chipDrag}>
           ${this.chips(l?.groups ?? [], g, (x) => {
             this.chGroup = x;
             this.host.refresh();
@@ -1441,7 +1482,7 @@ export class AppShell {
         this.railQuery = s;
         this.host.refresh();
       })}
-      <div class="gchips">
+      <div class="gchips" @wheel=${this.chipWheel} @pointerdown=${this.chipDrag}>
         ${this.chips(l?.groups ?? [], g, (x) => {
           this.railGroup = x;
           this.host.refresh();
