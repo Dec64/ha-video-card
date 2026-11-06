@@ -47,19 +47,6 @@ export const appStyles = css`
     container: app / inline-size;
     display: block;
   }
-  .app .appdbg {
-    position: absolute;
-    left: 8px;
-    bottom: 100px;
-    z-index: 99;
-    margin: 0;
-    font: 11px/1.3 var(--f-mono);
-    color: #7ee0d2;
-    background: rgba(0, 0, 0, 0.8);
-    padding: 6px;
-    white-space: pre-wrap;
-    max-width: 60%;
-  }
   ha-card.app.embed {
     height: auto;
     border-radius: var(--sc-radius);

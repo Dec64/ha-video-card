@@ -119,9 +119,6 @@ export class AppShell {
     // HA and kiosk add-ons settle the layout after the card connects.
     for (const ms of [300, 1200, 3000]) setTimeout(this.fit, ms);
     window.addEventListener('resize', this.fit);
-    window.addEventListener('scroll', this.fitSoon, { capture: true, passive: true });
-    this.host.el.addEventListener('pointerdown', this.onTouch);
-    this.host.el.addEventListener('wheel', this.onTouch, { passive: true });
     document.addEventListener('keydown', this.onDocKey);
     this.resizeObs = new ResizeObserver(() => this.fit());
     this.resizeObs.observe(document.documentElement);
@@ -134,9 +131,6 @@ export class AppShell {
 
   disconnect(): void {
     window.removeEventListener('resize', this.fit);
-    window.removeEventListener('scroll', this.fitSoon, { capture: true });
-    this.host.el.removeEventListener('pointerdown', this.onTouch);
-    this.host.el.removeEventListener('wheel', this.onTouch);
     document.removeEventListener('keydown', this.onDocKey);
     this.resizeObs?.disconnect();
     clearInterval(this.ambTimer);
@@ -146,68 +140,14 @@ export class AppShell {
   }
 
   /**
-   * The card fills the window from its top edge down (the Live TV dashboard is one card). The
-   * app itself is fixed to that box, so a page or view that scrolls under it (kiosk modes and
-   * HA's header padding can make the view a little taller than the window) never moves it.
+   * The card fills the window from its top edge down (the Live TV dashboard is one card).
    */
   private fit = (): void => {
     const el = this.host.el;
     const r = el.getBoundingClientRect();
     const top = Math.max(0, r.top);
     el.style.setProperty('--sc-app-h', `${Math.round(Math.max(420, window.innerHeight - top))}px`);
-    if (this.host.config.debug) {
-      this.dbg = this.layoutReport();
-      this.host.refresh();
-    }
-    // Nobody has scrolled the Lineup yet: keep it at the top while the page settles.
-    const body = el.shadowRoot?.querySelector<HTMLElement>('.app-body');
-    if (body && !this.touched && this.view === 'now') body.scrollTop = 0;
   };
-
-  private dbg = '';
-  /** `debug: true`: where the card sits, for layout problems that only happen inside HA. */
-  private layoutReport(): string {
-    const el = this.host.el;
-    const r = el.getBoundingClientRect();
-    const card = el.shadowRoot?.querySelector('ha-card')?.getBoundingClientRect();
-    const body = el.shadowRoot?.querySelector<HTMLElement>('.app-body');
-    const out = [
-      `win ${innerWidth}x${innerHeight} scrollY ${scrollY}`,
-      `host ${Math.round(r.left)},${Math.round(r.top)} ${Math.round(r.width)}x${Math.round(r.height)}`,
-      `card ${card ? `${Math.round(card.top)} ${Math.round(card.height)}` : '-'} body.scrollTop ${body?.scrollTop}`,
-    ];
-    let n: Node | null = el;
-    for (let i = 0; n && i < 40; i++) {
-      if (n instanceof HTMLElement) {
-        const cs = getComputedStyle(n);
-        const b = n.getBoundingClientRect();
-        const odd =
-          n.scrollTop ||
-          cs.transform !== 'none' ||
-          cs.overflowY !== 'visible' ||
-          cs.paddingTop !== '0px' ||
-          cs.marginTop !== '0px' ||
-          cs.position === 'fixed';
-        if (odd)
-          out.push(
-            `${n.tagName.toLowerCase()}${n.id ? '#' + n.id : ''} t${Math.round(b.top)} h${Math.round(b.height)} st${n.scrollTop} ov${cs.overflowY} pt${cs.paddingTop} mt${cs.marginTop} ${cs.position} ${cs.transform === 'none' ? '' : 'tf'}`,
-          );
-      }
-      n = n.parentNode ?? (n instanceof ShadowRoot ? n.host : null);
-    }
-    return out.join('\n');
-  }
-
-  private touched = false;
-  private onTouch = (): void => {
-    this.touched = true;
-  };
-
-  private fitSoon = (): void => {
-    cancelAnimationFrame(this.fitFrame);
-    this.fitFrame = requestAnimationFrame(this.fit);
-  };
-  private fitFrame = 0;
 
   private householdDock(): (HTMLElement & { folded?: boolean; render?: () => void }) | null {
     return document.querySelector('household-app-dock');
@@ -457,7 +397,6 @@ export class AppShell {
       </div>
       ${this.embed || view === 'full' ? nothing : this.dock(view, a)}
       ${this.toastText ? html`<div class="toast glass" role="status">${this.toastText}</div>` : nothing}
-      ${this.dbg && this.host.config.debug ? html`<pre class="appdbg">${this.dbg}</pre>` : nothing}
     </ha-card>`;
   }
 
