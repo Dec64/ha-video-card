@@ -50,7 +50,7 @@ export const appStyles = css`
   .app .appdbg {
     position: absolute;
     left: 8px;
-    top: 8px;
+    bottom: 100px;
     z-index: 99;
     margin: 0;
     font: 11px/1.3 var(--f-mono);
