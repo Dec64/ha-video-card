@@ -1777,6 +1777,13 @@ export const appStyles = css`
     z-index: 30;
     animation: sc-dock 0.5s var(--spring);
   }
+  /* The household dock, opened from the orb, stands in for the app dock until it folds. */
+  .app[data-hd-open] .cdock,
+  .app[data-hd-open] .dockpill {
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s;
+  }
   @keyframes sc-dock {
     from {
       opacity: 0;

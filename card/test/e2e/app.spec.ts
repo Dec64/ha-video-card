@@ -93,6 +93,47 @@ test('chrome: app chip rows scroll sideways with a mouse wheel and drag', async 
   await h.expectOpen(s.id(1), 1);
 });
 
+test('chrome: app shares the bottom with the household dock and hands it back', async ({ h }) => {
+  await h.load();
+  // A stand-in for the household dash's app dock: folds, renders, and decides its own display.
+  await h.page.evaluate(() => {
+    class Dock extends HTMLElement {
+      folded = true;
+      sw = false;
+      updates = 0;
+      render() {}
+      update() {
+        this.updates++;
+      }
+    }
+    customElements.define('household-app-dock', Dock);
+    document.body.appendChild(document.createElement('household-app-dock'));
+  });
+  const s = sources(h);
+  await h.mount({ m3u_url: s.m3u_url, epg_url: s.epg_url, chrome: 'app', channel: '101' });
+  await h.expectOpen(s.id(1), 1);
+  const dock = h.page.locator('household-app-dock');
+  const card = h.page.locator('stream-card');
+  const shell = card.locator('ha-card.app');
+  await expect(dock).toHaveCSS('display', 'none');
+
+  await card.locator('.cdock .orbw').click();
+  await expect(dock).not.toHaveCSS('display', 'none');
+  await expect(shell).toHaveAttribute('data-hd-open', '');
+  await expect(card.locator('.cdock')).toHaveCSS('opacity', '0');
+
+  // A tap on the card folds it again and brings the app dock back.
+  await card.locator('.app-stage').click({ position: { x: 20, y: 20 } });
+  await expect(dock).toHaveCSS('display', 'none');
+  await expect(shell).not.toHaveAttribute('data-hd-open');
+
+  // Leaving the page gives the dock back to its own logic.
+  await card.evaluate((el) => el.remove());
+  await expect(dock).not.toHaveCSS('display', 'none');
+  expect(await dock.evaluate((el) => (el as unknown as { updates: number }).updates)).toBe(1);
+  await h.expectOpen(s.id(1), 0, 3000);
+});
+
 test('chrome: app in the editor stays the standard preview and opens nothing', async ({ h }) => {
   await h.load();
   const s = sources(h);
