@@ -47,14 +47,18 @@ export const appStyles = css`
     container: app / inline-size;
     display: block;
   }
-  :host([data-chrome='app']) ha-card.app {
-    position: fixed;
-    top: var(--sc-app-top, 0px);
-    left: var(--sc-app-left, 0px);
-    width: var(--sc-app-w, 100%);
-    height: auto;
-    bottom: 0;
-    z-index: 1;
+  .app .appdbg {
+    position: absolute;
+    left: 8px;
+    top: 8px;
+    z-index: 99;
+    margin: 0;
+    font: 11px/1.3 var(--f-mono);
+    color: #7ee0d2;
+    background: rgba(0, 0, 0, 0.8);
+    padding: 6px;
+    white-space: pre-wrap;
+    max-width: 60%;
   }
   ha-card.app.embed {
     height: auto;
