@@ -47,6 +47,15 @@ export const appStyles = css`
     container: app / inline-size;
     display: block;
   }
+  :host([data-chrome='app']) ha-card.app {
+    position: fixed;
+    top: var(--sc-app-top, 0px);
+    left: var(--sc-app-left, 0px);
+    width: var(--sc-app-w, 100%);
+    height: auto;
+    bottom: 0;
+    z-index: 1;
+  }
   ha-card.app.embed {
     height: auto;
     border-radius: var(--sc-radius);
@@ -259,7 +268,7 @@ export const appStyles = css`
   /* ---------- body and views ---------- */
   .app-body {
     position: absolute;
-    inset: var(--sc-app-off, 0px) 0 0 0;
+    inset: 0;
     overflow: auto;
     scrollbar-width: none;
     box-sizing: border-box;

@@ -119,9 +119,13 @@ export class AppShell {
     // HA and kiosk add-ons settle the layout after the card connects.
     for (const ms of [300, 1200, 3000]) setTimeout(this.fit, ms);
     window.addEventListener('resize', this.fit);
+    window.addEventListener('scroll', this.fitSoon, { capture: true, passive: true });
+    this.host.el.addEventListener('pointerdown', this.onTouch);
+    this.host.el.addEventListener('wheel', this.onTouch, { passive: true });
     document.addEventListener('keydown', this.onDocKey);
     this.resizeObs = new ResizeObserver(() => this.fit());
     this.resizeObs.observe(document.documentElement);
+    this.resizeObs.observe(this.host.el);
     this.ambTimer = setInterval(this.sampleFrame, 2500);
     // The household app dock folds into a handle at the bottom; the app's own dock carries its
     // orb instead, so the handle hides while it's folded.
@@ -130,6 +134,9 @@ export class AppShell {
 
   disconnect(): void {
     window.removeEventListener('resize', this.fit);
+    window.removeEventListener('scroll', this.fitSoon, { capture: true });
+    this.host.el.removeEventListener('pointerdown', this.onTouch);
+    this.host.el.removeEventListener('wheel', this.onTouch);
     document.removeEventListener('keydown', this.onDocKey);
     this.resizeObs?.disconnect();
     clearInterval(this.ambTimer);
@@ -139,16 +146,33 @@ export class AppShell {
   }
 
   /**
-   * The card fills the window from its top edge down (the Live TV dashboard is one card). Kiosk
-   * modes can pull the view up under the hidden toolbar, so a card that starts above the window
-   * pads its content down by that much.
+   * The card fills the window from its top edge down (the Live TV dashboard is one card). The
+   * app itself is fixed to that box, so a page or view that scrolls under it (kiosk modes and
+   * HA's header padding can make the view a little taller than the window) never moves it.
    */
   private fit = (): void => {
-    const top = this.host.el.getBoundingClientRect().top;
-    const h = Math.max(420, window.innerHeight - top);
-    this.host.el.style.setProperty('--sc-app-h', `${Math.round(h)}px`);
-    this.host.el.style.setProperty('--sc-app-off', `${Math.round(Math.max(0, -top))}px`);
+    const el = this.host.el;
+    const r = el.getBoundingClientRect();
+    const top = Math.max(0, r.top);
+    el.style.setProperty('--sc-app-h', `${Math.round(Math.max(420, window.innerHeight - top))}px`);
+    el.style.setProperty('--sc-app-top', `${Math.round(top)}px`);
+    el.style.setProperty('--sc-app-left', `${Math.round(r.left)}px`);
+    el.style.setProperty('--sc-app-w', `${Math.round(r.width)}px`);
+    // Nobody has scrolled the Lineup yet: keep it at the top while the page settles.
+    const body = el.shadowRoot?.querySelector<HTMLElement>('.app-body');
+    if (body && !this.touched && this.view === 'now') body.scrollTop = 0;
   };
+
+  private touched = false;
+  private onTouch = (): void => {
+    this.touched = true;
+  };
+
+  private fitSoon = (): void => {
+    cancelAnimationFrame(this.fitFrame);
+    this.fitFrame = requestAnimationFrame(this.fit);
+  };
+  private fitFrame = 0;
 
   private householdDock(): (HTMLElement & { folded?: boolean; render?: () => void }) | null {
     return document.querySelector('household-app-dock');
