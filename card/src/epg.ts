@@ -5,6 +5,12 @@ export interface Programme {
   title: string;
   start?: number;
   end?: number;
+  /** First sentences of the description (app layout's guide detail). */
+  desc?: string;
+  /** XMLTV categories, at most two ("Sports", "Football"). */
+  cats?: string[];
+  /** Broadcast live: the guide's title started with "Live:"/"Live " (removed from the title). */
+  live?: boolean;
 }
 
 /** What's on a channel now, and what's on after it. */
@@ -14,9 +20,9 @@ export interface NowNext {
 }
 
 /** Programmes kept per channel: enough for now/next to stay right until the next refresh. */
-const MAX_PER_CHANNEL = 8;
+const MAX_PER_CHANNEL = 48;
 /** Programmes starting further ahead than this are dropped while parsing. */
-const LOOKAHEAD_MS = 12 * 3_600_000;
+const LOOKAHEAD_MS = 14 * 3_600_000;
 /** Reload the guide when it is older than this (and the page is visible). */
 const REFRESH_MS = 2 * 3_600_000;
 /** After a failed load, try again this much later. */
@@ -49,13 +55,46 @@ function decodeXml(s: string): string {
 
 const ATTR_RE = /([\w-]+)\s*=\s*"([^"]*)"/g;
 const TITLE_RE = /<title\b[^>]*>([\s\S]*?)<\/title>/;
+const DESC_RE = /<desc\b[^>]*>([\s\S]*?)<\/desc>/;
+const CAT_RE = /<category\b[^>]*>([\s\S]*?)<\/category>/g;
+/** Description length kept per programme: enough for two lines in the guide's detail panel. */
+const DESC_MAX = 180;
+
+const text = (raw: string): string =>
+  decodeXml(raw.replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, '$1')).trim();
+
+/** "Live: X" / "New: X" → X, remembering whether it was live. */
+export function cleanTitle(raw: string): { title: string; live: boolean } {
+  let title = raw;
+  let live = false;
+  for (;;) {
+    const m = /^(live|new|signed)\s*:\s*/i.exec(title) ?? /^(Live|LIVE)\s+(?=[A-Z])/.exec(title);
+    if (!m) break;
+    if (m[1].toLowerCase() === 'live') live = true;
+    title = title.slice(m[0].length);
+  }
+  return { title: title || raw, live };
+}
+
+/** Drops "4/10. " episode counters and cuts at a sentence end near DESC_MAX. */
+export function shortDesc(raw: string): string | undefined {
+  const d = raw
+    .replace(/^\(?\d+\/\d+\)?\.?\s*/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!d) return undefined;
+  if (d.length <= DESC_MAX) return d;
+  const cut = d.slice(0, DESC_MAX);
+  const stop = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '));
+  return stop > 60 ? cut.slice(0, stop + 1) : cut.slice(0, cut.lastIndexOf(' ')) + '…';
+}
 const OPEN = '<programme';
 const CLOSE = '</programme>';
 
 /**
  * Parses XMLTV text fed in chunks, keeping only programmes that haven't ended by `from` and start
- * before `from + LOOKAHEAD_MS`. Only channel, start, stop and title are read; descriptions are
- * skipped, so a multi-MB guide ends up as a few KB per channel.
+ * before `from + LOOKAHEAD_MS`. Channel, start, stop, title, the first two categories and a
+ * short description are kept, so a multi-MB guide ends up as a few KB per channel.
  */
 export class XmltvParser {
   private buf = '';
@@ -95,12 +134,22 @@ export class XmltvParser {
     if (!channel || start === undefined) return;
     if (end !== undefined && end <= this.from) return;
     if (start >= this.from + LOOKAHEAD_MS) return;
-    const raw = TITLE_RE.exec(block.slice(tagEnd + 1))?.[1] ?? '';
-    const title = decodeXml(raw.replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, '$1')).trim();
-    if (!title) return;
+    const body = block.slice(tagEnd + 1);
+    const raw = text(TITLE_RE.exec(body)?.[1] ?? '');
+    if (!raw) return;
+    const { title, live } = cleanTitle(raw);
+    const p: Programme = { title, start, end };
+    if (live) p.live = true;
+    const desc = DESC_RE.exec(body)?.[1];
+    if (desc) p.desc = shortDesc(text(desc));
+    const cats = [...body.matchAll(CAT_RE)]
+      .slice(0, 2)
+      .map((m) => text(m[1]))
+      .filter(Boolean);
+    if (cats.length) p.cats = cats;
     let list = this.byChannel.get(channel);
     if (!list) this.byChannel.set(channel, (list = []));
-    list.push({ title, start, end });
+    list.push(p);
   }
 
   /** Programmes per XMLTV channel ID, sorted by start, gaps in `end` filled from the next start. */
@@ -178,6 +227,12 @@ export class GuideFeed {
 
   get loaded(): boolean {
     return !!this.data;
+  }
+
+  /** Every programme kept for a channel, sorted by start (the app layout's guide grid and rails). */
+  programmes(ch: Channel): Programme[] | undefined {
+    const key = guideKey(ch);
+    return key === undefined ? undefined : this.data?.get(key);
   }
 
   nowNext(ch: Channel, at = Date.now()): NowNext | undefined {

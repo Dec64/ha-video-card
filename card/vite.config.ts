@@ -45,6 +45,10 @@ export default defineConfig({
     rolldownOptions: {
       output: {
         chunkFileNames: 'stream-card-[name]-[hash].js',
+        // The UI the card always needs stays one chunk, even though lazy chunks share parts of it.
+        advancedChunks: {
+          groups: [{ name: 'view', test: /src[\\/](ui[\\/]|icons\.ts|channels\.ts)/ }],
+        },
       },
     },
   },

@@ -20,6 +20,13 @@ describe('normalizeConfig', () => {
     expect(() => normalizeConfig({ ...base, guide: 'hidden' })).toThrow(ConfigError);
   });
 
+  it('takes the app layout from chrome', () => {
+    expect(normalizeConfig(base).chrome).toBe('standard');
+    expect(normalizeConfig({ ...base, chrome: 'app' }).chrome).toBe('app');
+    expect(normalizeConfig({ ...base, chrome: 'embed' }).chrome).toBe('embed');
+    expect(() => normalizeConfig({ ...base, chrome: 'tv' as never })).toThrow(ConfigError);
+  });
+
   it('applies defaults', () => {
     const c = normalizeConfig(base);
     expect(c).toMatchObject({

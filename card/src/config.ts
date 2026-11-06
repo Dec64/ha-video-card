@@ -1,6 +1,7 @@
 import { DEFAULT_TARGET, DEFAULT_URL_TEMPLATE } from './const';
 import type {
   BufferMode,
+  ChromeMode,
   GuideMode,
   ResolvedConfig,
   ResolvedMultiview,
@@ -173,6 +174,10 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     }
   }
 
+  const chrome = optionalString(raw, 'chrome') ?? 'standard';
+  if (chrome !== 'standard' && chrome !== 'app' && chrome !== 'embed') {
+    throw new ConfigError('"chrome" must be standard, app or embed');
+  }
   const guide = optionalString(raw, 'guide') ?? 'open';
   if (guide !== 'open' && guide !== 'closed' && guide !== 'off') {
     throw new ConfigError('"guide" must be open, closed or off');
@@ -209,6 +214,7 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     // days=1: Dispatcharr sends only the next 24 hours, not the whole guide.
     epgUrl: epgUrl ?? (base ? `${normalizeBaseUrl(base)}/output/epg?days=1` : undefined),
     guide: guide as GuideMode,
+    chrome: chrome as ChromeMode,
     settings: optionalBool(raw, 'settings', true),
     multiview: normalizeMultiview(raw.multiview, outputProfile),
   };

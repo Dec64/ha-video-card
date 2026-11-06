@@ -6,6 +6,8 @@ import {
   guideKey,
   nowNextAt,
   parseXmltvTime,
+  cleanTitle,
+  shortDesc,
   XmltvParser,
   type Programme,
 } from '../../src/epg';
@@ -44,7 +46,7 @@ describe('XmltvParser', () => {
     prog('1', -10, 20, 'News &amp; Weather &#8211; Live') +
     prog('1', -70, -10, 'Already over') +
     prog('1', 50, 80, '<![CDATA[Third & last]]>') +
-    prog('1', 60 * 13, 60 * 14, 'Too far ahead') +
+    prog('1', 60 * 15, 60 * 16, 'Too far ahead') +
     prog('2', 0, 30, '') +
     prog('3', -5, undefined, 'No stop') +
     prog('3', 25, 55, 'After no stop') +
@@ -68,6 +70,7 @@ describe('XmltvParser', () => {
       title: 'News & Weather – Live',
       start: T0 - 10 * MIN,
       end: T0 + 20 * MIN,
+      desc: 'Ignored & long',
     });
     expect(g.get('a&b')!.map((p) => p.title)).toEqual(['Escaped ID']);
   });
@@ -83,15 +86,15 @@ describe('XmltvParser', () => {
     for (const n of [1, 7, 11, 64, 333]) expect(parse(n)).toEqual(whole);
   });
 
-  it('keeps at most 8 programmes per channel', () => {
+  it('keeps at most 48 programmes per channel', () => {
     const p = new XmltvParser(T0);
-    for (let i = 0; i < 20; i++) p.push(prog('9', i * 10, i * 10 + 10, `P${i}`));
+    for (let i = 0; i < 60; i++) p.push(prog('9', i * 10, i * 10 + 10, `P${i}`));
     expect(
       p
         .finish()
         .get('9')!
         .map((x) => x.title),
-    ).toEqual([0, 1, 2, 3, 4, 5, 6, 7].map((i) => `P${i}`));
+    ).toEqual(Array.from({ length: 48 }, (_, i) => `P${i}`));
   });
 });
 
@@ -210,5 +213,47 @@ describe('GuideFeed', () => {
     expect(signal!.aborted).toBe(false);
     off();
     expect(signal!.aborted).toBe(true);
+  });
+});
+
+describe('guide text', () => {
+  it('drops broadcaster prefixes from titles and remembers live ones', () => {
+    expect(cleanTitle('Live: Everton v Coventry')).toEqual({
+      title: 'Everton v Coventry',
+      live: true,
+    });
+    expect(cleanTitle('Live Premier League Darts')).toEqual({
+      title: 'Premier League Darts',
+      live: true,
+    });
+    expect(cleanTitle('New: Succession')).toEqual({ title: 'Succession', live: false });
+    expect(cleanTitle('Liverpool Legends')).toEqual({ title: 'Liverpool Legends', live: false });
+  });
+
+  it('keeps descriptions short and drops episode counters', () => {
+    expect(shortDesc('4/10. The family gathers. Then much more happens later on.')).toBe(
+      'The family gathers. Then much more happens later on.',
+    );
+    expect(shortDesc('')).toBeUndefined();
+    const long = 'A sentence that goes on. '.repeat(20);
+    expect(shortDesc(long)!.length).toBeLessThanOrEqual(181);
+  });
+
+  it('reads categories and the live flag', () => {
+    const p = new XmltvParser(T0);
+    p.push(
+      prog(
+        '5',
+        0,
+        120,
+        'Live: Big Match',
+        '<category lang="en">Sports</category><category>Football</category>',
+      ),
+    );
+    expect(p.finish().get('5')![0]).toMatchObject({
+      title: 'Big Match',
+      live: true,
+      cats: ['Sports', 'Football'],
+    });
   });
 });
