@@ -1648,6 +1648,7 @@ export const appStyles = css`
   }
   .app .dockpill .t,
   .app .cdock .orbw .t {
+    white-space: nowrap;
     font-family: var(--f-mono);
     font-size: 12px;
     letter-spacing: 0.06em;
@@ -1793,6 +1794,7 @@ export const appStyles = css`
     height: 44px;
   }
   .app .cdock .tab {
+    white-space: nowrap;
     height: 52px;
     padding: 0 16px;
     border-radius: 99px;
