@@ -259,7 +259,7 @@ export const appStyles = css`
   /* ---------- body and views ---------- */
   .app-body {
     position: absolute;
-    inset: 0;
+    inset: var(--sc-app-off, 0px) 0 0 0;
     overflow: auto;
     scrollbar-width: none;
     box-sizing: border-box;
@@ -345,6 +345,7 @@ export const appStyles = css`
   }
   .app.embed .app-body {
     position: relative;
+    inset: auto;
     overflow: visible;
     padding: 0;
   }

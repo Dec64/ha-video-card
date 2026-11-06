@@ -116,6 +116,8 @@ export class AppShell {
   connect(): void {
     if (this.embed) return;
     this.fit();
+    // HA and kiosk add-ons settle the layout after the card connects.
+    for (const ms of [300, 1200, 3000]) setTimeout(this.fit, ms);
     window.addEventListener('resize', this.fit);
     document.addEventListener('keydown', this.onDocKey);
     this.resizeObs = new ResizeObserver(() => this.fit());
@@ -133,14 +135,19 @@ export class AppShell {
     clearInterval(this.ambTimer);
     clearInterval(this.dockTimer);
     const d = this.householdDock();
-    if (d) d.style.visibility = '';
+    if (d) d.style.display = '';
   }
 
-  /** The card fills the window from its top edge down (the Live TV dashboard is one card). */
+  /**
+   * The card fills the window from its top edge down (the Live TV dashboard is one card). Kiosk
+   * modes can pull the view up under the hidden toolbar, so a card that starts above the window
+   * pads its content down by that much.
+   */
   private fit = (): void => {
-    const top = this.host.el.getBoundingClientRect().top + window.scrollY;
-    const h = Math.max(420, window.innerHeight - Math.max(0, top));
-    this.host.el.style.setProperty('--sc-app-h', `${h}px`);
+    const top = this.host.el.getBoundingClientRect().top;
+    const h = Math.max(420, window.innerHeight - top);
+    this.host.el.style.setProperty('--sc-app-h', `${Math.round(h)}px`);
+    this.host.el.style.setProperty('--sc-app-off', `${Math.round(Math.max(0, -top))}px`);
   };
 
   private householdDock(): (HTMLElement & { folded?: boolean; render?: () => void }) | null {
@@ -150,7 +157,7 @@ export class AppShell {
   private syncHouseholdDock = (): void => {
     const d = this.householdDock();
     if (!d) return;
-    d.style.visibility = d.folded !== false ? 'hidden' : '';
+    d.style.display = d.folded !== false ? 'none' : '';
   };
 
   private openHouseholdDock = (e: Event): void => {
@@ -158,7 +165,7 @@ export class AppShell {
     const d = this.householdDock();
     if (!d) return;
     d.folded = false;
-    d.style.visibility = '';
+    d.style.display = '';
     d.render?.();
   };
 

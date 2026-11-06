@@ -36,40 +36,40 @@ How the card works today and the contracts other code relies on. For using the c
                               on the card's single <video>
 ```
 
-| File (`card/src/`)                                             | Role                                                                                                                                                                                                                    |
-| -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `index.ts`                                                     | Entry. Installs the controller and defines `stream-card` and `stream-card-picker`.                                                                                                                                      |
-| `controller.ts`                                                | One per page. Turns `fire-dom-event` buttons into requests per target, keeps them until a card for that target is on the page (Bubble removes closed pop-ups), opens pop-ups, relays Fully Kiosk screen events.         |
-| `stream-card.ts`                                               | The card. Picks what to play, decides whether to play (`evaluate()`), renders controls and the picker. Creates its `<video>` once and never puts it in a Lit template, so constant `hass` updates can't touch playback. |
-| `lifecycle.ts`                                                 | `holdReason()`, a pure function of the conditions below, and the watcher that tracks them.                                                                                                                              |
-| `session.ts`                                                   | One source on one `<video>`: start timeout, stall watchdog, reconnect with backoff, error classification. Tears down its engine before every retry.                                                                     |
-| `engines/`                                                     | `mpegts-engine.ts` (lazy chunk; loads the vendored `mpegts-<version>.js`), `native-engine.ts` (MP4/HLS where the browser plays them), `fetch-loader.ts` (`ImmediateAbortLoader`), `video-lock.ts`.                      |
-| `channels.ts`                                                  | M3U parsing, `ChannelList`, page-wide playlist cache.                                                                                                                                                                   |
-| `epg.ts`                                                       | Now/next (`epg`): streaming XMLTV parser and the page-wide `GuideFeed`. A lazy chunk, loaded only by cards with `epg` on.                                                                                               |
-| `picker.ts`                                                    | The channel guide element (`stream-card-picker`), a lazy chunk loaded with the channel list. It only fires events; the card plays.                                                                                      |
-| `ui/view.ts`                                                   | `CardView` and `CardActions`: what the templates read. Also the seams other features fill: `NavView`/`NavActions` (recents, last channel, keypad, volume, sleep timer) and `NowNext` (guide data).                      |
-| `ui/stage.ts`                                                  | Templates for the picture: channel ident, channel-number OSD, state layers, control bar, TV hints. Pure functions of `CardView` + `CardActions`.                                                                        |
-| `ui/theme.ts`                                                  | Design tokens mapped from the HA theme (`--sc-*`); the picture area is always dark.                                                                                                                                     |
-| `settings.ts`                                                  | The settings panel's per-device choices (buffer mode, now/next, stats overlay) per target, and the page event that keeps every card for the target in step.                                                             |
-| `memory.ts`                                                    | Last channel and play intent per target, per device (localStorage).                                                                                                                                                     |
-| `recents.ts`, `number-entry.ts`, `volume.ts`, `sleep-timer.ts` | Channel navigation logic: recently watched per target and device, remote-style number entry, remembered volume, sleep timers (owned by the controller). No markup.                                                      |
-| `editor-form.ts`                                               | Schema for HA's visual editor (`getConfigForm`), a lazy chunk.                                                                                                                                                          |
-| `multiview.ts`                                                 | The multiview grid (`stream-card-multiview`), a lazy chunk. It borrows Lit, `PlaybackSession` and the icons from the entry (`defineMultiview(deps)`) so the build doesn't split them into a shared chunk.               |
-| `errors.ts`                                                    | Every user-facing message. The README troubleshooting table must list each one (checked by `scripts/check-messages.mjs`).                                                                                               |
+| File (`card/src/`) | Role |
+|---|---|
+| `index.ts` | Entry. Installs the controller and defines `stream-card` and `stream-card-picker`. |
+| `controller.ts` | One per page. Turns `fire-dom-event` buttons into requests per target, keeps them until a card for that target is on the page (Bubble removes closed pop-ups), opens pop-ups, relays Fully Kiosk screen events. |
+| `stream-card.ts` | The card. Picks what to play, decides whether to play (`evaluate()`), renders controls and the picker. Creates its `<video>` once and never puts it in a Lit template, so constant `hass` updates can't touch playback. |
+| `lifecycle.ts` | `holdReason()`, a pure function of the conditions below, and the watcher that tracks them. |
+| `session.ts` | One source on one `<video>`: start timeout, stall watchdog, reconnect with backoff, error classification. Tears down its engine before every retry. |
+| `engines/` | `mpegts-engine.ts` (lazy chunk; loads the vendored `mpegts-<version>.js`), `native-engine.ts` (MP4/HLS where the browser plays them), `fetch-loader.ts` (`ImmediateAbortLoader`), `video-lock.ts`. |
+| `channels.ts` | M3U parsing, `ChannelList`, page-wide playlist cache. |
+| `epg.ts` | Now/next (`epg`): streaming XMLTV parser and the page-wide `GuideFeed`. A lazy chunk, loaded only by cards with `epg` on. |
+| `picker.ts` | The channel guide element (`stream-card-picker`), a lazy chunk loaded with the channel list. It only fires events; the card plays. |
+| `ui/view.ts` | `CardView` and `CardActions`: what the templates read. Also the seams other features fill: `NavView`/`NavActions` (recents, last channel, keypad, volume, sleep timer) and `NowNext` (guide data). |
+| `ui/stage.ts` | Templates for the picture: channel ident, channel-number OSD, state layers, control bar, TV hints. Pure functions of `CardView` + `CardActions`. |
+| `ui/theme.ts` | Design tokens mapped from the HA theme (`--sc-*`); the picture area is always dark. |
+| `settings.ts` | The settings panel's per-device choices (buffer mode, now/next, stats overlay) per target, and the page event that keeps every card for the target in step. |
+| `memory.ts` | Last channel and play intent per target, per device (localStorage). |
+| `recents.ts`, `number-entry.ts`, `volume.ts`, `sleep-timer.ts` | Channel navigation logic: recently watched per target and device, remote-style number entry, remembered volume, sleep timers (owned by the controller). No markup. |
+| `editor-form.ts` | Schema for HA's visual editor (`getConfigForm`), a lazy chunk. |
+| `multiview.ts` | The multiview grid (`stream-card-multiview`), a lazy chunk. It borrows Lit, `PlaybackSession` and the icons from the entry (`defineMultiview(deps)`) so the build doesn't split them into a shared chunk. |
+| `errors.ts` | Every user-facing message. The README troubleshooting table must list each one (checked by `scripts/check-messages.mjs`). |
 
 ## When the card plays
 
 `holdReason()` returns why the card must not hold a stream, most specific first, or `null` to play:
 
-| Reason         | Comes from                                                                                           |
-| -------------- | ---------------------------------------------------------------------------------------------------- |
-| `disconnected` | Element removed (closed Bubble pop-up, view switch, dashboard navigation)                            |
-| `preview`      | HA's card editor or dashboard edit mode (`preview` / `editMode`, or inside the editor dialog)        |
-| `no-source`    | Nothing chosen yet                                                                                   |
-| `stopped`      | Stop button, a stop button action, idle timeout, sleep timer, or an error                            |
-| `page-hidden`  | `visibilitychange` hidden or `pagehide` (app backgrounded, tab hidden, screen locked)                |
-| `screen-off`   | Fully Kiosk `screenOff` or screensaver                                                               |
-| `hidden`       | IntersectionObserver: the card isn't on screen (`display: none`, scrolled out of a hidden container) |
+| Reason | Comes from |
+|---|---|
+| `disconnected` | Element removed (closed Bubble pop-up, view switch, dashboard navigation) |
+| `preview` | HA's card editor or dashboard edit mode (`preview` / `editMode`, or inside the editor dialog) |
+| `no-source` | Nothing chosen yet |
+| `stopped` | Stop button, a stop button action, idle timeout, sleep timer, or an error |
+| `page-hidden` | `visibilitychange` hidden or `pagehide` (app backgrounded, tab hidden, screen locked) |
+| `screen-off` | Fully Kiosk `screenOff` or screensaver |
+| `hidden` | IntersectionObserver: the card isn't on screen (`display: none`, scrolled out of a hidden container) |
 
 Any change re-runs `evaluate()`.
 
@@ -89,7 +89,6 @@ Opt-in per card (`multiview.enabled`, needs the channel list). The grid has 2–
 ## Choosing what to play
 
 On connect, the card takes the first of:
-
 1. A button request for its target still in the controller's mailbox (30 s).
 2. The controller's `lastFor(target)`: the target's latest channel in this page session.
 3. This device's remembered channel for the target (`remember_channel`), playing only if it was left playing.
@@ -103,7 +102,7 @@ Channel picks, up/down, the Stop button and the idle timeout go through the cont
 
 `.stage` holds the picture (`.frame`, with the `<video>` and the state layers), the ident and the control bar, and is what goes full screen. It's a size container: under 520 px the ident and controls sit below the picture in the card's colours (phones, Bubble pop-ups); wider, they float over it and auto-hide while playing. A Cast receiver or TV user agent (`detectLayout()`) gets the 10-foot layout: larger type inside a 5% safe area, no tap controls, guide over the picture. Wall panels (coarse pointer, 900 px and wider) get 56 px targets through `--sc-target`. The floating bar never pushes a control off the card (`ha-card` clips): under 760 px it drops the Next line, under 680 px the volume slider and separators and goes back to 44 px targets, and as a last resort its groups wrap upwards (`flex-wrap`). The phone layout puts row 1 (transport) and row 2 (sound and view) apart with an explicit `.row-break`; row 2's `order` values are spaced so new buttons can slot in. If the dashboard makes the card taller than its content (a sections row beside a taller column), `ha-card` and `.stage` are flex columns and `.frame` grows into the extra height, so it shows as letterboxed picture rather than card background. `test/e2e/layout.spec.ts` sweeps card widths with every button shown plus a spare and fails on any control outside the card or covered.
 
-**App layout (`chrome: app` / `embed`).** A lazy chunk (`src/app/`) that replaces the standard template while the card is live; the editor and edit mode keep the standard preview. `AppShell.render()` gets the same `CardView`/`CardActions` and reads the channel list, guide feed and current channel through `hostFor()` (`src/app/host.ts`), which is the only code that reaches into the card. The card keeps owning playback: the app's views are On now (Lineup: hero, favourites, rails of sport and films from the guide), Guide (preview + detail + virtualised grid), Channels and full-screen Theatre, and the one `.app-stage` sits at the same place in the template in all of them, so CSS grid areas move the picture between views (with a FLIP animation) and the `<video>` never leaves `.video-host`. `updated()` moves the video into whichever `.video-host` the current template has, which only happens when the layout first switches. Channels hides the stage but keeps playing (the IntersectionObserver watches the card). `chrome: app` sizes the card to the window below its top edge and adds G (guide), F (Theatre) and Escape (back) to the card keys, also when nothing on the page has focus; `chrome: embed` is the picture with the Theatre's control glass only (no dock, no page-level keys) for pages such as FPL Home that pick the channel themselves. The bias light behind the hero samples the picture (8 × 4 canvas every 2.5 s) or, on Fire tablets and 2 GB devices (`LITE`), uses the logo's colours; those devices also get no backdrop blur. The vite config keeps `src/ui/`, `icons.ts` and `channels.ts` in one chunk so the app sharing them doesn't split the initial load.
+**App layout (`chrome: app` / `embed`).** A lazy chunk (`src/app/`) that replaces the standard template while the card is live; the editor and edit mode keep the standard preview. `AppShell.render()` gets the same `CardView`/`CardActions` and reads the channel list, guide feed and current channel through `hostFor()` (`src/app/host.ts`), which is the only code that reaches into the card. The card keeps owning playback: the app's views are On now (Lineup: hero, favourites, rails of sport and films from the guide), Guide (preview + detail + virtualised grid), Channels and full-screen Theatre, and the one `.app-stage` sits at the same place in the template in all of them, so CSS grid areas move the picture between views (with a FLIP animation) and the `<video>` never leaves `.video-host`. `updated()` moves the video into whichever `.video-host` the current template has, which only happens when the layout first switches. Channels hides the stage but keeps playing (the IntersectionObserver watches the card). `chrome: app` sizes the card to the window below its top edge (and pads down if a kiosk mode pulls the view above the window) and adds G (guide), F (Theatre) and Escape (back) to the card keys, also when nothing on the page has focus; `chrome: embed` is the picture with the Theatre's control glass only (no dock, no page-level keys) for pages such as FPL Home that pick the channel themselves. The bias light behind the hero samples the picture (8 × 4 canvas every 2.5 s) or, on Fire tablets and 2 GB devices (`LITE`), uses the logo's colours; those devices also get no backdrop blur. The vite config keeps `src/ui/`, `icons.ts` and `channels.ts` in one chunk so the app sharing them doesn't split the initial load.
 
 The guide shows under the picture (`guide: open`, or `closed` after the guide button), or over the picture in full screen, on a TV and with `guide: off`. With nothing selected it shows on its own. A pick from under the picture keeps it open; one over the picture closes it.
 
@@ -124,94 +123,75 @@ A playlist channel finds its programmes by `tvg-id` (falling back to its number)
 These are what buttons, dashboards and the code rely on. Change them only in their own PR, with this section updated.
 
 ### Card config
-
 ```yaml
 type: custom:stream-card
-target: kitchen_tv # mailbox key; buttons with this target play here (default "default")
+target: kitchen_tv                  # mailbox key; buttons with this target play here (default "default")
 dispatcharr_url: https://dispatcharr.example
-output_profile: 3 # sent as ?output_profile=3; omit for none
-url_template: "{base}/proxy/ts/stream/{channel}" # default
-channel: BBC One HD # optional default: UUID, or a name/number from the channel list
-url: https://… # optional: a full stream URL instead of a channel
-title: Optional title # default: the channel's name
-channel_list: true # default true when dispatcharr_url or m3u_url is set
-guide: open # open (under the picture) | closed | off (only over the picture)
-m3u_url: <url> # default {base}/output/m3u
-channel_groups: ["UK: News"] # optional: only these groups, in this order
-favourites: [BBC One HD, "101"] # optional: names, numbers or UUIDs under ★ Favourites
-remember_channel: true # start on this device's last channel for the target
-epg: true # now/next from Dispatcharr's guide; default on with the channel list and a guide URL
-epg_url: <url> # default {base}/output/epg?days=1
-autoplay: true # play the chosen channel when shown, unless left stopped
-muted: false # start muted; falls back to muted + "tap to unmute" if blocked
-buffer: low # low | stable (reserve of ~8 s, no skipping ahead, refills on underrun)
-settings: true # the settings button; its per-device choices override buffer and debug's overlay
+output_profile: 3                   # sent as ?output_profile=3; omit for none
+url_template: "{base}/proxy/ts/stream/{channel}"   # default
+channel: BBC One HD                 # optional default: UUID, or a name/number from the channel list
+url: https://…                      # optional: a full stream URL instead of a channel
+title: Optional title               # default: the channel's name
+channel_list: true                  # default true when dispatcharr_url or m3u_url is set
+guide: open                         # open (under the picture) | closed | off (only over the picture)
+m3u_url: <url>                      # default {base}/output/m3u
+channel_groups: ["UK: News"]        # optional: only these groups, in this order
+favourites: [BBC One HD, "101"]     # optional: names, numbers or UUIDs under ★ Favourites
+remember_channel: true              # start on this device's last channel for the target
+epg: true                           # now/next from Dispatcharr's guide; default on with the channel list and a guide URL
+epg_url: <url>                      # default {base}/output/epg?days=1
+autoplay: true                      # play the chosen channel when shown, unless left stopped
+muted: false                        # start muted; falls back to muted + "tap to unmute" if blocked
+buffer: low                         # low | stable (reserve of ~8 s, no skipping ahead, refills on underrun)
+settings: true                      # the settings button; its per-device choices override buffer and debug's overlay
 aspect_ratio: "16:9"
-idle_timeout: 0 # minutes, 0 = off; counts as a stop
-start_timeout: 20 # seconds to wait for first data
-reconnect: { max_attempts: 5 } # backoff 1, 2, 4, 8, 15 s
-multiview: # off by default; `multiview: true` = { enabled: true }
-  enabled: true # the multiview button (needs the channel list)
-  max_tiles: 2 # 2–4; each tile is its own Dispatcharr connection
-  output_profile: 5 # optional: profile for tiles; default the card's
-chrome: standard # standard | app (the Live TV app, fills the window) | embed (Theatre controls only)
+idle_timeout: 0                     # minutes, 0 = off; counts as a stop
+start_timeout: 20                   # seconds to wait for first data
+reconnect: { max_attempts: 5 }      # backoff 1, 2, 4, 8, 15 s
+multiview:                          # off by default; `multiview: true` = { enabled: true }
+  enabled: true                     # the multiview button (needs the channel list)
+  max_tiles: 2                      # 2–4; each tile is its own Dispatcharr connection
+  output_profile: 5                 # optional: profile for tiles; default the card's
+chrome: standard                    # standard | app (the Live TV app, fills the window) | embed (Theatre controls only)
 debug: false
 ```
 
 ### Button action
-
 ```yaml
 tap_action:
   action: fire-dom-event
   stream_card:
     target: kitchen_tv
-    channel:
-      BBC One HD # UUID, name or number (looked up in the receiving card's list),
-      # or url: <full url> to bypass the template
+    channel: BBC One HD      # UUID, name or number (looked up in the receiving card's list),
+                             # or url: <full url> to bypass the template
     title: Optional title
-    open: "#kitchen-tv" # optional: Bubble pop-up hash or dashboard path
+    open: "#kitchen-tv"      # optional: Bubble pop-up hash or dashboard path
   # stream_card: { target: kitchen_tv, action: stop }   ← stop button
 ```
-
 Other actions, which steer the target instead of choosing a channel: `channel_up`, `channel_down`, `last_channel`, `sleep` (with `sleep: <minutes>`, 0 cancels), `volume` (with `volume: 0–100`), `mute`, `unmute`. They never change the target's last channel. With no live card for the target: `sleep` still starts, `volume` is saved to device memory, `last_channel` plays the device's previous recent, `channel_up`/`channel_down` wait in the mailbox (30 s), and `mute`/`unmute` are dropped.
 
 ### Engine
-
 `card/src/engines/types.ts`. Engines report data, media info and errors; the session watches the `<video>` itself for playing and stalls, so both engines share one watchdog.
-
 ```ts
 interface Engine {
-  readonly kind: "mpegts" | "native";
+  readonly kind: 'mpegts' | 'native';
   load(video: HTMLVideoElement, src: StreamSource): Promise<void>;
-  destroy(): Promise<void>; // idempotent; aborts the fetch synchronously
+  destroy(): Promise<void>;            // idempotent; aborts the fetch synchronously
   on(listener: (e: EngineEvent) => void): () => void;
-  getStats(video: HTMLVideoElement): EngineStats; // buffer s, frames, dropped, KB/s
+  getStats(video: HTMLVideoElement): EngineStats;   // buffer s, frames, dropped, KB/s
 }
 type EngineEvent =
-  | { type: "data" } // first bytes arrived (ends the start timeout)
-  | ({ type: "media-info" } & MediaInfo) // videoCodec, audioCodec, width, height, fps
-  | { type: "error"; error: EngineError };
+  | { type: 'data' }                                // first bytes arrived (ends the start timeout)
+  | ({ type: 'media-info' } & MediaInfo)            // videoCodec, audioCodec, width, height, fps
+  | { type: 'error'; error: EngineError };
 interface EngineError {
-  kind:
-    | "network"
-    | "cors"
-    | "http"
-    | "timeout"
-    | "codec"
-    | "unsupported-device"
-    | "media"
-    | "stall"
-    | "ended"
-    | "config";
-  detail: string;
-  status?: number;
-  track?: "audio" | "video";
-  codec?: string;
+  kind: 'network' | 'cors' | 'http' | 'timeout' | 'codec' | 'unsupported-device'
+      | 'media' | 'stall' | 'ended' | 'config';
+  detail: string; status?: number; track?: 'audio' | 'video'; codec?: string;
 }
 ```
 
 ### Controller (one per page, on `window.__streamCard`)
-
 `request(req)`, `take(target)`, `lastFor(target)`, `stop(target)`, `stopCount(target)`, `setSleep(target, minutes)`, `extendSleep(target, minutes)`, `sleepFor(target)`, `register(card)`, `unregister(card)`, `onFullyEvent(name)`. Pending requests expire after 30 s. Requests without a target go to `default`. `stop` clears the target's pending and last request, cancels its sleep timer, marks the device memory stopped, and bumps `stopCount`.
 
 A registered card implements `ControllerCard`: `target`, `isLive`, `deliver(req)`, `stopFromController()`, `command(req)` (the navigation actions above) and `sleepChanged()`.
@@ -221,7 +201,6 @@ A registered card implements `ControllerCard`: `target`, `isLive`, `deliver(req)
 **Sleep timer.** One per target, owned by the controller, so every card on the target shares it and a closed pop-up still stops on time. It wakes once when its last minute starts (`sleepFor(target).warning`, cards repaint each second from then) and once at the deadline, where it calls `stop(target)`: the same release path as a stop button.
 
 ### Device memory
-
 - `localStorage['stream-card:last:<target>']` = `{ channel?, url?, title?, playing }`. `channel` is always the resolved stream ID.
 - `localStorage['stream-card:recent:<target>']` = up to 8 `{ channel?, url?, title? }`, newest first, no duplicates. Last channel is the newest entry that isn't playing now.
 - `localStorage['stream-card:volume']` = `0`–`1`, for every card on the device.
@@ -230,22 +209,20 @@ A registered card implements `ControllerCard`: `target`, `isLive`, `deliver(req)
 - `localStorage['stream-card:sleep:<target>']` = the sleep deadline (epoch ms). One that passed while the page was closed stops the target when the controller next looks at it.
 
 ### Card navigation API
-
 For the templates (`navView()` returns the data, `navActions()` the callbacks; an action left out hides its control): `recents`, `previousChannel`, `numberEntry` (`{ digits, candidates }`), `volume` (0–1), `sleep` (`{ endsAt, remainingMs, warning }`); `lastChannel()`, `pressDigit(d)`, `clearDigits()`, `commitDigits()`, `setVolume(v)`, `setSleep(minutes)`, `extendSleep(minutes)`, plus `channelUp()`, `channelDown()` and `keepWatching()`. Keys (digits, Enter (commits digits, else toggles the guide unless a button has focus), Escape, Backspace, arrows, Page Up/Down, M, F, and G in the app layout) are handled on the card host and ignored inside the picker and text fields. Number entry tunes after 2 s, on Enter, at 5 digits, or as soon as the channel list has an exact number with no longer one starting with it.
 
 ### Companion integration mapping (planned, Phase 3)
-
 The per-screen `media_player` will call the screen's controller with `request()`, so it needs no new card code paths:
 
-| media_player                                                    | Card request                                               |
-| --------------------------------------------------------------- | ---------------------------------------------------------- |
-| `play_media` (`media_content_id`: channel name, number or UUID) | `{ action: play, channel }`                                |
-| `media_stop` / `turn_off`                                       | `{ action: stop }`                                         |
-| `media_next_track` / `media_previous_track`                     | `channel_up` / `channel_down`                              |
-| `select_source` (source list = favourites + recents)            | `{ action: play, channel }`                                |
-| `volume_set` (0–1) / `volume_mute`                              | `{ action: volume, volume: v × 100 }` / `mute` or `unmute` |
-| service `stream_card.sleep_timer` (`minutes`)                   | `{ action: sleep, sleep }`                                 |
-| service `stream_card.last_channel`                              | `last_channel`                                             |
+| media_player | Card request |
+|---|---|
+| `play_media` (`media_content_id`: channel name, number or UUID) | `{ action: play, channel }` |
+| `media_stop` / `turn_off` | `{ action: stop }` |
+| `media_next_track` / `media_previous_track` | `channel_up` / `channel_down` |
+| `select_source` (source list = favourites + recents) | `{ action: play, channel }` |
+| `volume_set` (0–1) / `volume_mute` | `{ action: volume, volume: v × 100 }` / `mute` or `unmute` |
+| service `stream_card.sleep_timer` (`minutes`) | `{ action: sleep, sleep }` |
+| service `stream_card.last_channel` | `last_channel` |
 
 State reported back (title, channel number, volume, muted, sleep deadline) comes from the same card getters.
 
@@ -259,10 +236,10 @@ Vite library build in `card/dist/`: `stream-card.js` (entry) and the chunks it i
 
 ## Testing
 
-| Layer            | Where                                          | What it proves                                                                                                                                                                                                                                                          |
-| ---------------- | ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit (Vitest)    | `card/test/unit`                               | Config, URL building, M3U and XMLTV parsing, `ChannelList`, guide feed, controller, lifecycle, session logic                                                                                                                                                            |
-| E2E (Playwright) | `card/test/e2e`                                | Real fetch, demux and teardown against a fake Dispatcharr (ffmpeg, per-test channel behaviour, fake `/output/m3u` and `/output/epg`), with an MSE shim because headless Chromium can't decode H.264/AAC. Every release path asserts the server's open-connection count. |
-| Real decode      | same tests tagged `@real`, Google Chrome in CI | Real H.264/AAC playback                                                                                                                                                                                                                                                 |
-| Real HA          | `card/test/ha`                                 | Pinned Home Assistant + Bubble Card: buttons, pop-ups, view switching, edit mode, visual editor, picker                                                                                                                                                                 |
-| Live             | `card/test/live`                               | A real Dispatcharr channel, from env vars only; never in CI                                                                                                                                                                                                             |
+| Layer | Where | What it proves |
+|---|---|---|
+| Unit (Vitest) | `card/test/unit` | Config, URL building, M3U and XMLTV parsing, `ChannelList`, guide feed, controller, lifecycle, session logic |
+| E2E (Playwright) | `card/test/e2e` | Real fetch, demux and teardown against a fake Dispatcharr (ffmpeg, per-test channel behaviour, fake `/output/m3u` and `/output/epg`), with an MSE shim because headless Chromium can't decode H.264/AAC. Every release path asserts the server's open-connection count. |
+| Real decode | same tests tagged `@real`, Google Chrome in CI | Real H.264/AAC playback |
+| Real HA | `card/test/ha` | Pinned Home Assistant + Bubble Card: buttons, pop-ups, view switching, edit mode, visual editor, picker |
+| Live | `card/test/live` | A real Dispatcharr channel, from env vars only; never in CI |
