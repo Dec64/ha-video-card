@@ -134,6 +134,29 @@ test('chrome: app shares the bottom with the household dock and hands it back', 
   await h.expectOpen(s.id(1), 0, 3000);
 });
 
+test('chrome: app on a phone scrolls up and down only', async ({ h }) => {
+  await h.page.setViewportSize({ width: 390, height: 844 });
+  await h.load();
+  const s = sources(h);
+  await h.mount({ m3u_url: `${s.m3u_url}&n=30`, epg_url: s.epg_url, chrome: 'app' });
+  const card = h.page.locator('stream-card');
+  const body = card.locator('.app-body');
+  await expect(card.locator('.railr').first()).toBeVisible();
+  await body.hover({ position: { x: 200, y: 700 } });
+  await h.page.mouse.wheel(0, 400);
+  await expect.poll(() => body.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+  // Sideways over the heading (not over a rail, which scrolls on its own).
+  await body.evaluate((el) => (el.scrollTop = 0));
+  await card.locator('.band').hover();
+  await h.page.mouse.wheel(300, 0);
+  await h.page.waitForTimeout(300);
+  expect(await body.evaluate((el) => el.scrollLeft)).toBe(0);
+  expect(await h.page.evaluate(() => window.scrollX)).toBe(0);
+  expect(await h.page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    390,
+  );
+});
+
 test('chrome: app in the editor stays the standard preview and opens nothing', async ({ h }) => {
   await h.load();
   const s = sources(h);

@@ -260,7 +260,9 @@ export const appStyles = css`
   .app-body {
     position: absolute;
     inset: 0;
-    overflow: auto;
+    /* Up and down only: the bias light and edge-to-edge rails reach past the sides, and on a
+       phone that let the whole page slide sideways. Rails and favourites scroll on their own. */
+    overflow: hidden auto;
     scrollbar-width: none;
     box-sizing: border-box;
   }
