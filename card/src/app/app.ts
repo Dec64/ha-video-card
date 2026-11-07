@@ -107,6 +107,7 @@ export class AppShell {
   private zapCount = 0;
   private pressTimer?: ReturnType<typeof setTimeout>;
   private pressed = false;
+  private pressOff?: () => void;
   private ambTimer?: ReturnType<typeof setInterval>;
   private readonly ambCanvas = document.createElement('canvas');
   private deepLinked = false;
@@ -346,18 +347,40 @@ export class AppShell {
     );
   }
 
-  /** Long-press on a tile or row toggles the favourite; the click that follows is swallowed. */
+  /**
+   * Long-press on a tile or row toggles the favourite; the click that follows is swallowed. A
+   * finger that moves (a swipe along a rail, a scroll of the page) is never a long-press.
+   */
   private pressStart = (ch: Channel) => (e: PointerEvent) => {
     if (e.button > 0) return;
     this.pressed = false;
-    clearTimeout(this.pressTimer);
+    this.pressEnd();
+    const x0 = e.clientX;
+    const y0 = e.clientY;
+    const move = (m: PointerEvent) => {
+      if (m.pointerId === e.pointerId && Math.hypot(m.clientX - x0, m.clientY - y0) > 8)
+        this.pressEnd();
+    };
+    // A touch that turns into a pan ends in pointercancel; a mouse drag shows up as movement.
+    const cancel = () => this.pressEnd();
+    window.addEventListener('pointermove', move, { passive: true });
+    window.addEventListener('pointercancel', cancel);
+    this.pressOff = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointercancel', cancel);
+    };
     this.pressTimer = setTimeout(() => {
+      this.pressEnd();
       this.pressed = true;
       this.toggleFav(ch);
     }, LONG_PRESS_MS);
   };
 
-  private pressEnd = (): void => clearTimeout(this.pressTimer);
+  private pressEnd = (): void => {
+    clearTimeout(this.pressTimer);
+    this.pressOff?.();
+    this.pressOff = undefined;
+  };
 
   private tap(ch: Channel, thenFull = false) {
     return (e: Event) => {

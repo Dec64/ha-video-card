@@ -157,6 +157,42 @@ test('chrome: app on a phone scrolls up and down only', async ({ h }) => {
   );
 });
 
+test('chrome: app long-press favourites, but a swipe along the tiles never does', async ({ h }) => {
+  await h.page.setViewportSize({ width: 390, height: 844 });
+  await h.load();
+  const s = sources(h);
+  await h.mount({
+    m3u_url: `${s.m3u_url}&n=30`,
+    epg_url: s.epg_url,
+    chrome: 'app',
+    favourites: ['101', '102', '103', '104'],
+  });
+  const card = h.page.locator('stream-card');
+  const tile = card.locator('.favs .ttile').first();
+  await expect(tile).toBeVisible();
+  const favs = () =>
+    h.page.evaluate(
+      () => Object.keys(localStorage).filter((k) => k.startsWith('stream-card:favourites:')).length,
+    );
+  const box = (await tile.boundingBox())!;
+  const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+
+  // A slow swipe: finger down, moves along, then rests past the long-press time.
+  await h.page.mouse.move(at.x, at.y);
+  await h.page.mouse.down();
+  await h.page.mouse.move(at.x - 120, at.y, { steps: 8 });
+  await h.page.waitForTimeout(800);
+  await h.page.mouse.up();
+  expect(await favs()).toBe(0);
+
+  // Held still, it toggles.
+  await h.page.mouse.move(at.x, at.y);
+  await h.page.mouse.down();
+  await h.page.waitForTimeout(800);
+  await h.page.mouse.up();
+  await expect.poll(favs).toBe(1);
+});
+
 test('chrome: app in the editor stays the standard preview and opens nothing', async ({ h }) => {
   await h.load();
   const s = sources(h);
