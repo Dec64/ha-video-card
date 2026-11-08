@@ -27,7 +27,14 @@ import { holdReason, LifecycleWatcher, type HoldReason } from './lifecycle';
 import { NumberEntry } from './number-entry';
 import { previousRecent, pushRecent, readRecents, type RecentEntry } from './recents';
 import { PlaybackSession, type SessionStatus } from './session';
-import { readSettings, SETTINGS_EVENT, writeSettings, type DeviceSettings } from './settings';
+import {
+  readBufferLevel,
+  readSettings,
+  SETTINGS_EVENT,
+  writeBufferLevel,
+  writeSettings,
+  type DeviceSettings,
+} from './settings';
 import type { SleepState } from './sleep-timer';
 import { styles } from './styles';
 import type {
@@ -763,6 +770,8 @@ export class StreamCard extends LitElement implements ControllerCard {
       pictureCheck: this.config.pictureCheck,
       switchSource: this.config.switchSource ? this.switchSource : undefined,
       keepTrying: this.config.keepTrying,
+      autoLevel: readBufferLevel(),
+      onAutoLevel: writeBufferLevel,
       onHealth: (kind, detail) => {
         if (session === this.session) this.logHealth(kind, detail);
       },
@@ -1157,7 +1166,9 @@ export class StreamCard extends LitElement implements ControllerCard {
     const muted = !this.effectiveMuted;
     this.video.muted = muted;
     this.userMuted = muted;
+    // Through the session too, so a reconnect or the end of a buffering hold keeps the choice.
     if (!muted && this.session?.status.mutedByPolicy) void this.session.resumeFromGesture(true);
+    else this.session?.setMuted(muted);
     this.showControls();
     this.refresh();
   };
@@ -1181,7 +1192,7 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   /** The buffer mode in effect: this device's choice, else the card's YAML. */
   private get bufferMode(): BufferMode {
-    return this.deviceSettings.buffer ?? this.config?.buffer ?? 'low';
+    return this.deviceSettings.buffer ?? this.config?.buffer ?? 'auto';
   }
 
   private get showNowNext(): boolean {
@@ -1369,6 +1380,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       notice: this.status?.notice,
       buffering: this.status?.buffering ?? false,
       buffer: this.bufferMode,
+      auto: this.session?.autoInfo,
       error: this.error,
       lastError: this.status?.lastError,
       channels: { state: this.channelState, count: this.channels?.size ?? 0 },
@@ -1567,6 +1579,9 @@ export class StreamCard extends LitElement implements ControllerCard {
       st
         ? `${st.engine} · buffer ${st.bufferSeconds.toFixed(1)} s · ${st.speedKBps?.toFixed(0) ?? '-'} KB/s`
         : 'engine -',
+      d.auto
+        ? `auto · target ${d.auto.target} s (level ${d.auto.level}) · rate ${d.auto.rate}`
+        : `buffer mode ${d.buffer}`,
       st ? `frames ${st.decodedFrames ?? '-'} · dropped ${st.droppedFrames ?? '-'}` : '',
       d.lastError ? `last error ${d.lastError}` : '',
       `channels ${d.channels.state} (${d.channels.count})`,

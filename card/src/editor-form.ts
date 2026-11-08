@@ -80,12 +80,13 @@ const schema: FormField[] = [
       },
       {
         name: 'buffer',
-        default: 'low',
+        default: 'auto',
         selector: {
           select: {
             mode: 'dropdown',
             options: [
-              { value: 'low', label: 'Low delay (default)' },
+              { value: 'auto', label: 'Auto: adjusts to the device (default)' },
+              { value: 'low', label: 'Low delay' },
               { value: 'stable', label: 'Stable: for slow devices such as Fire tablets' },
             ],
           },
@@ -189,7 +190,7 @@ const LABELS: Record<string, string> = {
 const HELPERS: Record<string, string> = {
   dispatcharr_url: 'e.g. https://dispatcharr.example',
   buffer:
-    'Stable keeps ~8 s in reserve and never skips ahead: smoother on slow devices, a few seconds behind live.',
+    'Auto keeps 1.5–12 s in reserve, more after a stutter and less once smooth. Stable always keeps ~8 s. Low delay stays closest to live.',
   output_profile:
     'The AAC output profile from the README. Leave empty to play streams as they are.',
   target: 'Buttons with the same target play on this card.',

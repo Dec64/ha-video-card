@@ -310,8 +310,9 @@ describe('isUuid / needsLookup', () => {
 });
 
 describe('buffer', () => {
-  it('defaults to low and accepts stable', () => {
-    expect(normalizeConfig(base).buffer).toBe('low');
+  it('defaults to auto and accepts low and stable', () => {
+    expect(normalizeConfig(base).buffer).toBe('auto');
+    expect(normalizeConfig({ ...base, buffer: 'low' }).buffer).toBe('low');
     expect(normalizeConfig({ ...base, buffer: 'stable' }).buffer).toBe('stable');
     expect(() => normalizeConfig({ ...base, buffer: 'huge' })).toThrow(ConfigError);
   });

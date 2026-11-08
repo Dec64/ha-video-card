@@ -47,8 +47,11 @@ export type GuideMode = 'open' | 'closed' | 'off';
 
 export type SourceType = 'mpegts' | 'native';
 
-/** `low`: stay close to live. `stable`: keep a reserve of several seconds for slow devices. */
-export type BufferMode = 'low' | 'stable';
+/**
+ * `auto` (default): a reserve that grows when the picture runs dry and shrinks when it's smooth.
+ * `low`: stay close to live. `stable`: keep a fixed reserve of several seconds for slow devices.
+ */
+export type BufferMode = 'auto' | 'low' | 'stable';
 
 /** Card config after validation and defaults. */
 export interface ResolvedConfig {

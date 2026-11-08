@@ -10,7 +10,7 @@ export interface EngineOptions {
 export type EngineFactory = (type: SourceType, opts: EngineOptions) => Promise<Engine>;
 
 /** mpegts.js is a separate chunk, loaded the first time a TS stream plays. */
-export const createEngine: EngineFactory = async (type, { debug, buffer = 'low' }) => {
+export const createEngine: EngineFactory = async (type, { debug, buffer = 'auto' }) => {
   if (type === 'native') return new NativeEngine();
   const { MpegtsEngine } = await import('./mpegts-engine');
   return new MpegtsEngine(debug, buffer);

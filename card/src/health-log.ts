@@ -12,6 +12,7 @@ const DAY = 24 * 60 * 60 * 1000;
 export type HealthKind =
   | 'reconnect'
   | 'buffering'
+  | 'buffer-level'
   | 'frozen'
   | 'black'
   | 'switch'

@@ -106,8 +106,8 @@ export function parseAspectRatio(v: string | undefined): string {
 }
 
 function bufferMode(v: string | undefined): BufferMode {
-  if (v === undefined || v === 'low' || v === 'stable') return v ?? 'low';
-  throw new ConfigError('"buffer" must be "low" or "stable"');
+  if (v === undefined || v === 'auto' || v === 'low' || v === 'stable') return v ?? 'auto';
+  throw new ConfigError('"buffer" must be "auto", "low" or "stable"');
 }
 
 export const MULTIVIEW_MAX_TILES = 4;

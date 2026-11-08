@@ -196,11 +196,18 @@ Keys typed in the channel search box stay in the search box.
 - Fire HD 8 tablets: keep `max_tiles` at 2. Each tile is a separate video decode, and these tablets run out of hardware decoders quickly. If a tile stutters, the card says the device can't keep up; a lower-resolution Dispatcharr output profile for tiles (`multiview.output_profile`, e.g. one that scales to 540p) helps, at the cost of Dispatcharr transcoding each tile.
 
 **Settings.** The sliders button in the control bar opens a small panel for this device:
-- **Buffering**: Low delay or Stable (the same as the `buffer` option). Changing it while playing reconnects once: the old connection closes before the new one opens.
+- **Buffering**: Auto, Low delay or Stable (the same as the `buffer` option). Changing it while playing reconnects once: the old connection closes before the new one opens.
 - **Now and next**: hide or show the programme info in the ident, the control bar and the guide (only with guide data). The guide keeps downloading while it's hidden; `epg: false` stops that.
 - **Stats overlay**: the codecs, buffer, speed and dropped frames over the picture (the overlay part of `debug`), plus this device's **health log**: a count of the last 24 hours' trouble (reconnects, buffering, frozen or black picture, source switches, network returns) and the latest three events. The log is kept on the device per target (last 100 events).
 
-Choices are saved on this device for this card's target and override the card's YAML there, so a Fire tablet can use Stable while phones stay on Low delay with the same dashboard. Every card for the target on the page follows a change. **Reset** in the panel forgets them and goes back to the YAML. `settings: false` hides the button (e.g. on a shared wall panel).
+Choices are saved on this device for this card's target and override the card's YAML there, so a Fire tablet can use Stable while phones stay on Auto with the same dashboard. Every card for the target on the page follows a change. **Reset** in the panel forgets them and goes back to the YAML. `settings: false` hides the button (e.g. on a shared wall panel).
+
+**How Auto buffering works** (the default). The card keeps a reserve of video ahead of what's on screen, and sizes it to the device:
+- It starts with 1.5 s, so channels start fast and stay close to live.
+- When the picture runs dry and then recovers (a Wi-Fi hiccup, a slow tablet), the reserve steps up: 3, 5, 8, then 12 s. If the stream stopped altogether, that's a reconnect, not a reason for a bigger reserve.
+- After 5 minutes without running dry, it steps back down.
+- Instead of jumping ahead or stopping, it plays a touch slower (0.95×) while the reserve is low and a touch faster (1.05×) when it's well ahead, which is hard to notice. Only when it's more than 15 s behind does it jump.
+- Each device remembers its level, so a Fire tablet that needed 8 s yesterday starts there today. The Stats overlay shows the level, target and rate, and the health log notes each change.
 
 **When the picture goes wrong.** Every 2 seconds the card looks at a tiny copy of the picture.
 - **Frozen** (unchanged, or no new frames, for 12 s while the clock runs): it reconnects. The last frame stays on screen while it does, instead of a black flash.
@@ -312,7 +319,7 @@ cards:
 - Advanced Web Settings → **Enable JavaScript Interface**: on. The card then stops when the screen turns off or the screensaver starts, and resumes after.
 - Advanced Web Settings → hardware acceleration: on.
 - For a wall panel, add `reconnect: { keep_trying: true }` so the card never gives up while it's on screen. With the JavaScript interface on, the card also reconnects as soon as Fully reports the Wi-Fi is back.
-- If playback pauses every few seconds, set **Buffering** to **Stable** in the card's settings panel on that tablet (or `buffer: stable` on its card). The picture starts after about 8 s of buffering and runs a few seconds behind live, but rides through the tablet's hiccups. If it still stutters with the debug overlay showing dropped frames climbing, the tablet can't decode the channel's video fast enough; a Dispatcharr output profile that converts to 720p for that tablet is the fix.
+- If playback pauses every few seconds, Auto (the default) grows the reserve by itself after the first few pauses. If it keeps pausing, set **Buffering** to **Stable** in the card's settings panel on that tablet (or `buffer: stable` on its card). The picture starts after about 8 s of buffering and runs a few seconds behind live, but rides through the tablet's hiccups. If it still stutters with the debug overlay showing dropped frames climbing, the tablet can't decode the channel's video fast enough; a Dispatcharr output profile that converts to 720p for that tablet is the fix.
 
 ## 6. All options
 
@@ -334,7 +341,7 @@ cards:
 | `m3u_url` | `<dispatcharr_url>/output/m3u` | A different playlist for the list. Playing Dispatcharr channels from it still needs `dispatcharr_url` |
 | `autoplay` | `true` | Start playing when the card appears, unless this device left it stopped |
 | `muted` | `false` | Start muted |
-| `buffer` | `low` | `low` stays close to live. `stable` keeps about 8 s in reserve, never skips ahead and refills instead of stuttering: smoother on slow devices such as Fire tablets, a few seconds behind live |
+| `buffer` | `auto` | `auto` sizes its reserve to the device (1.5–12 s, see section 4). `low` stays close to live and skips ahead when it falls behind. `stable` always keeps about 8 s in reserve, never skips ahead and refills instead of stuttering |
 | `aspect_ratio` | `16:9` | Picture shape |
 | `idle_timeout` | `0` | Minutes with no touch or key press before stopping (remembered like a Stop). `0` = never |
 | `start_timeout` | `20` | Seconds to wait for the first data before showing an error |
@@ -382,7 +389,7 @@ Turn on `debug: true` to see codecs, buffer, dropped frames, the channel list st
 | This device can't keep up with this many tiles. Use fewer tiles, or a lower-resolution output profile for multiview. | Multiview: more than a quarter of frames were dropped across the tiles. Remove a tile, lower `multiview.max_tiles`, or set `multiview.output_profile` to a Dispatcharr profile that scales video down. |
 
 Other symptoms:
-- **Playback pauses every few seconds on one device** (typically a Fire tablet). Use `buffer: stable` on that device's card (see section 5, Fully Kiosk).
+- **Playback pauses every few seconds on one device** (typically a Fire tablet). Auto should settle on a bigger reserve within a few pauses; the Stats overlay shows its level. If it doesn't, use Stable on that device (see section 5, Fully Kiosk).
 - **A device keeps playing an old version** after an update. Raise `?v=` on the resource, then reload. In the HA app, use the Companion app's **Reset frontend cache** setting. On Fully, clear the cache.
 - **White logos are hard to read** on a light theme. They sit on a dark plate by default; set `--stream-card-logo-background` in your theme to change it.
 - **iPhone shows "This browser can't play live MPEG-TS streams".** That iOS version or app lacks Media Source Extensions. An HLS fallback is planned.

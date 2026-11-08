@@ -34,13 +34,16 @@ const PLAYER_CONFIG: mpegts.Config = {
 };
 
 /**
- * buffer: stable never jumps forward to catch up with live: on a slow device the jump itself
- * empties the reserve and causes the stutter. The session keeps the reserve instead.
+ * buffer: stable and auto never let mpegts.js jump forward to catch up with live: on a slow
+ * device the jump itself empties the reserve and causes the stutter. The session keeps the
+ * reserve instead (auto catches up with a slightly faster playback rate).
  */
 export function playerConfig(buffer: BufferMode): mpegts.Config {
-  return buffer === 'stable'
-    ? { ...PLAYER_CONFIG, liveBufferLatencyChasing: false, stashInitialSize: 512 * 1024 }
-    : PLAYER_CONFIG;
+  if (buffer === 'stable') {
+    return { ...PLAYER_CONFIG, liveBufferLatencyChasing: false, stashInitialSize: 512 * 1024 };
+  }
+  if (buffer === 'auto') return { ...PLAYER_CONFIG, liveBufferLatencyChasing: false };
+  return PLAYER_CONFIG;
 }
 
 let loggingConfigured = false;
@@ -98,7 +101,7 @@ export class MpegtsEngine implements Engine {
 
   constructor(
     private readonly debug = false,
-    private readonly buffer: BufferMode = 'low',
+    private readonly buffer: BufferMode = 'auto',
   ) {}
 
   on(listener: (e: EngineEvent) => void): () => void {

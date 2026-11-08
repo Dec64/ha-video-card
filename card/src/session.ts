@@ -75,6 +75,9 @@ export interface SessionOptions {
   onHealth?: (kind: HealthKind, detail?: string) => void;
   /** Just before a reconnect tears down a picture that was playing (to keep the last frame up). */
   onBeforeReconnect?: () => void;
+  /** buffer: auto. The level to start at (this device's last), and where to save a new one. */
+  autoLevel?: number;
+  onAutoLevel?: (level: number) => void;
   createEngine?: EngineFactory;
   diagnose?: (url: string) => Promise<'cors' | 'unreachable'>;
 }
@@ -94,6 +97,22 @@ export const STABLE_START_S = 8;
 export const STABLE_RESUME_S = 5;
 /** Below this much reserve while playing, pause and refill instead of stuttering. */
 const UNDERRUN_S = 0.3;
+
+/**
+ * buffer: auto. Seconds of reserve to keep, per level. Running dry raises the level (and
+ * refills to the new target); AUTO_STEP_DOWN_MS without running dry lowers it again.
+ */
+export const AUTO_LEVELS = [1.5, 3, 5, 8, 12];
+export const AUTO_STEP_DOWN_MS = 5 * 60_000;
+/** buffer: auto steers the reserve with the playback rate instead of jumping or stalling. */
+export const AUTO_FAST = 1.05;
+export const AUTO_SLOW = 0.95;
+/** Further ahead than target + this, auto jumps forward instead of catching up slowly. */
+const AUTO_JUMP_S = 15;
+
+export function clampLevel(n: number | undefined): number {
+  return Math.max(0, Math.min(AUTO_LEVELS.length - 1, Math.round(n ?? 0) || 0));
+}
 /** If the reserve grows but never reaches the target (a slow link), start anyway after this. */
 const MAX_HOLD_MS = 20_000;
 
@@ -185,6 +204,15 @@ export class PlaybackSession {
   private lastSwitchAt = 0;
   /** A source switch is in flight; don't sample or climb the ladder meanwhile. */
   private switching = false;
+  /** buffer: auto: the current level, when it last changed, and the rate it plays at. */
+  private level: number;
+  private levelSince = Date.now();
+  private rate = 1;
+  /**
+   * Running dry raised the level for this refill; it's kept (and saved) only if the refill
+   * succeeds. If data stopped altogether, that's a stall, not a too-small reserve: put it back.
+   */
+  private raisedFrom?: number;
   private readonly createEngine: EngineFactory;
   private readonly diagnose: (url: string) => Promise<'cors' | 'unreachable'>;
 
@@ -195,6 +223,7 @@ export class PlaybackSession {
   ) {
     this.createEngine = opts.createEngine ?? defaultCreateEngine;
     this.diagnose = opts.diagnose ?? diagnoseFetchFailure;
+    this.level = clampLevel(opts.autoLevel);
     sessionCounters.sessions++;
   }
 
@@ -228,6 +257,9 @@ export class PlaybackSession {
     this.holding = false;
     this.watch.reset();
     this.lastSampleAt = 0;
+    this.setRate(1);
+    // The mute state shows (and toggles) from the <video>, also while a reserve builds before play().
+    this.video.muted = this.opts.muted || this.status.mutedByPolicy;
     this.update({
       state: this.status.failures > 0 ? 'reconnecting' : 'connecting',
       notice: undefined,
@@ -271,7 +303,7 @@ export class PlaybackSession {
     }
     if (!this.isCurrent(id)) return;
     this.watchdog = setInterval(() => this.tick(id), 500);
-    if (this.stable) {
+    if (this.reserved) {
       this.startHold(true);
       return;
     }
@@ -282,8 +314,83 @@ export class PlaybackSession {
    * The reserve logic is for mpegts.js, which buffers into MSE whatever the video is doing. A
    * native source with `preload="none"` wouldn't buffer before play(), so it never holds.
    */
-  private get stable(): boolean {
-    return this.opts.buffer === 'stable' && this.source.type === 'mpegts';
+  private get reserved(): boolean {
+    return (
+      (this.opts.buffer === 'stable' || this.opts.buffer === 'auto') &&
+      this.source.type === 'mpegts'
+    );
+  }
+
+  private get auto(): boolean {
+    return this.opts.buffer === 'auto' && this.source.type === 'mpegts';
+  }
+
+  /** Reserve to build before the picture starts. */
+  private get startTarget(): number {
+    return this.auto ? AUTO_LEVELS[this.level] : STABLE_START_S;
+  }
+
+  /** Reserve to refill to after running dry. */
+  private get resumeTarget(): number {
+    return this.auto ? AUTO_LEVELS[this.level] : STABLE_RESUME_S;
+  }
+
+  /** buffer: auto state for the stats overlay and tests. */
+  get autoInfo(): { level: number; target: number; rate: number } | undefined {
+    return this.auto
+      ? { level: this.level, target: AUTO_LEVELS[this.level], rate: this.rate }
+      : undefined;
+  }
+
+  private setRate(rate: number): void {
+    if (this.rate === rate && this.video.playbackRate === rate) return;
+    this.rate = rate;
+    try {
+      this.video.playbackRate = rate;
+    } catch {
+      /* some players refuse rates; auto then just holds and refills */
+    }
+  }
+
+  private setLevel(level: number, why: string): void {
+    const next = clampLevel(level);
+    this.levelSince = Date.now();
+    if (next === this.level) return;
+    this.level = next;
+    this.opts.onAutoLevel?.(next);
+    this.opts.onHealth?.('buffer-level', `${AUTO_LEVELS[next]} s (${why})`);
+  }
+
+  /** The refill after running dry worked: keep the raised level. */
+  private commitRaise(): void {
+    if (this.raisedFrom === undefined) return;
+    this.raisedFrom = undefined;
+    this.levelSince = Date.now();
+    this.opts.onAutoLevel?.(this.level);
+    this.opts.onHealth?.('buffer-level', `${AUTO_LEVELS[this.level]} s (ran dry)`);
+  }
+
+  /**
+   * buffer: auto while playing: a little faster when well ahead of the target (catching up with
+   * live without a jump), a little slower when the reserve runs low (so it refills without a
+   * stop), and a lower level after a quiet spell.
+   */
+  private steer(now: number): void {
+    const v = this.video;
+    const target = AUTO_LEVELS[this.level];
+    const ahead = reserveAhead(v);
+    if (ahead > target + AUTO_JUMP_S) {
+      v.currentTime = v.currentTime + ahead - target;
+      this.lastTime = -1;
+      return;
+    }
+    let next = 1;
+    if (ahead > target + 2 || (this.rate > 1 && ahead > target + 0.5)) next = AUTO_FAST;
+    else if (ahead < target * 0.5 || (this.rate < 1 && ahead < target * 0.9)) next = AUTO_SLOW;
+    this.setRate(next);
+    if (this.level > 0 && now - this.levelSince > AUTO_STEP_DOWN_MS) {
+      this.setLevel(this.level - 1, 'smooth for 5 min');
+    }
   }
 
   /** Pause the picture until the reserve is built (start) or refilled (after running dry). */
@@ -296,14 +403,24 @@ export class PlaybackSession {
     this.watch.reset();
     if (!atStart) {
       this.video.pause();
+      this.setRate(1);
       this.opts.onHealth?.('buffering', 'reserve ran dry');
+      if (this.auto && this.raisedFrom === undefined) {
+        const next = clampLevel(this.level + 1);
+        if (next !== this.level) {
+          this.raisedFrom = this.level;
+          this.level = next;
+        }
+      }
     }
-    this.update({ buffering: true });
+    // Before the first data it's still tuning, not buffering.
+    this.update({ buffering: !atStart || this.gotData });
   }
 
   private tickHolding(id: number): void {
     const v = this.video;
     const now = Date.now();
+    if (!this.status.buffering && this.gotData) this.update({ buffering: true });
     const end = bufferedEnd(v);
     if (end > this.holdBufferedEnd + 0.01) {
       this.holdBufferedEnd = end;
@@ -317,16 +434,17 @@ export class PlaybackSession {
       return;
     }
     const ahead = reserveAhead(v);
-    const target = this.holdIsStart ? STABLE_START_S : STABLE_RESUME_S;
+    const target = this.holdIsStart ? this.startTarget : this.resumeTarget;
     const overdue = now - this.holdStartedAt > MAX_HOLD_MS;
-    if (overdue && ahead <= 1 && end - v.currentTime > STABLE_RESUME_S) {
+    if (overdue && ahead <= 1 && end - v.currentTime > this.resumeTarget) {
       // Data keeps coming but never lines up into a reserve where the playhead is (a big hole
       // in the buffer): start from the newest data instead of holding for ever.
-      v.currentTime = end - STABLE_RESUME_S;
+      v.currentTime = end - this.resumeTarget;
       return;
     }
     if (ahead >= target || (ahead > 1 && overdue)) {
       skipGap(v);
+      if (!this.holdIsStart) this.commitRaise();
       this.holding = false;
       this.lastTime = -1;
       this.lastProgressAt = now;
@@ -416,7 +534,7 @@ export class PlaybackSession {
     // Playing into a hole in the buffer: jump it (the browser waits there for ever otherwise).
     if (this.source.type === 'mpegts' && !v.paused && skipGap(v)) return;
     if (
-      this.stable &&
+      this.reserved &&
       this.status.state === 'playing' &&
       !v.paused &&
       reserveAhead(v) < UNDERRUN_S
@@ -424,6 +542,7 @@ export class PlaybackSession {
       this.startHold(false);
       return;
     }
+    if (this.auto && this.status.state === 'playing' && !v.paused) this.steer(now);
     const t = v.currentTime;
     if (t !== this.lastTime) {
       if (this.lastTime >= 0 && t > this.lastTime) {
@@ -566,6 +685,10 @@ export class PlaybackSession {
     if (!this.isCurrent(id)) return;
     const failures = this.status.failures + 1;
     if (this.status.state === 'playing') this.opts.onBeforeReconnect?.();
+    if (this.raisedFrom !== undefined) {
+      this.level = this.raisedFrom;
+      this.raisedFrom = undefined;
+    }
     this.teardownEngine();
     const giveUp = !retryable || failures > this.opts.maxAttempts;
     const slow = giveUp && !!this.opts.keepTrying && KEEP_TRYING_KINDS.has(e.kind);
@@ -621,6 +744,7 @@ export class PlaybackSession {
   async destroy(): Promise<void> {
     if (this.disposed) return;
     this.teardownEngine();
+    this.setRate(1);
     this.disposed = true;
     this.attemptId++;
     this.status = { ...this.status, state: 'stopped' };

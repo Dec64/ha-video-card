@@ -3,6 +3,10 @@ import type { Engine, EngineEvent } from '../../src/engines/types';
 import type { StreamSource } from '../../src/types';
 import type { HealthKind } from '../../src/health-log';
 import {
+  AUTO_FAST,
+  AUTO_LEVELS,
+  AUTO_SLOW,
+  AUTO_STEP_DOWN_MS,
   KEEP_TRYING_MS,
   PlaybackSession,
   reserveAhead,
@@ -639,5 +643,172 @@ describe('PlaybackSession recovery', () => {
     expect(r.statuses.at(-1)?.state).toBe('reconnecting');
     expect(FakeEngine.live).toBe(0);
     await r.s.destroy();
+  });
+});
+
+describe('PlaybackSession with buffer: auto', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    FakeEngine.live = 0;
+    FakeEngine.created = [];
+  });
+  afterEach(() => vi.useRealTimers());
+
+  function autoSetup(over: Partial<ConstructorParameters<typeof PlaybackSession>[2]> = {}) {
+    const levels: number[] = [];
+    const health: HealthKind[] = [];
+    const env = setup({
+      buffer: 'auto',
+      onAutoLevel: (l) => levels.push(l),
+      onHealth: (k) => health.push(k),
+      ...over,
+    });
+    const v = env.video as unknown as Record<string, unknown> & {
+      bufEnd: number;
+      playbackRate: number;
+    };
+    v.bufEnd = 0;
+    v.playbackRate = 1;
+    v.buffered = {
+      get length() {
+        return v.bufEnd > 0 ? 1 : 0;
+      },
+      start: () => 0,
+      end: () => v.bufEnd,
+    };
+    v.pause = () => {
+      v.paused = true;
+    };
+    return { ...env, v, levels, health };
+  }
+
+  /** Plays `secs` of video over `secs` of wall clock, with `ahead` seconds buffered beyond. */
+  async function play(env: ReturnType<typeof autoSetup>, secs: number, ahead: number) {
+    for (let i = 0; i < secs * 2; i++) {
+      env.video.currentTime += 0.5;
+      env.v.bufEnd = env.video.currentTime + ahead;
+      await vi.advanceTimersByTimeAsync(500);
+    }
+  }
+
+  it("starts once this device's level of reserve is built", async () => {
+    const env = autoSetup({ autoLevel: 2 });
+    env.s.start();
+    await flush();
+    env.engine().emit({ type: 'data' });
+    env.v.bufEnd = AUTO_LEVELS[2] - 1;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(env.video.paused).toBe(true);
+    env.v.bufEnd = AUTO_LEVELS[2] + 0.2;
+    await vi.advanceTimersByTimeAsync(600);
+    expect(env.video.paused).toBe(false);
+    expect(env.s.autoInfo).toEqual({ level: 2, target: AUTO_LEVELS[2], rate: 1 });
+    await env.s.destroy();
+  });
+
+  it('raises the level when the picture runs dry, and remembers it', async () => {
+    const env = autoSetup();
+    env.s.start();
+    await flush();
+    env.engine().emit({ type: 'data' });
+    env.v.bufEnd = 2;
+    await vi.advanceTimersByTimeAsync(600);
+    await play(env, 3, 1.5);
+    expect(env.statuses.at(-1)?.state).toBe('playing');
+    env.v.bufEnd = env.video.currentTime + 0.1; // ran dry
+    await vi.advanceTimersByTimeAsync(500);
+    expect(env.video.paused).toBe(true);
+    expect(env.s.autoInfo?.level).toBe(1);
+    expect(env.levels).toEqual([]); // saved once the refill works
+    // Refills to the new, larger target before playing again.
+    env.v.bufEnd = env.video.currentTime + AUTO_LEVELS[1] - 0.5;
+    await vi.advanceTimersByTimeAsync(600);
+    expect(env.video.paused).toBe(true);
+    env.v.bufEnd = env.video.currentTime + AUTO_LEVELS[1] + 0.2;
+    await vi.advanceTimersByTimeAsync(600);
+    expect(env.video.paused).toBe(false);
+    expect(env.levels).toEqual([1]);
+    expect(env.health).toEqual(['buffering', 'buffer-level']);
+    await env.s.destroy();
+  });
+
+  it('a stall while refilling keeps the old level (not a buffer-size problem)', async () => {
+    const env = autoSetup();
+    env.s.start();
+    await flush();
+    env.engine().emit({ type: 'data' });
+    env.v.bufEnd = 2;
+    await vi.advanceTimersByTimeAsync(600);
+    await play(env, 3, 1.5);
+    env.v.bufEnd = env.video.currentTime + 0.1; // ran dry, and nothing more arrives
+    await vi.advanceTimersByTimeAsync(3100);
+    expect(env.statuses.at(-1)?.state).toBe('reconnecting');
+    expect(env.levels).toEqual([]);
+    expect(env.health).toEqual(['buffering', 'reconnect']);
+    expect(env.s.autoInfo?.level).toBe(0);
+    await env.s.destroy();
+  });
+
+  it('catches up a little faster when far ahead, slows a little when low', async () => {
+    const env = autoSetup({ autoLevel: 2 });
+    env.s.start();
+    await flush();
+    env.engine().emit({ type: 'data' });
+    env.v.bufEnd = 6;
+    await vi.advanceTimersByTimeAsync(600);
+    const target = AUTO_LEVELS[2];
+    await play(env, 2, target);
+    expect(env.v.playbackRate).toBe(1);
+    await play(env, 2, target + 4);
+    expect(env.v.playbackRate).toBe(AUTO_FAST);
+    await play(env, 1, target + 1); // hysteresis: keeps catching up
+    expect(env.v.playbackRate).toBe(AUTO_FAST);
+    await play(env, 1, target);
+    expect(env.v.playbackRate).toBe(1);
+    await play(env, 2, target * 0.4);
+    expect(env.v.playbackRate).toBe(AUTO_SLOW);
+    await play(env, 2, target);
+    expect(env.v.playbackRate).toBe(1);
+    await env.s.destroy();
+    expect(env.v.playbackRate).toBe(1);
+  });
+
+  it('jumps forward instead of racing when very far behind live', async () => {
+    const env = autoSetup();
+    env.s.start();
+    await flush();
+    env.engine().emit({ type: 'data' });
+    env.v.bufEnd = 2;
+    await vi.advanceTimersByTimeAsync(600);
+    await play(env, 1, 1.5);
+    env.v.bufEnd = env.video.currentTime + 30;
+    await vi.advanceTimersByTimeAsync(500);
+    expect(env.v.bufEnd - env.video.currentTime).toBeCloseTo(AUTO_LEVELS[0], 0);
+    await env.s.destroy();
+  });
+
+  it('steps the level down after a smooth spell', async () => {
+    const env = autoSetup({ autoLevel: 3 });
+    env.s.start();
+    await flush();
+    env.engine().emit({ type: 'data' });
+    env.v.bufEnd = AUTO_LEVELS[3] + 0.5;
+    await vi.advanceTimersByTimeAsync(600);
+    await play(env, AUTO_STEP_DOWN_MS / 1000 + 2, AUTO_LEVELS[3]);
+    expect(env.levels).toEqual([2]);
+    expect(env.s.autoInfo?.level).toBe(2);
+    await env.s.destroy();
+  });
+
+  it('low never touches the playback rate or the level', async () => {
+    const env = autoSetup({ buffer: 'low' });
+    env.s.start();
+    await flush();
+    env.engine().emit({ type: 'data' });
+    await play(env, 3, 20);
+    expect(env.v.playbackRate).toBe(1);
+    expect(env.s.autoInfo).toBeUndefined();
+    expect(env.levels).toEqual([]);
+    await env.s.destroy();
   });
 });
