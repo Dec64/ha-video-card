@@ -14,6 +14,9 @@
 //   nocors    stream without Access-Control-Allow-Origin
 //   hevc / mpeg2 / ac3 / mp2   stream with that codec
 //
+// ?output_profile=<id> on a stream acts like a Dispatcharr profile that converts: plain H.264 + AAC
+// at 160x90, whatever the channel's mode (the source is 320x180).
+//
 // GET /__stats?channel=<id>  → { open, total, queries: [...] }   (all channels without ?channel)
 //
 // GET /output/m3u  → a Dispatcharr-style channel playlist. Query parameters:
@@ -127,7 +130,7 @@ function parseChannel(id) {
   return m ? { mode: m[1], arg: m[2] === undefined ? undefined : Number(m[2]) } : { mode: 'ok' };
 }
 
-function ffmpegArgs(mode) {
+function ffmpegArgs(mode, size = '320x180') {
   const video =
     mode === 'hevc'
       ? ['-c:v', 'libx265', '-preset', 'ultrafast', '-x265-params', 'log-level=error']
@@ -148,7 +151,7 @@ function ffmpegArgs(mode) {
     '-f',
     'lavfi',
     '-i',
-    'testsrc2=size=320x180:rate=25',
+    `testsrc2=size=${size}:rate=25`,
     '-f',
     'lavfi',
     '-i',
@@ -304,7 +307,10 @@ export async function startFakeDispatcharr({ port = 0, appPort = 0, host = '127.
     let held = null;
     const begin = () => {
       if (closed) return;
-      ff = spawn('ffmpeg', ffmpegArgs(mode), { stdio: ['ignore', 'pipe', 'inherit'] });
+      const profiled = url.searchParams.has('output_profile');
+      ff = spawn('ffmpeg', profiled ? ffmpegArgs('ok', '160x90') : ffmpegArgs(mode), {
+        stdio: ['ignore', 'pipe', 'inherit'],
+      });
       ff.stdout.on('data', (chunk) => {
         if (closed || paused) return;
         if (held) held.push(chunk);

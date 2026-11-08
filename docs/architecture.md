@@ -85,6 +85,8 @@ Any change re-runs `evaluate()`.
 
 **buffer: auto** (default; mpegts sources). Like stable (mpegts.js latency chasing off, the session holds and refills), but the reserve target is a level in `AUTO_LEVELS` = 1.5, 3, 5, 8, 12 s. Running dry raises the level for the refill; the raise is kept and saved (`stream-card:buffer-level`) only when the refill completes, and undone if the session fails (a stall is not a buffer-size problem). 5 minutes without running dry lowers it one step. While playing, the session steers with `playbackRate`: 1.05 while more than target + 2 s ahead (until target + 0.5), 0.95 under half the target (until 90 %), 1 otherwise, and a jump to the target if more than 15 s ahead. Each attempt and `destroy()` reset the rate to 1. Multiview tiles start at level 0 and don't save. The session also sets the `<video>`'s mute state at each attempt, so the mute button is right (and a change survives) while a reserve builds before `play()`.
 
+**Quality** (`qualities`, single card only). The ladder is Source (no profile) then the configured rungs by height. For a channel request, `resolveWithQuality()` builds the channel's options (Source plus rungs at most 90 % of the channel's known height; all rungs while unknown), puts `output_profile` on Source if the channel needs it (`fmt`) or the device chose Safe audio, and picks the pinned rung (Source if not offered) or Auto's step, never Source when `noSource`. URL requests have no quality. The session reports `onStruggle` at most once: over the last 5 two-second samples while playing, at least 100 frames with more than 20 % dropped; or 3 refills after running dry within 10 minutes once Auto buffering is at its top level (or with `stable`). Auto then saves one step down with a hold of 30 min / 2 h / 8 h (step-downs in a day) and restarts: `stopSession()` (fetch aborted synchronously) before `evaluate()` starts the next, as for a channel change. `startSession()` steps up once if the hold is over; never mid-session. While Source plays, the media-info height is saved for the channel. A `codec` error at Source restarts instead of showing: audio → `fmt` (when `output_profile` is set), otherwise → `noSource`. A settings change re-resolves and restarts only if the URL changed.
+
 ## Multiview
 
 Opt-in per card (`multiview.enabled`, needs the channel list). The grid has 2–4 tiles (`max_tiles`, default 2); each tile owns a `<video>` created once (never in a template) and at most one `PlaybackSession`, so **each tile is one Dispatcharr connection** and the header says how many are open.
@@ -135,7 +137,10 @@ These are what buttons, dashboards and the code rely on. Change them only in the
 type: custom:stream-card
 target: kitchen_tv                  # mailbox key; buttons with this target play here (default "default")
 dispatcharr_url: https://dispatcharr.example
-output_profile: 3                   # sent as ?output_profile=3; omit for none
+output_profile: 3                   # sent as ?output_profile=3; omit for none. With qualities: Safe audio only
+qualities:                          # optional: lower qualities, best first after sorting by height
+  - { name: 1080p, output_profile: 6 }      # height from the name (720p, 4K), or height: <px>
+  - { name: 720p, output_profile: 7 }       # "Source" (no profile) is always rung 0
 url_template: "{base}/proxy/ts/stream/{channel}"   # default
 channel: BBC One HD                 # optional default: UUID, or a name/number from the channel list
 url: https://…                      # optional: a full stream URL instead of a channel
@@ -214,8 +219,10 @@ A registered card implements `ControllerCard`: `target`, `isLive`, `deliver(req)
 - `localStorage['stream-card:recent:<target>']` = up to 8 `{ channel?, url?, title? }`, newest first, no duplicates. Last channel is the newest entry that isn't playing now.
 - `localStorage['stream-card:volume']` = `0`–`1`, for every card on the device.
 - `localStorage['stream-card:buffer-level']` = buffer: auto's level on this device, `0`–`4` (one for every card and target).
-- `localStorage['stream-card:settings:<target>']` = `{ buffer?: 'auto' | 'low' | 'stable', nowNext?: boolean, stats?: boolean }` from the settings panel. A field is present only when it differs from the card's YAML (`nowNext` defaults to on, `stats` to `debug`); Reset removes the key. Each write fires `stream-card-settings` on `window` with `{ target, settings }`, and every card for that target applies it. A new buffer mode while a TS session runs stops that session (closing its connection) and lets `evaluate()` start the next. Multiview tiles get the mode when they next start.
-- `localStorage['stream-card:health:<target>']` = up to 100 `{ t, kind, ch?, detail? }`, oldest first. `kind`: `reconnect`, `buffering`, `buffer-level`, `frozen`, `black`, `switch`, `switch-failed`, `check-paused`, `network`, `keep-trying`, `gave-up`. Display only (stats overlay, `debugInfo.health`).
+- `localStorage['stream-card:settings:<target>']` = `{ buffer?: 'auto' | 'low' | 'stable', nowNext?: boolean, stats?: boolean, quality?: string, audio?: 'safe' }` from the settings panel (`quality` is a rung's name; absent = Auto). A field is present only when it differs from the card's YAML (`nowNext` defaults to on, `stats` to `debug`); Reset removes the key. Each write fires `stream-card-settings` on `window` with `{ target, settings }`, and every card for that target applies it. A new buffer mode while a TS session runs stops that session (closing its connection) and lets `evaluate()` start the next. Multiview tiles get the mode when they next start.
+- `localStorage['stream-card:quality-auto']` = `{ step, until, strikes, since }`: Auto quality's steps below Source on this device (one for every card; clamped to each channel's options), the time before which it won't step up, and step-downs in the day since `since`.
+- `localStorage['stream-card:channel-info']` = `{ [stream id]: { h?, fmt?, noSource? } }`, at most 300 channels, least recently changed dropped first: the channel's own height (seen at Source), whether Source needs `output_profile` for its audio here, and whether Source can't be played here at all.
+- `localStorage['stream-card:health:<target>']` = up to 100 `{ t, kind, ch?, detail? }`, oldest first. `kind`: `reconnect`, `buffering`, `buffer-level`, `quality`, `frozen`, `black`, `switch`, `switch-failed`, `check-paused`, `network`, `keep-trying`, `gave-up`. Display only (stats overlay, `debugInfo.health`).
 - `localStorage['stream-card:sleep:<target>']` = the sleep deadline (epoch ms). One that passed while the page was closed stops the target when the controller next looks at it.
 
 ### Card navigation API

@@ -306,6 +306,33 @@ const BUFFER_HINTS = {
   stable: 'Smoother on slow devices, a few seconds behind',
 } as const;
 
+function qualityRow(
+  q: NonNullable<NonNullable<CardView['settings']>['quality']>,
+  act: NonNullable<CardActions['settings']>,
+): TemplateResult {
+  const opt = (value: string, label: string) =>
+    html`<button
+      class="seg-option quality-option"
+      role="radio"
+      data-quality=${value}
+      aria-checked=${q.choice === value ? 'true' : 'false'}
+      @click=${() => act.setQuality(value)}
+    >
+      ${label}
+    </button>`;
+  const hint =
+    q.choice === 'auto'
+      ? `Lowers the quality if this device can’t keep up${q.playing ? ` · now ${q.playing}` : ''}`
+      : 'Stays on this quality on this device';
+  return html`<div class="setting">
+    <span class="setting-name">Quality</span>
+    <div class="seg wrap" role="radiogroup" aria-label="Quality">
+      ${opt('auto', 'Auto')} ${q.options.map((name) => opt(name, name))}
+    </div>
+    <span class="setting-hint">${hint}</span>
+  </div>`;
+}
+
 function settingsPanel(v: CardView, a: CardActions): TemplateResult | typeof nothing {
   const s = v.settings;
   const act = a.settings;
@@ -351,6 +378,34 @@ function settingsPanel(v: CardView, a: CardActions): TemplateResult | typeof not
       </div>
       <span class="setting-hint">${BUFFER_HINTS[s.buffer]}</span>
     </div>
+    ${s.quality ? qualityRow(s.quality, act) : nothing}
+    ${
+      s.audio
+        ? html`<div class="setting">
+            <span class="setting-name">Audio</span>
+            <div class="seg" role="radiogroup" aria-label="Audio">
+              ${(['original', 'safe'] as const).map(
+                (a) =>
+                  html`<button
+                    class="seg-option audio-${a}"
+                    role="radio"
+                    aria-checked=${s.audio === a ? 'true' : 'false'}
+                    @click=${() => act.setAudio(a)}
+                  >
+                    ${a === 'original' ? 'Original' : 'Safe'}
+                  </button>`,
+              )}
+            </div>
+            <span class="setting-hint"
+              >${
+                s.audio === 'safe'
+                  ? 'AAC stereo: plays on every device'
+                  : 'The channel’s own sound (falls back to Safe if this device can’t play it)'
+              }</span
+            >
+          </div>`
+        : nothing
+    }
     ${
       s.nowNext !== undefined
         ? toggle('set-nownext', 'Now and next', s.nowNext, act.setNowNext)

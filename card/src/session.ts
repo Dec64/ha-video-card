@@ -26,7 +26,18 @@ import {
   frameCount,
   type PictureProblem,
 } from './picture';
+import {
+  STRUGGLE_DRY_RUNS,
+  STRUGGLE_DRY_WINDOW_MS,
+  STRUGGLE_SAMPLE_MS,
+  STRUGGLE_SAMPLES,
+  droppingFrames,
+  type FrameSample,
+} from './quality';
 import type { BufferMode, StreamSource } from './types';
+
+/** Why a device seems unable to keep up with a stream (see onStruggle). */
+export type StruggleReason = 'dropping frames' | 'running dry';
 
 export type SessionState = 'connecting' | 'reconnecting' | 'playing' | 'error' | 'stopped';
 
@@ -78,6 +89,12 @@ export interface SessionOptions {
   /** buffer: auto. The level to start at (this device's last), and where to save a new one. */
   autoLevel?: number;
   onAutoLevel?: (level: number) => void;
+  /**
+   * The device can't keep up although the stream keeps coming: it keeps dropping frames, or keeps
+   * running its reserve dry while data still arrives. Called at most once per session; the card
+   * may answer by restarting on a lighter quality.
+   */
+  onStruggle?: (reason: StruggleReason) => void;
   createEngine?: EngineFactory;
   diagnose?: (url: string) => Promise<'cors' | 'unreachable'>;
 }
@@ -213,6 +230,12 @@ export class PlaybackSession {
    * succeeds. If data stopped altogether, that's a stall, not a too-small reserve: put it back.
    */
   private raisedFrom?: number;
+  /** Struggle detection: frame counts per sample, refills after running dry, and done-once. */
+  private frameSamples: FrameSample[] = [];
+  private lastFrames?: FrameSample;
+  private lastFrameSampleAt = 0;
+  private dryRuns: number[] = [];
+  private struggled = false;
   private readonly createEngine: EngineFactory;
   private readonly diagnose: (url: string) => Promise<'cors' | 'unreachable'>;
 
@@ -257,6 +280,7 @@ export class PlaybackSession {
     this.holding = false;
     this.watch.reset();
     this.lastSampleAt = 0;
+    this.resetFrameSamples();
     this.setRate(1);
     // The mute state shows (and toggles) from the <video>, also while a reserve builds before play().
     this.video.muted = this.opts.muted || this.status.mutedByPolicy;
@@ -401,6 +425,7 @@ export class PlaybackSession {
     this.holdBufferedEnd = bufferedEnd(this.video);
     this.lastProgressAt = Date.now();
     this.watch.reset();
+    this.resetFrameSamples();
     if (!atStart) {
       this.video.pause();
       this.setRate(1);
@@ -444,7 +469,16 @@ export class PlaybackSession {
     }
     if (ahead >= target || (ahead > 1 && overdue)) {
       skipGap(v);
-      if (!this.holdIsStart) this.commitRaise();
+      if (!this.holdIsStart) {
+        this.commitRaise();
+        // The reserve refilled, so data kept coming: running dry was this device or its link.
+        this.dryRuns = [...this.dryRuns.filter((t) => now - t < STRUGGLE_DRY_WINDOW_MS), now];
+        const maxed = !this.auto || this.level === AUTO_LEVELS.length - 1;
+        if (maxed && this.dryRuns.length >= STRUGGLE_DRY_RUNS) {
+          this.struggle('running dry');
+          if (!this.isCurrent(id)) return;
+        }
+      }
       this.holding = false;
       this.lastTime = -1;
       this.lastProgressAt = now;
@@ -543,6 +577,10 @@ export class PlaybackSession {
       return;
     }
     if (this.auto && this.status.state === 'playing' && !v.paused) this.steer(now);
+    if (this.status.state === 'playing' && !v.paused) {
+      this.sampleFrames(now);
+      if (!this.isCurrent(id)) return;
+    }
     const t = v.currentTime;
     if (t !== this.lastTime) {
       if (this.lastTime >= 0 && t > this.lastTime) {
@@ -580,6 +618,39 @@ export class PlaybackSession {
         detail: `no progress for ${this.stallTimeoutMs} ms`,
       });
     }
+  }
+
+  private resetFrameSamples(): void {
+    this.frameSamples = [];
+    this.lastFrames = undefined;
+    this.lastFrameSampleAt = 0;
+  }
+
+  /** Every STRUGGLE_SAMPLE_MS while playing: frames decoded and dropped since the last sample. */
+  private sampleFrames(now: number): void {
+    if (!this.opts.onStruggle || this.struggled) return;
+    if (now - this.lastFrameSampleAt < STRUGGLE_SAMPLE_MS) return;
+    this.lastFrameSampleAt = now;
+    const st = this.engine?.getStats(this.video);
+    if (st?.decodedFrames === undefined) return;
+    const cur = { decoded: st.decodedFrames, dropped: st.droppedFrames ?? 0 };
+    const prev = this.lastFrames;
+    this.lastFrames = cur;
+    if (!prev) return;
+    this.frameSamples = [
+      ...this.frameSamples.slice(-(STRUGGLE_SAMPLES - 1)),
+      {
+        decoded: Math.max(0, cur.decoded - prev.decoded),
+        dropped: Math.max(0, cur.dropped - prev.dropped),
+      },
+    ];
+    if (droppingFrames(this.frameSamples)) this.struggle('dropping frames');
+  }
+
+  private struggle(reason: StruggleReason): void {
+    if (this.struggled || !this.opts.onStruggle) return;
+    this.struggled = true;
+    this.opts.onStruggle(reason);
   }
 
   private pictureTick(id: number, now: number): void {

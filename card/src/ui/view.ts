@@ -113,6 +113,10 @@ export interface SettingsView {
   /** Programme info on screen; absent when the card has no guide (`epg: false`). */
   nowNext?: boolean;
   stats: boolean;
+  /** With `qualities`: Auto or a pinned quality, what the channel offers, and what plays now. */
+  quality?: { choice: string; options: string[]; playing?: string };
+  /** With `qualities` and `output_profile`: the original sound, or always AAC stereo. */
+  audio?: 'original' | 'safe';
   /** Something here differs from the card's YAML on this device. */
   custom: boolean;
 }
@@ -122,6 +126,9 @@ export interface SettingsActions {
   setBuffer: (mode: BufferMode) => void;
   setNowNext: (on: boolean) => void;
   setStats: (on: boolean) => void;
+  /** 'auto' or a quality's name. */
+  setQuality: (choice: string) => void;
+  setAudio: (audio: 'original' | 'safe') => void;
   /** Forgets this device's choices; the card's YAML applies again. */
   reset: () => void;
 }

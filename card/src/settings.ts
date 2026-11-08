@@ -16,6 +16,10 @@ export interface DeviceSettings {
   nowNext?: boolean;
   /** The stats overlay (the picture part of `debug`). */
   stats?: boolean;
+  /** With `qualities`: a quality's name to stay on, or absent for Auto. */
+  quality?: string;
+  /** With `qualities` and `output_profile`: always convert the sound to AAC stereo. */
+  audio?: 'safe';
 }
 
 export function readSettings(target: string): DeviceSettings {
@@ -28,6 +32,8 @@ export function readSettings(target: string): DeviceSettings {
     if (r.buffer === 'auto' || r.buffer === 'low' || r.buffer === 'stable') s.buffer = r.buffer;
     if (typeof r.nowNext === 'boolean') s.nowNext = r.nowNext;
     if (typeof r.stats === 'boolean') s.stats = r.stats;
+    if (typeof r.quality === 'string' && r.quality && r.quality !== 'auto') s.quality = r.quality;
+    if (r.audio === 'safe') s.audio = 'safe';
     return s;
   } catch {
     return {};

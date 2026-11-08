@@ -9,6 +9,7 @@
 //   window.__mseShimBlockUnmuted = true          play() with sound rejects (autoplay policy)
 //   window.__mseShimAppendMs = 600               each append takes this long (a slow device)
 //   window.__mseShimGap = [3, 3.2]               a hole in the buffer; playback stops at it
+//   window.__mseShimDropRatio = 0.5              this share of frames from now on is "dropped"
 //   window.__mseShimPicture = 'moving'           what a canvas sees when it draws the video:
 //                                                'moving' (default), 'frozen' or 'black'
 (() => {
@@ -410,7 +411,13 @@
   const origQ = HTMLVideoElement.prototype.getVideoPlaybackQuality;
   HTMLVideoElement.prototype.getVideoPlaybackQuality = function () {
     if (!fake(this)) return origQ.call(this);
-    return { totalVideoFrames: Math.floor(state(this).now() * 25), droppedVideoFrames: 0 };
+    const total = Math.floor(state(this).now() * 25);
+    // A device too slow for the stream: this share of frames counts as dropped.
+    const ratio = window.__mseShimDropRatio ?? 0;
+    const st = state(this);
+    st.dropped = (st.dropped ?? 0) + Math.max(0, total - (st.lastTotal ?? total)) * ratio;
+    st.lastTotal = total;
+    return { totalVideoFrames: total, droppedVideoFrames: Math.floor(st.dropped) };
   };
 
   // Nothing is decoded, so drawing the video into a canvas would give an empty (black) picture.

@@ -13,6 +13,7 @@ export type HealthKind =
   | 'reconnect'
   | 'buffering'
   | 'buffer-level'
+  | 'quality'
   | 'frozen'
   | 'black'
   | 'switch'

@@ -23,6 +23,8 @@ class FakeEngine implements Engine {
   destroyed = false;
   static live = 0;
   static created: FakeEngine[] = [];
+  /** Frame counters the next getStats() reports (struggle tests). */
+  static frames?: { decoded: number; dropped: number };
   constructor() {
     FakeEngine.created.push(this);
   }
@@ -41,7 +43,13 @@ class FakeEngine implements Engine {
     this.destroyed = true;
   }
   getStats() {
-    return { engine: 'mpegts' as const, bufferSeconds: 0 };
+    const f = FakeEngine.frames;
+    return {
+      engine: 'mpegts' as const,
+      bufferSeconds: 0,
+      decodedFrames: f?.decoded,
+      droppedFrames: f?.dropped,
+    };
   }
 }
 
@@ -809,6 +817,48 @@ describe('PlaybackSession with buffer: auto', () => {
     expect(env.v.playbackRate).toBe(1);
     expect(env.s.autoInfo).toBeUndefined();
     expect(env.levels).toEqual([]);
+    await env.s.destroy();
+  });
+});
+
+describe('PlaybackSession struggle detection', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    FakeEngine.live = 0;
+    FakeEngine.created = [];
+    FakeEngine.frames = { decoded: 0, dropped: 0 };
+  });
+  afterEach(() => {
+    FakeEngine.frames = undefined;
+    vi.useRealTimers();
+  });
+
+  async function playing(dropShare: number, secs: number, onStruggle: (r: string) => void) {
+    const env = setup({ onStruggle, stableMs: 1e9 });
+    env.s.start();
+    await flush();
+    env.engine().emit({ type: 'data' });
+    for (let i = 0; i < secs * 2; i++) {
+      env.video.currentTime += 0.5;
+      const f = FakeEngine.frames!;
+      f.decoded += 12;
+      f.dropped += Math.round(12 * dropShare);
+      await vi.advanceTimersByTimeAsync(500);
+    }
+    return env;
+  }
+
+  it('reports a device that keeps dropping frames, once', async () => {
+    const reasons: string[] = [];
+    const env = await playing(0.5, 30, (r) => reasons.push(r));
+    expect(reasons).toEqual(['dropping frames']);
+    await env.s.destroy();
+  });
+
+  it('stays quiet while frames play smoothly', async () => {
+    const reasons: string[] = [];
+    const env = await playing(0.05, 30, (r) => reasons.push(r));
+    expect(reasons).toEqual([]);
     await env.s.destroy();
   });
 });
