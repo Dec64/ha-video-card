@@ -614,6 +614,21 @@ describe('PlaybackSession recovery', () => {
     await r.s.destroy();
   });
 
+  it('ignores the network coming back once the retry is already running', async () => {
+    const r = setup({ backoffMs: [100] });
+    r.s.start();
+    await connect(r);
+    r.engine().emit({ type: 'error', error: { kind: 'network', detail: 'offline' } });
+    vi.advanceTimersByTime(100); // the retry fires and starts connecting
+    expect(r.statuses.at(-1)?.state).toBe('reconnecting');
+    r.s.networkBack();
+    await flush();
+    expect(FakeEngine.created).toHaveLength(2);
+    expect(FakeEngine.live).toBe(1);
+    await r.s.destroy();
+    expect(FakeEngine.live).toBe(0);
+  });
+
   it('gives up on a stalled picture at once when the network comes back', async () => {
     const r = setup({ stallTimeoutMs: 20_000 });
     r.s.start();

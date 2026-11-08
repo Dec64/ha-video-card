@@ -522,8 +522,8 @@ export class PlaybackSession {
     if (this.disposed) return;
     const id = this.attemptId;
     if (this.status.state === 'reconnecting' && this.retryTimer) {
-      clearTimeout(this.retryTimer);
-      this.retryTimer = undefined;
+      // Clears the timer too; there is no engine while a retry waits, but never risk two.
+      this.teardownEngine();
       this.opts.onHealth?.('network', 'retrying now');
       void this.attempt();
       return;
@@ -588,6 +588,8 @@ export class PlaybackSession {
       lastError: `${e.kind}: ${e.detail}`,
     });
     this.retryTimer = setTimeout(() => {
+      // Fired: no retry is pending any more (networkBack() must not start a second one).
+      this.retryTimer = undefined;
       if (this.isCurrent(id)) void this.attempt();
     }, delay);
   }
