@@ -154,12 +154,22 @@ describe('StreamController', () => {
     });
     new StreamController(win as Window).install();
     expect(Object.keys(bound).sort()).toEqual([
+      'networkReconnect',
       'onScreensaverStart',
       'onScreensaverStop',
       'screenOff',
       'screenOn',
     ]);
     expect(bound.screenOff).toContain('onFullyEvent("screenOff")');
+  });
+
+  it('relays Fully networkReconnect as a network event on window', () => {
+    const seen: string[] = [];
+    const l = (e: Event) => seen.push(e.type);
+    window.addEventListener('stream-card-network', l);
+    onTestFinished(() => window.removeEventListener('stream-card-network', l));
+    new StreamController(window).onFullyEvent('networkReconnect');
+    expect(seen).toEqual(['stream-card-network']);
   });
 
   describe('navigation actions', () => {

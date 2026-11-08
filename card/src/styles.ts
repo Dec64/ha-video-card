@@ -88,6 +88,17 @@ const card = css`
     object-fit: contain;
     background: var(--sc-pic);
   }
+  .video-host canvas.still {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+  }
+  .video-host canvas.still[hidden] {
+    display: none;
+  }
   .sheen {
     position: absolute;
     inset: 0;

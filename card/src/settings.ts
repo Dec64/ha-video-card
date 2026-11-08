@@ -25,7 +25,7 @@ export function readSettings(target: string): DeviceSettings {
     const r = JSON.parse(raw) as Record<string, unknown>;
     if (typeof r !== 'object' || !r) return {};
     const s: DeviceSettings = {};
-    if (r.buffer === 'low' || r.buffer === 'stable') s.buffer = r.buffer;
+    if (r.buffer === 'auto' || r.buffer === 'low' || r.buffer === 'stable') s.buffer = r.buffer;
     if (typeof r.nowNext === 'boolean') s.nowNext = r.nowNext;
     if (typeof r.stats === 'boolean') s.stats = r.stats;
     return s;
@@ -46,4 +46,25 @@ export function writeSettings(target: string, s: DeviceSettings): void {
   window.dispatchEvent(
     new CustomEvent(SETTINGS_EVENT, { detail: { target, settings: clean as DeviceSettings } }),
   );
+}
+
+const LEVEL_KEY = 'stream-card:buffer-level';
+
+/** buffer: auto's level on this device (one for every card: it's about the device and its link). */
+export function readBufferLevel(): number | undefined {
+  try {
+    const raw = localStorage.getItem(LEVEL_KEY);
+    const n = raw === null ? NaN : Number(raw);
+    return Number.isFinite(n) ? n : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+export function writeBufferLevel(level: number): void {
+  try {
+    localStorage.setItem(LEVEL_KEY, String(level));
+  } catch {
+    /* storage unavailable */
+  }
 }

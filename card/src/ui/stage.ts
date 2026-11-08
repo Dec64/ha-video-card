@@ -300,11 +300,17 @@ function sleepMenu(v: CardView, a: CardActions): TemplateResult | typeof nothing
   </div>`;
 }
 
+const BUFFER_HINTS = {
+  auto: 'Adjusts to this device: more reserve after a stutter, less once smooth',
+  low: 'Starts fast, stays close to live',
+  stable: 'Smoother on slow devices, a few seconds behind',
+} as const;
+
 function settingsPanel(v: CardView, a: CardActions): TemplateResult | typeof nothing {
   const s = v.settings;
   const act = a.settings;
   if (!s?.open || !act) return nothing;
-  const seg = (mode: 'low' | 'stable', label: string) =>
+  const seg = (mode: 'auto' | 'low' | 'stable', label: string) =>
     html`<button
       class="seg-option buffer-${mode}"
       role="radio"
@@ -341,11 +347,9 @@ function settingsPanel(v: CardView, a: CardActions): TemplateResult | typeof not
     <div class="setting">
       <span class="setting-name">Buffering</span>
       <div class="seg" role="radiogroup" aria-label="Buffering">
-        ${seg('low', 'Low delay')} ${seg('stable', 'Stable')}
+        ${seg('auto', 'Auto')} ${seg('low', 'Low delay')} ${seg('stable', 'Stable')}
       </div>
-      <span class="setting-hint">
-        ${s.buffer === 'stable' ? 'Smoother on slow devices, a few seconds behind' : 'Starts fast, stays close to live'}
-      </span>
+      <span class="setting-hint">${BUFFER_HINTS[s.buffer]}</span>
     </div>
     ${
       s.nowNext !== undefined

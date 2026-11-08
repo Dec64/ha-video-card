@@ -13,7 +13,11 @@ export interface StreamCardConfig {
   aspect_ratio?: string;
   idle_timeout?: number;
   start_timeout?: number;
-  reconnect?: { max_attempts?: number };
+  reconnect?: { max_attempts?: number; keep_trying?: boolean };
+  /** Watch for a frozen or black picture and recover (default on). */
+  picture_check?: boolean;
+  /** HA action that moves the channel to its next source in Dispatcharr, e.g. rest_command.dispatcharr_next_stream. */
+  switch_source?: string;
   debug?: boolean;
   channel_list?: boolean;
   m3u_url?: string;
@@ -43,8 +47,11 @@ export type GuideMode = 'open' | 'closed' | 'off';
 
 export type SourceType = 'mpegts' | 'native';
 
-/** `low`: stay close to live. `stable`: keep a reserve of several seconds for slow devices. */
-export type BufferMode = 'low' | 'stable';
+/**
+ * `auto` (default): a reserve that grows when the picture runs dry and shrinks when it's smooth.
+ * `low`: stay close to live. `stable`: keep a fixed reserve of several seconds for slow devices.
+ */
+export type BufferMode = 'auto' | 'low' | 'stable';
 
 /** Card config after validation and defaults. */
 export interface ResolvedConfig {
@@ -59,6 +66,11 @@ export interface ResolvedConfig {
   idleTimeoutMs: number;
   startTimeoutMs: number;
   maxReconnectAttempts: number;
+  /** After the normal attempts, keep retrying every minute instead of stopping on an error. */
+  keepTrying: boolean;
+  pictureCheck: boolean;
+  /** `domain.service` called with `{ channel: <uuid> }` to switch source; unset = never switch. */
+  switchSource?: string;
   debug: boolean;
   /** Load Dispatcharr's channel list (M3U) for the picker, channel up/down and name lookups. */
   channelList: boolean;

@@ -217,9 +217,11 @@ test('a button for the target leaves multiview and plays its channel', async ({ 
 
 test('the idle timeout releases every tile', async ({ h }) => {
   await h.load();
-  const pl = await twoTiles(h, { idle_timeout: 0.05 }); // 3 s
+  // 6 s: long enough for the first tile to reach "playing" before it fires (Auto, the default,
+  // waits for a 1.5 s reserve first, ~3 s in all here); the clicks in startTwo restart it.
+  const pl = await twoTiles(h, { idle_timeout: 0.1 });
   await startTwo(h, pl);
-  await expectSum(h, pl.ids, 0, 8000);
+  await expectSum(h, pl.ids, 0, 12_000);
   await expect(grid(h)).toHaveCount(0);
 });
 

@@ -1,10 +1,25 @@
 import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from 'lit';
 import { ChannelList, loadChannels, type Channel } from './channels';
 import type { GuideFeed } from './epg';
-import { ConfigError, isUuid, needsLookup, normalizeConfig, resolveSource } from './config';
-import { VERSION } from './const';
+import {
+  ConfigError,
+  dispatcharrChannelId,
+  isUuid,
+  needsLookup,
+  normalizeConfig,
+  resolveSource,
+} from './config';
+import { NETWORK_EVENT, VERSION } from './const';
 import { getController, type ControllerCard, type StreamController } from './controller';
 import { format, type PlaybackError } from './errors';
+import {
+  appendHealth,
+  readHealth,
+  recentHealthLines,
+  summarizeHealth,
+  type HealthEvent,
+  type HealthKind,
+} from './health-log';
 import { icon } from './icons';
 import { readRemembered, writeRemembered } from './memory';
 import type { PickerState } from './picker';
@@ -12,7 +27,14 @@ import { holdReason, LifecycleWatcher, type HoldReason } from './lifecycle';
 import { NumberEntry } from './number-entry';
 import { previousRecent, pushRecent, readRecents, type RecentEntry } from './recents';
 import { PlaybackSession, type SessionStatus } from './session';
-import { readSettings, SETTINGS_EVENT, writeSettings, type DeviceSettings } from './settings';
+import {
+  readBufferLevel,
+  readSettings,
+  SETTINGS_EVENT,
+  writeBufferLevel,
+  writeSettings,
+  type DeviceSettings,
+} from './settings';
 import type { SleepState } from './sleep-timer';
 import { styles } from './styles';
 import type {
@@ -47,6 +69,17 @@ import type { StreamCardMultiview, TileItem } from './multiview';
 const CONTROLS_HIDE_MS = 4000;
 /** How long the big channel number stays up after a change. */
 const OSD_MS = 2600;
+/** switch_source: how long the HA action may take before the card carries on without it. */
+const SWITCH_TIMEOUT_MS = 10_000;
+
+/** The one part of HA's `hass` object the card uses. */
+interface HassLike {
+  callService?: (
+    domain: string,
+    service: string,
+    data?: Record<string, unknown>,
+  ) => Promise<unknown>;
+}
 /**
  * Channel up/down tunes once presses stop for this long. Each press releases the old stream at
  * once and shows the new channel, but only the one you land on opens a Dispatcharr connection.
@@ -94,6 +127,11 @@ export class StreamCard extends LitElement implements ControllerCard {
   private config?: ResolvedConfig;
   private readonly controller: StreamController;
   private readonly video: HTMLVideoElement;
+  /** The last frame, held over the picture while a reconnect runs (instead of a black flash). */
+  private readonly still: HTMLCanvasElement;
+  private hassRef?: HassLike;
+  /** This device's health log for the target (see health-log.ts). */
+  private health: HealthEvent[] = [];
   private readonly watcher: LifecycleWatcher;
   private request?: StreamRequest;
   private source?: StreamSource;
@@ -173,6 +211,9 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.video.volume = readVolume() ?? 1;
     (this.video as HTMLVideoElement & { disableRemotePlayback: boolean }).disableRemotePlayback =
       true;
+    this.still = document.createElement('canvas');
+    this.still.className = 'still';
+    this.still.hidden = true;
     this.watcher = new LifecycleWatcher(
       this,
       this.controller.power,
@@ -187,6 +228,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     const prevTarget = this.config?.target;
     this.config = normalizeConfig(raw);
     this.deviceSettings = readSettings(this.config.target);
+    this.health = readHealth(this.config.target);
     if (!this.config.settings) this.settingsOpen = false;
     this.syncStatsTimer();
     if (this.config.guide !== this.guideMode) {
@@ -219,8 +261,9 @@ export class StreamCard extends LitElement implements ControllerCard {
     return (await import('./editor-form')).configForm;
   }
 
-  set hass(_hass: unknown) {
-    // Playback never depends on HA state, so ignoring hass keeps re-renders away from <video>.
+  set hass(hass: unknown) {
+    // Kept only for switch_source. Playback never depends on HA state, and nothing re-renders.
+    this.hassRef = hass as HassLike;
   }
 
   getCardSize(): number {
@@ -320,6 +363,8 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.ensureChannels();
     this.syncGuide();
     window.addEventListener(SETTINGS_EVENT, this.onSettingsEvent);
+    window.addEventListener('online', this.onNetworkBack);
+    window.addEventListener(NETWORK_EVENT, this.onNetworkBack);
     if (this.config) this.deviceSettings = readSettings(this.config.target);
     this.syncStatsTimer();
     this.addEventListener('keydown', this.onKeyDown);
@@ -333,6 +378,8 @@ export class StreamCard extends LitElement implements ControllerCard {
     document.removeEventListener('fullscreenchange', this.onFullscreenChange);
     document.removeEventListener('webkitfullscreenchange', this.onFullscreenChange);
     window.removeEventListener(SETTINGS_EVENT, this.onSettingsEvent);
+    window.removeEventListener('online', this.onNetworkBack);
+    window.removeEventListener(NETWORK_EVENT, this.onNetworkBack);
     clearInterval(this.debugTimer);
     this.debugTimer = undefined;
     clearTimeout(this.controlsTimer);
@@ -350,7 +397,9 @@ export class StreamCard extends LitElement implements ControllerCard {
   }
 
   protected override firstUpdated(): void {
-    this.renderRoot.querySelector('.video-host')?.appendChild(this.video);
+    const host = this.renderRoot.querySelector('.video-host');
+    host?.appendChild(this.video);
+    host?.appendChild(this.still);
   }
 
   protected override updated(changed: PropertyValues): void {
@@ -718,6 +767,17 @@ export class StreamCard extends LitElement implements ControllerCard {
       muted: this.userMuted ?? this.config.muted,
       debug: this.config.debug,
       buffer: this.bufferMode,
+      pictureCheck: this.config.pictureCheck,
+      switchSource: this.config.switchSource ? this.switchSource : undefined,
+      keepTrying: this.config.keepTrying,
+      autoLevel: readBufferLevel(),
+      onAutoLevel: writeBufferLevel,
+      onHealth: (kind, detail) => {
+        if (session === this.session) this.logHealth(kind, detail);
+      },
+      onBeforeReconnect: () => {
+        if (session === this.session) this.holdLastFrame();
+      },
       onStatus: (s) => this.onStatus(session, s),
     });
     this.session = session;
@@ -734,8 +794,58 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.status = undefined;
     this.lastRelease = reason;
     this.watcher.disarmIdle();
+    this.still.hidden = true;
     void s.destroy();
   }
+
+  private logHealth(kind: HealthKind, detail?: string): void {
+    if (!this.config) return;
+    const ch = this.source?.title ?? this.source?.channel;
+    this.health = appendHealth(this.config.target, { t: Date.now(), kind, ch, detail });
+  }
+
+  /** Copies the picture that's showing into the still canvas, shown until playback resumes. */
+  private holdLastFrame(): void {
+    const v = this.video;
+    if (!v.videoWidth || !v.videoHeight) return;
+    try {
+      const scale = Math.min(1, 1280 / v.videoWidth);
+      this.still.width = Math.round(v.videoWidth * scale);
+      this.still.height = Math.round(v.videoHeight * scale);
+      this.still.getContext('2d')?.drawImage(v, 0, 0, this.still.width, this.still.height);
+      this.still.hidden = false;
+    } catch {
+      this.still.hidden = true;
+    }
+  }
+
+  /** switch_source: asks HA to move the channel to its next source in Dispatcharr. */
+  private switchSource = async (): Promise<boolean> => {
+    const action = this.config?.switchSource;
+    const id = this.source ? dispatcharrChannelId(this.source.url) : undefined;
+    const hass = this.hassRef;
+    if (!action || !id || typeof hass?.callService !== 'function' || this.isPreview) return false;
+    const [domain, service] = action.split('.');
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        hass.callService(domain, service, { channel: id }),
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('timed out')), SWITCH_TIMEOUT_MS);
+        }),
+      ]);
+      return true;
+    } catch (err) {
+      console.warn('[stream-card] switch_source failed', err);
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+  };
+
+  private onNetworkBack = (): void => {
+    this.session?.networkBack();
+  };
 
   private onStatus(session: PlaybackSession, s: SessionStatus): void {
     if (session !== this.session) return;
@@ -748,6 +858,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       return;
     }
     if (s.state === 'playing') {
+      this.still.hidden = true;
       this.scheduleHideControls();
       if (this.osdPending) {
         this.osdPending = false;
@@ -1055,7 +1166,9 @@ export class StreamCard extends LitElement implements ControllerCard {
     const muted = !this.effectiveMuted;
     this.video.muted = muted;
     this.userMuted = muted;
+    // Through the session too, so a reconnect or the end of a buffering hold keeps the choice.
     if (!muted && this.session?.status.mutedByPolicy) void this.session.resumeFromGesture(true);
+    else this.session?.setMuted(muted);
     this.showControls();
     this.refresh();
   };
@@ -1079,7 +1192,7 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   /** The buffer mode in effect: this device's choice, else the card's YAML. */
   private get bufferMode(): BufferMode {
-    return this.deviceSettings.buffer ?? this.config?.buffer ?? 'low';
+    return this.deviceSettings.buffer ?? this.config?.buffer ?? 'auto';
   }
 
   private get showNowNext(): boolean {
@@ -1267,6 +1380,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       notice: this.status?.notice,
       buffering: this.status?.buffering ?? false,
       buffer: this.bufferMode,
+      auto: this.session?.autoInfo,
       error: this.error,
       lastError: this.status?.lastError,
       channels: { state: this.channelState, count: this.channels?.size ?? 0 },
@@ -1276,6 +1390,8 @@ export class StreamCard extends LitElement implements ControllerCard {
       sleep: this.sleep,
       typed: this.numbers.digits,
       multiview: this.mvOn ? this.mv?.debugInfo : undefined,
+      stillShown: !this.still.hidden,
+      health: this.health.slice(-20),
       stats,
     };
   }
@@ -1463,10 +1579,15 @@ export class StreamCard extends LitElement implements ControllerCard {
       st
         ? `${st.engine} · buffer ${st.bufferSeconds.toFixed(1)} s · ${st.speedKBps?.toFixed(0) ?? '-'} KB/s`
         : 'engine -',
+      d.auto
+        ? `auto · target ${d.auto.target} s (level ${d.auto.level}) · rate ${d.auto.rate}`
+        : `buffer mode ${d.buffer}`,
       st ? `frames ${st.decodedFrames ?? '-'} · dropped ${st.droppedFrames ?? '-'}` : '',
       d.lastError ? `last error ${d.lastError}` : '',
       `channels ${d.channels.state} (${d.channels.count})`,
       `muted ${d.muted}${d.mutedByPolicy ? ' (autoplay policy)' : ''}`,
+      `health ${summarizeHealth(this.health, Date.now())}`,
+      ...recentHealthLines(this.health, 3),
     ];
     return lines.filter(Boolean).join('\n');
   }

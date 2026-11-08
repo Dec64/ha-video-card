@@ -26,7 +26,8 @@ test('a stalled stream reconnects on its own, never with two connections @real',
 test('a dropped connection reconnects', async ({ h }) => {
   await h.load();
   const ch = h.channel('drop-2');
-  await h.mount({ channel: ch, ...FAST });
+  // Each connection carries only 2 s: buffer: auto would spend most of it building its reserve.
+  await h.mount({ channel: ch, ...FAST, buffer: 'low' });
   await h.expectUi('playing');
   await expect.poll(async () => (await h.stats(ch)).total, { timeout: 10_000 }).toBeGreaterThan(1);
   await h.expectUi('playing');
@@ -176,7 +177,7 @@ test('buffer: low stalls on the same network gap (the case stable is for)', asyn
   test.setTimeout(60_000);
   await h.load();
   const ch = h.channel('gap-4');
-  await h.mount({ channel: ch });
+  await h.mount({ channel: ch, buffer: 'low' });
   await h.expectUi('playing');
   await h.page.waitForTimeout(3000);
   await countWaiting(h); // only the gap from 12 s counts, not start-up
@@ -292,3 +293,30 @@ for (const [buffer, gap] of [
     expect((await h.stats(ch)).total).toBe(1);
   });
 }
+
+test('buffer: auto (the default) raises its reserve after a network gap and keeps one connection', async ({
+  h,
+}) => {
+  test.setTimeout(60_000);
+  await h.load();
+  const ch = h.channel('gap-4');
+  await h.mount({ channel: ch });
+  await h.expectUi('playing');
+  type AutoInfo = { buffer: string; auto?: { level: number; target: number } };
+  const auto = async () => ((await h.info()) as unknown as AutoInfo).auto;
+  expect(((await h.info()) as unknown as AutoInfo).buffer).toBe('auto');
+  expect((await auto())?.level).toBe(0);
+  // The gap at 12 s runs the 1.5 s reserve dry; the refill keeps the next level.
+  await expect
+    .poll(() => h.page.evaluate(() => localStorage.getItem('stream-card:buffer-level')), {
+      timeout: 30_000,
+    })
+    .toBe('1');
+  expect((await auto())?.level).toBe(1);
+  await expect
+    .poll(async () => ((await h.info()) as unknown as { buffering: boolean }).buffering)
+    .toBe(false);
+  await h.expectUi('playing');
+  expect((await h.stats(ch)).total).toBe(1);
+  await h.expectOpen(ch, 1);
+});

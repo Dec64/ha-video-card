@@ -25,13 +25,13 @@ test('switching buffering while playing reconnects once, never with two connecti
   const ch = h.channel();
   await h.mount({ channel: ch });
   await h.expectUi('playing');
-  expect(await buffer(h)).toBe('low');
+  expect(await buffer(h)).toBe('auto');
   const f = h.frame();
 
   await f.locator('button.ctl-settings').click();
   const panel = f.locator('.settings-panel');
   await expect(panel).toBeVisible();
-  await expect(panel.locator('.buffer-low')).toHaveAttribute('aria-checked', 'true');
+  await expect(panel.locator('.buffer-auto')).toHaveAttribute('aria-checked', 'true');
   // Nothing differs from the YAML yet.
   await expect(panel.locator('.reset-settings')).toHaveCount(0);
 
@@ -62,7 +62,7 @@ test('switching buffering while playing reconnects once, never with two connecti
   // "Use the dashboard's settings" forgets it.
   await h.frame().locator('button.ctl-settings').click();
   await h.frame().locator('.reset-settings').click();
-  await expect.poll(() => buffer(h)).toBe('low');
+  await expect.poll(() => buffer(h)).toBe('auto');
   expect(
     await h.page.evaluate(() => localStorage.getItem('stream-card:settings:default')),
   ).toBeNull();
@@ -85,7 +85,7 @@ test('a buffering change reaches every card for the target, and only that target
   await h.frame('#a').locator('button.ctl-settings').click();
   await h.frame('#a').locator('.buffer-stable').click();
   await expect.poll(() => buffer(h, '#c')).toBe('stable');
-  expect(await buffer(h, '#b')).toBe('low');
+  expect(await buffer(h, '#b')).toBe('auto');
   expect((await h.stats(b)).total).toBe(1);
 });
 

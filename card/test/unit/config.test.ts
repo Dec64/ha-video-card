@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   ConfigError,
+  dispatcharrChannelId,
   guessSourceType,
   isUuid,
   needsLookup,
@@ -13,6 +14,39 @@ import {
 const base = { type: 'custom:stream-card', dispatcharr_url: 'https://dispatcharr.example/' };
 
 describe('normalizeConfig', () => {
+  it('reads the recovery options', () => {
+    expect(normalizeConfig(base)).toMatchObject({
+      pictureCheck: true,
+      keepTrying: false,
+      switchSource: undefined,
+    });
+    expect(
+      normalizeConfig({
+        ...base,
+        picture_check: false,
+        reconnect: { keep_trying: true },
+        switch_source: 'rest_command.dispatcharr_next_stream',
+      }),
+    ).toMatchObject({
+      pictureCheck: false,
+      keepTrying: true,
+      maxReconnectAttempts: 5,
+      switchSource: 'rest_command.dispatcharr_next_stream',
+    });
+    expect(() => normalizeConfig({ ...base, switch_source: 'next stream' })).toThrow(
+      /switch_source/,
+    );
+  });
+
+  it('finds the Dispatcharr channel ID in a stream URL', () => {
+    const id = '0b6f1c62-3c5e-4a43-9f1e-6a1f3d6c2b10';
+    expect(dispatcharrChannelId(`https://d.example/proxy/ts/stream/${id}?output_profile=3`)).toBe(
+      id,
+    );
+    expect(dispatcharrChannelId('https://d.example/live/x.m3u8')).toBeUndefined();
+    expect(dispatcharrChannelId('not a url')).toBeUndefined();
+  });
+
   it('opens the guide by default and accepts closed and off', () => {
     expect(normalizeConfig(base).guide).toBe('open');
     expect(normalizeConfig({ ...base, guide: 'closed' }).guide).toBe('closed');
@@ -276,8 +310,9 @@ describe('isUuid / needsLookup', () => {
 });
 
 describe('buffer', () => {
-  it('defaults to low and accepts stable', () => {
-    expect(normalizeConfig(base).buffer).toBe('low');
+  it('defaults to auto and accepts low and stable', () => {
+    expect(normalizeConfig(base).buffer).toBe('auto');
+    expect(normalizeConfig({ ...base, buffer: 'low' }).buffer).toBe('low');
     expect(normalizeConfig({ ...base, buffer: 'stable' }).buffer).toBe('stable');
     expect(() => normalizeConfig({ ...base, buffer: 'huge' })).toThrow(ConfigError);
   });

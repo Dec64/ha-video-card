@@ -1,4 +1,4 @@
-import { CONTROLLER_KEY, DEFAULT_TARGET, POWER_EVENT, VERSION } from './const';
+import { CONTROLLER_KEY, DEFAULT_TARGET, NETWORK_EVENT, POWER_EVENT, VERSION } from './const';
 import { parseRequest } from './config';
 import { readRemembered, rememberStopped } from './memory';
 import { previousRecent } from './recents';
@@ -204,7 +204,13 @@ export class StreamController {
     if (!fully || typeof fully.bind !== 'function') return;
     const fire = (name: string) =>
       `window.${CONTROLLER_KEY} && window.${CONTROLLER_KEY}.onFullyEvent(${JSON.stringify(name)})`;
-    for (const name of ['screenOn', 'screenOff', 'onScreensaverStart', 'onScreensaverStop']) {
+    for (const name of [
+      'screenOn',
+      'screenOff',
+      'onScreensaverStart',
+      'onScreensaverStop',
+      'networkReconnect',
+    ]) {
       try {
         fully.bind(name, fire(name));
       } catch (err) {
@@ -215,6 +221,10 @@ export class StreamController {
 
   /** Entry point for the code strings bound with fully.bind(). */
   onFullyEvent(name: string): void {
+    if (name === 'networkReconnect') {
+      this.win.dispatchEvent(new CustomEvent(NETWORK_EVENT));
+      return;
+    }
     if (name === 'screenOn') this.power.screenOn = true;
     else if (name === 'screenOff') this.power.screenOn = false;
     else if (name === 'onScreensaverStart') this.power.screensaver = true;

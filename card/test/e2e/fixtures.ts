@@ -133,5 +133,8 @@ declare global {
     __mseShimBlockUnmuted?: boolean;
     __mseShimAppendMs?: number;
     __mseShimGap?: [number, number];
+    __mseShimPicture?: 'moving' | 'frozen' | 'black';
+    __serviceCalls?: Array<{ domain: string; service: string; data: Record<string, unknown> }>;
+    __onService?: (domain: string, service: string, data: unknown) => unknown;
   }
 }
