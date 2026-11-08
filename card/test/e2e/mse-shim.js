@@ -9,6 +9,8 @@
 //   window.__mseShimBlockUnmuted = true          play() with sound rejects (autoplay policy)
 //   window.__mseShimAppendMs = 600               each append takes this long (a slow device)
 //   window.__mseShimGap = [3, 3.2]               a hole in the buffer; playback stops at it
+//   window.__mseShimPicture = 'moving'           what a canvas sees when it draws the video:
+//                                                'moving' (default), 'frozen' or 'black'
 (() => {
   if (window.__mseShimInstalled) return;
   window.__mseShimInstalled = true;
@@ -409,6 +411,24 @@
   HTMLVideoElement.prototype.getVideoPlaybackQuality = function () {
     if (!fake(this)) return origQ.call(this);
     return { totalVideoFrames: Math.floor(state(this).now() * 25), droppedVideoFrames: 0 };
+  };
+
+  // Nothing is decoded, so drawing the video into a canvas would give an empty (black) picture.
+  // Paint a stand-in instead: a colour that changes every frame, a fixed one, or black.
+  const origDraw = CanvasRenderingContext2D.prototype.drawImage;
+  CanvasRenderingContext2D.prototype.drawImage = function (img, ...args) {
+    if (!(img instanceof HTMLVideoElement) || !fake(img)) return origDraw.call(this, img, ...args);
+    const [x, y, w, h] =
+      args.length >= 4 ? args.slice(-4) : [args[0], args[1], img.videoWidth, img.videoHeight];
+    const mode = window.__mseShimPicture ?? 'moving';
+    const f = Math.floor(state(img).now() * 25);
+    this.fillStyle =
+      mode === 'black'
+        ? '#000'
+        : mode === 'frozen'
+          ? 'rgb(120,80,120)'
+          : `rgb(${30 + (f % 200)},80,120)`;
+    this.fillRect(x, y, w, h);
   };
 
   // Playback clock: timeupdate / waiting / playing events.

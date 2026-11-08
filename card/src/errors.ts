@@ -22,6 +22,8 @@ export const MESSAGES = {
   gaveUp: 'The stream kept dropping. Stopped after {attempts} attempts.',
   media: 'The player hit an error it could not recover from.',
   config: '{detail}',
+  pictureBlack:
+    'The picture keeps going black, even after reconnecting (and switching source, if switch_source is set). The channel may be off air.',
   noVideo:
     'No picture in this stream: its video track is missing or uses a codec the player skips.',
   channelsFailed:

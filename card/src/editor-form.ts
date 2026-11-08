@@ -110,8 +110,13 @@ const schema: FormField[] = [
       {
         name: 'reconnect',
         type: 'grid',
-        schema: [{ name: 'max_attempts', default: 5, selector: box(0, 50) }],
+        schema: [
+          { name: 'max_attempts', default: 5, selector: box(0, 50) },
+          { name: 'keep_trying', selector: bool },
+        ],
       },
+      { name: 'picture_check', ...on },
+      { name: 'switch_source', selector: text },
       { name: 'settings', ...on },
       { name: 'debug', selector: bool },
     ],
@@ -165,6 +170,9 @@ const LABELS: Record<string, string> = {
   idle_timeout: 'Stop after idle',
   start_timeout: 'Start timeout',
   max_attempts: 'Reconnect attempts',
+  keep_trying: 'Never give up',
+  picture_check: 'Fix frozen or black picture',
+  switch_source: 'Switch source action',
   settings: 'Settings button',
   debug: 'Debug overlay',
   enabled: 'Multiview button',
@@ -198,6 +206,11 @@ const HELPERS: Record<string, string> = {
   max_tiles: '2 on Fire tablets; up to 4 on desktops and TVs.',
   tile_profile: "e.g. a lower-resolution profile. Empty = the card's output profile.",
   start_timeout: 'Seconds to wait for the first data.',
+  keep_trying:
+    'After the attempts, keep retrying every minute instead of showing an error. Good for wall panels.',
+  picture_check: 'Reconnect when the picture freezes or stays black.',
+  switch_source:
+    "e.g. rest_command.dispatcharr_next_stream: asks Dispatcharr for the channel's next stream when reconnecting doesn't fix the picture. See the README.",
   m3u_url: 'Default: <Dispatcharr URL>/output/m3u',
   epg: "Show what's on now and next from Dispatcharr's guide. Downloads the next 24 hours of the guide every 2 hours while a dashboard with the card is open.",
   epg_url: 'Default: <Dispatcharr URL>/output/epg?days=1',

@@ -16,6 +16,16 @@ import {
   toPlaybackError,
   type PlaybackError,
 } from './errors';
+import type { HealthKind } from './health-log';
+import {
+  FROZEN_MS,
+  BLACK_MS,
+  PictureSampler,
+  PictureWatch,
+  SAMPLE_MS,
+  frameCount,
+  type PictureProblem,
+} from './picture';
 import type { BufferMode, StreamSource } from './types';
 
 export type SessionState = 'connecting' | 'reconnecting' | 'playing' | 'error' | 'stopped';
@@ -51,11 +61,33 @@ export interface SessionOptions {
   /** Playing this long without trouble resets the failure count. */
   stableMs?: number;
   backoffMs?: number[];
+  /** Watch for a frozen or black picture and recover (reconnect, then switchSource). */
+  pictureCheck?: boolean;
+  /**
+   * Asks Dispatcharr to move the channel to its next source (through an HA action). Resolves
+   * true if the request went out. Called while the connection is still open, so the channel
+   * keeps running on Dispatcharr and switches in place.
+   */
+  switchSource?: (problem: PictureProblem) => Promise<boolean>;
+  /** After max attempts (or a start timeout / HTTP error), retry every KEEP_TRYING_MS for ever. */
+  keepTrying?: boolean;
+  /** Something worth putting in the device's health log. */
+  onHealth?: (kind: HealthKind, detail?: string) => void;
+  /** Just before a reconnect tears down a picture that was playing (to keep the last frame up). */
+  onBeforeReconnect?: () => void;
   createEngine?: EngineFactory;
   diagnose?: (url: string) => Promise<'cors' | 'unreachable'>;
 }
 
 const DEFAULT_BACKOFF = [1000, 2000, 4000, 8000, 15000];
+/** keep_trying: the wait between attempts once the normal ones are used up. */
+export const KEEP_TRYING_MS = 60_000;
+/** Picture problems within this window climb the recovery ladder together. */
+export const PICTURE_WINDOW_MS = 10 * 60_000;
+/** At most one source switch per channel in this long. */
+export const SWITCH_COOLDOWN_MS = 2 * 60_000;
+/** Errors keep_trying retries slowly. Codec, CORS, device and config errors never fix themselves. */
+const KEEP_TRYING_KINDS = new Set(['network', 'stall', 'ended', 'media', 'http', 'timeout']);
 
 /** buffer: stable. Seconds of reserve before the picture starts, and before it resumes. */
 export const STABLE_START_S = 8;
@@ -145,6 +177,14 @@ export class PlaybackSession {
   private holdIsStart = false;
   private holdStartedAt = 0;
   private holdBufferedEnd = 0;
+  private readonly sampler = new PictureSampler();
+  private readonly watch = new PictureWatch();
+  private lastSampleAt = 0;
+  /** When each recent picture problem was seen (survives reconnects: same channel). */
+  private pictureEvents: number[] = [];
+  private lastSwitchAt = 0;
+  /** A source switch is in flight; don't sample or climb the ladder meanwhile. */
+  private switching = false;
   private readonly createEngine: EngineFactory;
   private readonly diagnose: (url: string) => Promise<'cors' | 'unreachable'>;
 
@@ -186,6 +226,8 @@ export class PlaybackSession {
     this.lastProgressAt = 0;
     this.playingSince = 0;
     this.holding = false;
+    this.watch.reset();
+    this.lastSampleAt = 0;
     this.update({
       state: this.status.failures > 0 ? 'reconnecting' : 'connecting',
       notice: undefined,
@@ -251,7 +293,11 @@ export class PlaybackSession {
     this.holdStartedAt = Date.now();
     this.holdBufferedEnd = bufferedEnd(this.video);
     this.lastProgressAt = Date.now();
-    if (!atStart) this.video.pause();
+    this.watch.reset();
+    if (!atStart) {
+      this.video.pause();
+      this.opts.onHealth?.('buffering', 'reserve ran dry');
+    }
     this.update({ buffering: true });
   }
 
@@ -399,11 +445,14 @@ export class PlaybackSession {
         ) {
           this.update({ failures: 0 });
         }
+        if (this.status.state === 'playing') this.pictureTick(id, now);
       }
       this.lastTime = t;
       if (!this.lastProgressAt) this.lastProgressAt = now;
       return;
     }
+    // Time isn't moving (paused, or stalling): that's the stall watchdog's business.
+    this.watch.reset();
     if (v.paused || !this.gotData) return;
     if (!this.lastProgressAt) this.lastProgressAt = now;
     if (now - this.lastProgressAt > this.stallTimeoutMs) {
@@ -411,6 +460,83 @@ export class PlaybackSession {
         kind: 'stall',
         detail: `no progress for ${this.stallTimeoutMs} ms`,
       });
+    }
+  }
+
+  private pictureTick(id: number, now: number): void {
+    if (!this.opts.pictureCheck || this.switching || this.video.videoWidth === 0) return;
+    if (now - this.lastSampleAt < SAMPLE_MS) return;
+    this.lastSampleAt = now;
+    const problem = this.watch.check(this.sampler.sample(this.video), frameCount(this.video), now);
+    if (problem) void this.onPictureProblem(id, problem);
+  }
+
+  /**
+   * The recovery ladder for a bad picture on this channel: reconnect; then ask Dispatcharr for
+   * the next source (if switchSource is set); then reconnect again; after that the picture is
+   * taken to be what the channel really shows, and the check stops for this session.
+   */
+  private async onPictureProblem(id: number, problem: PictureProblem): Promise<void> {
+    const now = Date.now();
+    const secs = Math.round((problem === 'black' ? BLACK_MS : FROZEN_MS) / 1000);
+    this.pictureEvents = this.pictureEvents.filter((t) => now - t < PICTURE_WINDOW_MS);
+    this.pictureEvents.push(now);
+    const n = this.pictureEvents.length;
+    this.watch.reset();
+    this.opts.onHealth?.(problem, `${secs} s, step ${Math.min(n, 4)}`);
+    if (n >= 4) {
+      this.watch.off.add(problem);
+      this.pictureEvents = [];
+      this.opts.onHealth?.('check-paused', `${problem} picture keeps coming back`);
+      if (problem === 'black') this.update({ notice: format('pictureBlack') });
+      return;
+    }
+    if (n === 2 && this.opts.switchSource && now - this.lastSwitchAt > SWITCH_COOLDOWN_MS) {
+      this.lastSwitchAt = now;
+      this.switching = true;
+      let ok: boolean;
+      try {
+        ok = await this.opts.switchSource(problem);
+      } catch {
+        ok = false;
+      }
+      this.switching = false;
+      if (!this.isCurrent(id)) return;
+      this.opts.onHealth?.(ok ? 'switch' : 'switch-failed');
+      if (ok) {
+        // Dispatcharr switches the running channel in place: keep this connection (reconnecting
+        // could let the channel stop and restart on its first source) and watch again.
+        this.watch.reset();
+        this.lastSampleAt = Date.now();
+        return;
+      }
+    }
+    this.fail(id, { kind: 'stall', detail: `picture ${problem} for ${secs} s` }, true);
+  }
+
+  /**
+   * The network is back (browser online event, Fully Kiosk networkReconnect): skip the backoff
+   * wait, or give up on a stalled picture now instead of at the stall timeout.
+   */
+  networkBack(): void {
+    if (this.disposed) return;
+    const id = this.attemptId;
+    if (this.status.state === 'reconnecting' && this.retryTimer) {
+      clearTimeout(this.retryTimer);
+      this.retryTimer = undefined;
+      this.opts.onHealth?.('network', 'retrying now');
+      void this.attempt();
+      return;
+    }
+    const v = this.video;
+    if (
+      this.status.state === 'playing' &&
+      !v.paused &&
+      this.lastProgressAt &&
+      Date.now() - this.lastProgressAt > 2000
+    ) {
+      this.opts.onHealth?.('network', 'stalled picture, reconnecting');
+      void this.handleFailure(id, { kind: 'stall', detail: 'network came back while stalled' });
     }
   }
 
@@ -439,17 +565,22 @@ export class PlaybackSession {
   private fail(id: number, e: EngineError, retryable: boolean): void {
     if (!this.isCurrent(id)) return;
     const failures = this.status.failures + 1;
+    if (this.status.state === 'playing') this.opts.onBeforeReconnect?.();
     this.teardownEngine();
-    if (!retryable) {
-      this.terminal(toPlaybackError(e, { startTimeoutMs: this.opts.startTimeoutMs }));
-      return;
-    }
-    if (failures > this.opts.maxAttempts) {
-      this.terminal(toPlaybackError(e, { attempts: failures }));
+    const giveUp = !retryable || failures > this.opts.maxAttempts;
+    const slow = giveUp && !!this.opts.keepTrying && KEEP_TRYING_KINDS.has(e.kind);
+    if (giveUp && !slow) {
+      this.opts.onHealth?.('gave-up', `${e.kind}: ${e.detail}`);
+      this.terminal(
+        retryable
+          ? toPlaybackError(e, { attempts: failures })
+          : toPlaybackError(e, { startTimeoutMs: this.opts.startTimeoutMs }),
+      );
       return;
     }
     const backoff = this.opts.backoffMs ?? DEFAULT_BACKOFF;
-    const delay = backoff[Math.min(failures - 1, backoff.length - 1)];
+    const delay = slow ? KEEP_TRYING_MS : backoff[Math.min(failures - 1, backoff.length - 1)];
+    this.opts.onHealth?.(slow ? 'keep-trying' : 'reconnect', `${e.kind}: ${e.detail}`);
     this.update({
       state: 'reconnecting',
       failures,

@@ -5,5 +5,7 @@ export const VERSION = __VERSION__;
 export const CONTROLLER_KEY = '__streamCard';
 /** Event the controller fires on window when Fully Kiosk reports a screen/screensaver change. */
 export const POWER_EVENT = 'stream-card-power';
+/** Event the controller fires on window when Fully Kiosk reports the network is back. */
+export const NETWORK_EVENT = 'stream-card-network';
 export const DEFAULT_TARGET = 'default';
 export const DEFAULT_URL_TEMPLATE = '{base}/proxy/ts/stream/{channel}';

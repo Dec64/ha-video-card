@@ -36,7 +36,14 @@
       const card = document.createElement('stream-card');
       if (id) card.id = id;
       card.setConfig({ type: 'custom:stream-card', ...config });
-      card.hass = { states: {} };
+      card.hass = {
+        states: {},
+        // Records HA action calls (switch_source); a test can react through __onService.
+        async callService(domain, service, data) {
+          (window.__serviceCalls ??= []).push({ domain, service, data });
+          if (window.__onService) await window.__onService(domain, service, data);
+        },
+      };
       if (where === 'page') {
         document.getElementById('view').appendChild(card);
       } else {

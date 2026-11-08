@@ -42,7 +42,9 @@ How the card works today and the contracts other code relies on. For using the c
 | `controller.ts` | One per page. Turns `fire-dom-event` buttons into requests per target, keeps them until a card for that target is on the page (Bubble removes closed pop-ups), opens pop-ups, relays Fully Kiosk screen events. |
 | `stream-card.ts` | The card. Picks what to play, decides whether to play (`evaluate()`), renders controls and the picker. Creates its `<video>` once and never puts it in a Lit template, so constant `hass` updates can't touch playback. |
 | `lifecycle.ts` | `holdReason()`, a pure function of the conditions below, and the watcher that tracks them. |
-| `session.ts` | One source on one `<video>`: start timeout, stall watchdog, reconnect with backoff, error classification. Tears down its engine before every retry. |
+| `session.ts` | One source on one `<video>`: start timeout, stall watchdog, picture check and its recovery ladder, reconnect with backoff (and `keep_trying`), error classification. Tears down its engine before every retry. |
+| `picture.ts` | Frozen/black detection: `PictureSampler` draws the frame into a 32×18 canvas, `PictureWatch` (pure) decides from successive samples and the decoded frame count. |
+| `health-log.ts` | Per-device, per-target log of playback trouble for the stats overlay. |
 | `engines/` | `mpegts-engine.ts` (lazy chunk; loads the vendored `mpegts-<version>.js`), `native-engine.ts` (MP4/HLS where the browser plays them), `fetch-loader.ts` (`ImmediateAbortLoader`), `video-lock.ts`. |
 | `channels.ts` | M3U parsing, `ChannelList`, page-wide playlist cache. |
 | `epg.ts` | Now/next (`epg`): streaming XMLTV parser and the page-wide `GuideFeed`. A lazy chunk, loaded only by cards with `epg` on. |
@@ -74,6 +76,12 @@ How the card works today and the contracts other code relies on. For using the c
 Any change re-runs `evaluate()`.
 
 **Buffering.** `buffer: low` (default) lets mpegts.js jump forward when playback falls more than 6 s behind live. `buffer: stable` turns that off (mpegts sources only: a native source with `preload="none"` never buffers before play, so it plays at once); the session instead holds the picture until about 8 s is buffered, and if the reserve ever drops under 0.3 s it pauses and refills to 5 s before resuming. While it holds, buffered data not growing for the stall timeout counts as a stall and reconnects, so a stalled stream is still released. In both modes the stall clock starts at the first data: a channel that is slow to send anything is the start timeout's case, not a stall. Live TS buffers in pieces and the browser stops at any hole, so the reserve counts across holes of up to 3 s and the session jumps the playhead over them (in both modes; `buffer: low` would also get past them by catching up). A hold that is still short after 20 s while data arrives starts from the newest data. Channel up/down tunes once presses stop for 800 ms: each press releases the old stream at once, but only the channel landed on opens a connection. A hold destroys the session at once: the engine aborts its fetch synchronously (`ImmediateAbortLoader`; mpegts.js's own loader leaves a stalled fetch open on Chrome) and defers the rest of mpegts.js's teardown one tick. The next engine waits on `videoIdle()` before touching the same `<video>`. Coming back plays from the live edge.
+
+**Picture recovery** (`picture_check`, default on; single card only, not multiview tiles). While playing with the clock running, the session samples the picture every 2 s: a 32×18 copy (unreadable for a cross-origin native source without CORS, which turns the pixel check off for that session) and the decoded frame count. Unchanged pixels or frames for 12 s is *frozen*; near-black for 15 s is *black* (black samples don't count toward frozen). Paused, holding or stalled time resets the watch. Problems on one session (= one channel) within 10 minutes climb a ladder: 1st, reconnect; 2nd, call `switch_source` (an HA action, `{ channel: <uuid> }`, 10 s timeout) **while the connection stays open**, because Dispatcharr switches the running channel in place and a reconnect could let it stop and restart on its first stream; if the action isn't set or fails, reconnect; 3rd, reconnect; 4th, stop checking that problem for the session (black also shows `pictureBlack`). Source switches are at most one per 2 minutes. Before a reconnect tears down a playing picture, the card copies the last frame into a canvas over the `<video>` (`.still`), hidden again when playback resumes or the session stops.
+
+**Network back.** `online` on `window`, and Fully Kiosk's `networkReconnect` (relayed by the controller as `stream-card-network`), call `session.networkBack()`: a pending backoff retry starts at once, and a playing session whose clock hasn't moved for 2 s reconnects now instead of at the stall timeout.
+
+**keep_trying.** With `reconnect.keep_trying`, a session that would show an error after its attempts, a start timeout or an HTTP error retries every 60 s instead (state `reconnecting`, holding no connection between attempts). Codec, CORS, unsupported-device and config errors still stop.
 
 ## Multiview
 
@@ -145,7 +153,9 @@ settings: true                      # the settings button; its per-device choice
 aspect_ratio: "16:9"
 idle_timeout: 0                     # minutes, 0 = off; counts as a stop
 start_timeout: 20                   # seconds to wait for first data
-reconnect: { max_attempts: 5 }      # backoff 1, 2, 4, 8, 15 s
+reconnect: { max_attempts: 5, keep_trying: false }   # backoff 1, 2, 4, 8, 15 s; keep_trying: then every 60 s
+picture_check: true                 # frozen/black picture detection and recovery
+switch_source: rest_command.dispatcharr_next_stream   # optional HA action, called with { channel: <uuid> }
 multiview:                          # off by default; `multiview: true` = { enabled: true }
   enabled: true                     # the multiview button (needs the channel list)
   max_tiles: 2                      # 2–4; each tile is its own Dispatcharr connection
@@ -189,7 +199,7 @@ interface EngineError {
 ```
 
 ### Controller (one per page, on `window.__streamCard`)
-`request(req)`, `take(target)`, `lastFor(target)`, `stop(target)`, `stopCount(target)`, `setSleep(target, minutes)`, `extendSleep(target, minutes)`, `sleepFor(target)`, `register(card)`, `unregister(card)`, `onFullyEvent(name)`. Pending requests expire after 30 s. Requests without a target go to `default`. `stop` clears the target's pending and last request, cancels its sleep timer, marks the device memory stopped, and bumps `stopCount`.
+Fires `stream-card-power` (screen/screensaver) and `stream-card-network` (Fully `networkReconnect`) on `window`. `request(req)`, `take(target)`, `lastFor(target)`, `stop(target)`, `stopCount(target)`, `setSleep(target, minutes)`, `extendSleep(target, minutes)`, `sleepFor(target)`, `register(card)`, `unregister(card)`, `onFullyEvent(name)`. Pending requests expire after 30 s. Requests without a target go to `default`. `stop` clears the target's pending and last request, cancels its sleep timer, marks the device memory stopped, and bumps `stopCount`.
 
 A registered card implements `ControllerCard`: `target`, `isLive`, `deliver(req)`, `stopFromController()`, `command(req)` (the navigation actions above) and `sleepChanged()`.
 
@@ -202,6 +212,7 @@ A registered card implements `ControllerCard`: `target`, `isLive`, `deliver(req)
 - `localStorage['stream-card:recent:<target>']` = up to 8 `{ channel?, url?, title? }`, newest first, no duplicates. Last channel is the newest entry that isn't playing now.
 - `localStorage['stream-card:volume']` = `0`–`1`, for every card on the device.
 - `localStorage['stream-card:settings:<target>']` = `{ buffer?: 'low' | 'stable', nowNext?: boolean, stats?: boolean }` from the settings panel. A field is present only when it differs from the card's YAML (`nowNext` defaults to on, `stats` to `debug`); Reset removes the key. Each write fires `stream-card-settings` on `window` with `{ target, settings }`, and every card for that target applies it. A new buffer mode while a TS session runs stops that session (closing its connection) and lets `evaluate()` start the next. Multiview tiles get the mode when they next start.
+- `localStorage['stream-card:health:<target>']` = up to 100 `{ t, kind, ch?, detail? }`, oldest first. `kind`: `reconnect`, `buffering`, `frozen`, `black`, `switch`, `switch-failed`, `check-paused`, `network`, `keep-trying`, `gave-up`. Display only (stats overlay, `debugInfo.health`).
 - `localStorage['stream-card:sleep:<target>']` = the sleep deadline (epoch ms). One that passed while the page was closed stops the target when the controller next looks at it.
 
 ### Card navigation API

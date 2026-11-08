@@ -5,7 +5,7 @@ A Lovelace card that plays your [Dispatcharr](https://github.com/Dispatcharr/Dis
 - **Every channel on the card.** Logos, search, Dispatcharr groups, favourites, channel up/down. Each device remembers what it was watching.
 - **Releases the stream when hidden.** Closing a Bubble Card pop-up, switching view, screen off, Fully Kiosk screensaver, app in the background, idle timeout or dashboard edit mode all free the connection. Coming back resumes at the live edge.
 - **Buttons anywhere.** Any HA button can play a channel (by name, number or ID) on a chosen card and open a pop-up, using HA's built-in `fire-dom-event`. No browser_mod.
-- **Recovers by itself.** It reconnects after stalls and dropped connections, and never holds two connections at once.
+- **Recovers by itself.** It reconnects after stalls and dropped connections, spots a frozen or black picture, can ask Dispatcharr for the channel's next source, and never holds two connections at once.
 - **Plain-language errors.** It names the problem (an unsupported codec, a broken output profile, a blocked request, an unknown channel) instead of showing a black box.
 - **Visual editor.** Every option is in HA's card editor.
 
@@ -56,6 +56,21 @@ It should print `access-control-allow-origin: *`. If you add a header rule in Cl
 
 ### Channel list
 The card reads `<dispatcharr_url>/output/m3u`, the same playlist IPTV apps use. It needs no login, but Dispatcharr's **network access** settings for M3U/EPG must allow the devices that show the card. Channel numbers, names, groups and logos come from Dispatcharr, so set them there.
+
+### Backup sources (optional)
+When a channel's picture freezes or goes black, the card reconnects by itself. If that doesn't fix it, the card can ask Dispatcharr to move the channel to its **next stream**, which only helps if the channel has more than one stream in Dispatcharr. Dispatcharr only lets admins switch streams, so the admin API key stays in Home Assistant and the card calls an HA action:
+
+```yaml
+# configuration.yaml
+rest_command:
+  dispatcharr_next_stream:
+    url: "https://dispatcharr.example/proxy/ts/next_stream/{{ channel }}"
+    method: POST
+    headers:
+      X-API-Key: !secret dispatcharr_api_key
+```
+
+Put an admin user's API key (from Dispatcharr's user settings) in `secrets.yaml` as `dispatcharr_api_key`, restart HA, then set `switch_source: rest_command.dispatcharr_next_stream` on the card. The switch changes the source for everyone watching that channel. [docs/dispatcharr-tuning.md](docs/dispatcharr-tuning.md) has the Dispatcharr settings that matter for smooth playback.
 
 ### Now and next
 With `dispatcharr_url` set, the card also reads `<dispatcharr_url>/output/epg?days=1`, the next 24 hours of Dispatcharr's guide, to show what's on now and next. The guide is large (several MB on a big channel list), so the card downloads it once per dashboard page, keeps only titles and times, and refreshes it every 2 hours while a dashboard with the card is open (never in edit mode or while the page is hidden). Channels need guide data assigned in Dispatcharr. If the guide can't be loaded, or has nothing for a channel, the card simply shows no programme line. Set `epg: false` to never download it.
@@ -183,9 +198,18 @@ Keys typed in the channel search box stay in the search box.
 **Settings.** The sliders button in the control bar opens a small panel for this device:
 - **Buffering**: Low delay or Stable (the same as the `buffer` option). Changing it while playing reconnects once: the old connection closes before the new one opens.
 - **Now and next**: hide or show the programme info in the ident, the control bar and the guide (only with guide data). The guide keeps downloading while it's hidden; `epg: false` stops that.
-- **Stats overlay**: the codecs, buffer, speed and dropped frames over the picture (the overlay part of `debug`).
+- **Stats overlay**: the codecs, buffer, speed and dropped frames over the picture (the overlay part of `debug`), plus this device's **health log**: a count of the last 24 hours' trouble (reconnects, buffering, frozen or black picture, source switches, network returns) and the latest three events. The log is kept on the device per target (last 100 events).
 
 Choices are saved on this device for this card's target and override the card's YAML there, so a Fire tablet can use Stable while phones stay on Low delay with the same dashboard. Every card for the target on the page follows a change. **Reset** in the panel forgets them and goes back to the YAML. `settings: false` hides the button (e.g. on a shared wall panel).
+
+**When the picture goes wrong.** Every 2 seconds the card looks at a tiny copy of the picture.
+- **Frozen** (unchanged, or no new frames, for 12 s while the clock runs): it reconnects. The last frame stays on screen while it does, instead of a black flash.
+- **Black** for 15 s: the same. Fades and dark scenes are much shorter than that.
+- If it happens again within 10 minutes, the card asks Dispatcharr for the channel's next source (with `switch_source`, see section 1) and keeps the connection while Dispatcharr switches. Otherwise it reconnects again.
+- If it comes back a fourth time within those 10 minutes, the card takes it that the channel really looks like that (a radio slate, a still caption) and stops checking it until you change channel. A picture that keeps going black also gets a message.
+- `picture_check: false` turns all this off.
+
+**When the network drops.** When the browser (or Fully Kiosk) reports that the network is back, the card reconnects at once instead of waiting out its retry timer. `reconnect: { keep_trying: true }` makes it keep trying every minute after the normal attempts, instead of stopping with an error, which suits wall panels.
 
 **What it remembers.** Each device remembers the last channel on each target and whether it was left playing.
 - Next time, it starts on that channel: playing if you left it playing, or stopped with a play button if you stopped it (Stop, a stop button or the idle timeout).
@@ -287,6 +311,7 @@ cards:
 - Web Content Settings → **Autoplay Videos**: on. Otherwise playback starts muted.
 - Advanced Web Settings → **Enable JavaScript Interface**: on. The card then stops when the screen turns off or the screensaver starts, and resumes after.
 - Advanced Web Settings → hardware acceleration: on.
+- For a wall panel, add `reconnect: { keep_trying: true }` so the card never gives up while it's on screen. With the JavaScript interface on, the card also reconnects as soon as Fully reports the Wi-Fi is back.
 - If playback pauses every few seconds, set **Buffering** to **Stable** in the card's settings panel on that tablet (or `buffer: stable` on its card). The picture starts after about 8 s of buffering and runs a few seconds behind live, but rides through the tablet's hiccups. If it still stutters with the debug overlay showing dropped frames climbing, the tablet can't decode the channel's video fast enough; a Dispatcharr output profile that converts to 720p for that tablet is the fix.
 
 ## 6. All options
@@ -314,6 +339,9 @@ cards:
 | `idle_timeout` | `0` | Minutes with no touch or key press before stopping (remembered like a Stop). `0` = never |
 | `start_timeout` | `20` | Seconds to wait for the first data before showing an error |
 | `reconnect.max_attempts` | `5` | Reconnects after stalls or drops before giving up (backoff 1, 2, 4, 8, 15 s) |
+| `reconnect.keep_trying` | `false` | After those attempts (or a start timeout or Dispatcharr error), keep retrying every minute instead of showing an error. Codec and CORS errors still stop |
+| `picture_check` | `true` | Watch for a frozen or black picture and recover by reconnecting (see section 4) |
+| `switch_source` | none | An HA action, e.g. `rest_command.dispatcharr_next_stream`, called with `channel: <uuid>` to move the channel to its next source in Dispatcharr when reconnecting doesn't fix the picture (see section 1) |
 | `url_template` | `{base}/proxy/ts/stream/{channel}` | How channel URLs are built |
 | `settings` | `true` | The settings button in the control bar. Its choices are saved per device and override `buffer` and `debug`'s overlay there |
 | `debug` | `false` | Overlay with engine, codecs, buffer, frames, channel list state and the last error |
@@ -350,6 +378,7 @@ Turn on `debug: true` to see codecs, buffer, dropped frames, the channel list st
 | This browser can't play live MPEG-TS streams (no Media Source Extensions). | Old iOS, or a WebView without Media Source Extensions. An HLS fallback for these is planned (v1.1). |
 | The stream kept dropping. Stopped after {attempts} attempts. | The stream stalled or disconnected repeatedly. Check Dispatcharr's logs for this channel; press Retry. |
 | The player hit an error it could not recover from. | Turn on `debug` and note the last error. |
+| The picture keeps going black, even after reconnecting (and switching source, if switch_source is set). The channel may be off air. | The source is sending black. Check the channel in Dispatcharr's stats, add a backup stream to the channel and set `switch_source` (section 1). The card stops checking that channel until you change channel. |
 | This device can't keep up with this many tiles. Use fewer tiles, or a lower-resolution output profile for multiview. | Multiview: more than a quarter of frames were dropped across the tiles. Remove a tile, lower `multiview.max_tiles`, or set `multiview.output_profile` to a Dispatcharr profile that scales video down. |
 
 Other symptoms:

@@ -140,6 +140,17 @@ function normalizeMultiview(v: unknown, outputProfile: string | undefined): Reso
   };
 }
 
+/** An HA action as `domain.service`, e.g. rest_command.dispatcharr_next_stream. */
+function switchSourceAction(v: string | undefined): string | undefined {
+  if (v === undefined) return undefined;
+  if (!/^[a-z0-9_]+\.[a-z0-9_]+$/.test(v)) {
+    throw new ConfigError(
+      '"switch_source" must be an HA action such as rest_command.dispatcharr_next_stream',
+    );
+  }
+  return v;
+}
+
 export function normalizeConfig(input: unknown): ResolvedConfig {
   if (!isPlainObject(input)) throw new ConfigError('Card config must be an object');
   const raw = input as Record<string, unknown> & Partial<StreamCardConfig>;
@@ -198,6 +209,11 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     maxReconnectAttempts: reconnect
       ? optionalNumber(reconnect as Record<string, unknown>, 'max_attempts', 5, 0)
       : 5,
+    keepTrying: reconnect
+      ? optionalBool(reconnect as Record<string, unknown>, 'keep_trying', false)
+      : false,
+    pictureCheck: optionalBool(raw, 'picture_check', true),
+    switchSource: switchSourceAction(optionalString(raw, 'switch_source')),
     debug: optionalBool(raw, 'debug', false),
     channelList: optionalBool(raw, 'channel_list', !!(base || m3uUrl)),
     m3uUrl: m3uUrl ?? (base ? `${normalizeBaseUrl(base)}/output/m3u` : undefined),
@@ -330,4 +346,14 @@ export function parseRequest(input: unknown): StreamRequest | undefined {
     req.volume = v;
   }
   return req;
+}
+
+/** The Dispatcharr channel ID in a /proxy/ts/stream/<id> URL, or undefined for other URLs. */
+export function dispatcharrChannelId(url: string): string | undefined {
+  try {
+    const m = /\/proxy\/ts\/stream\/([^/?#]+)/.exec(new URL(url).pathname);
+    return m ? decodeURIComponent(m[1]) : undefined;
+  } catch {
+    return undefined;
+  }
 }
