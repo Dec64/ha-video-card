@@ -1,8 +1,8 @@
 import { expect, test, type Harness } from './fixtures';
 
 /**
- * Quality ladder. The fake server's source is 320x180 and any ?output_profile= converts to plain
- * H.264 + AAC at 160x90, so these rungs sit below the source (1080p is above it and gets hidden).
+ * Quality ladder. The fake server's source is 320x180 (any ?output_profile= converts to plain
+ * H.264 + AAC), so these rungs sit below the source (1080p is above it and gets hidden).
  */
 const QUALITIES = [
   { name: '1080p', output_profile: 9 },
