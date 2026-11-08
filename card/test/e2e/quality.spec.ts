@@ -1,4 +1,4 @@
-import { expect, test, type Harness } from './fixtures';
+import { expect, STREAM, test, type Harness } from './fixtures';
 
 /**
  * Quality ladder. The fake server's source is 320x180 (any ?output_profile= converts to plain
@@ -150,4 +150,45 @@ test('without qualities there is no Quality or Audio row and output_profile appl
   await expect(h.frame().locator('.settings-panel')).toBeVisible();
   await expect(h.frame().locator('[data-quality]')).toHaveCount(0);
   await expect(h.frame().locator('.audio-safe')).toHaveCount(0);
+});
+
+test('chrome: app has the Quality setting on On now and in full screen', async ({ h }) => {
+  test.setTimeout(60_000);
+  await h.load();
+  const tag = h.channel('pl').split('--')[1];
+  const id = (n: number) => `ok--${tag}-${n}`;
+  await h.mount({
+    m3u_url: `${STREAM}/output/m3u?prefix=${tag}`,
+    epg_url: `${STREAM}/output/epg?prefix=${tag}`,
+    chrome: 'app',
+    channel: '101',
+    output_profile: 5,
+    qualities: QUALITIES,
+  });
+  await h.expectOpen(id(1), 1);
+  await h.expectUi('playing');
+  const card = h.page.locator('stream-card');
+
+  // On now: the hero's settings button opens the panel over the picture.
+  await card.locator('.over').getByRole('button', { name: 'Settings' }).click();
+  const panel = card.locator('.setwrap.at-hero .settings-panel');
+  await expect(panel).toBeVisible();
+  await expect(panel.locator('[data-quality="auto"]')).toHaveAttribute('aria-checked', 'true');
+  await expect(panel.locator('.audio-safe')).toBeVisible();
+  const switching = maxOpenUntil(h, id(1), async () => (await h.stats(id(1))).total >= 2);
+  await panel.locator('[data-quality="Low"]').click();
+  expect(await switching).toBe(1);
+  await h.expectUi('playing');
+  expect(await profiles(h, id(1))).toEqual(['source', '8']);
+  await h.expectOpen(id(1), 1);
+
+  // Full screen: the chip names the quality, and the control bar has the same button.
+  await card.locator('.over').getByRole('button', { name: 'Settings' }).click();
+  await card.locator('.over').getByRole('button', { name: 'Full screen' }).click();
+  await expect(card.locator('ha-card.app')).toHaveAttribute('data-view', 'full');
+  await expect(card.locator('.tr .chip', { hasText: 'Low' })).toHaveCount(1);
+  await card.locator('.frame').hover({ position: { x: 200, y: 200 } });
+  await card.locator('.t-ctl').getByRole('button', { name: 'Settings' }).click();
+  await expect(card.locator('.setwrap.at-full .settings-panel')).toBeVisible();
+  await h.expectOpen(id(1), 1);
 });

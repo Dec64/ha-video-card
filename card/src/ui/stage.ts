@@ -333,7 +333,7 @@ function qualityRow(
   </div>`;
 }
 
-function settingsPanel(v: CardView, a: CardActions): TemplateResult | typeof nothing {
+export function settingsPanel(v: CardView, a: CardActions): TemplateResult | typeof nothing {
   const s = v.settings;
   const act = a.settings;
   if (!s?.open || !act) return nothing;

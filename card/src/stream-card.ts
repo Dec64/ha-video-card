@@ -1,4 +1,13 @@
-import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from 'lit';
+import {
+  adoptStyles,
+  css,
+  html,
+  LitElement,
+  nothing,
+  svg,
+  type PropertyValues,
+  type TemplateResult,
+} from 'lit';
 import { ChannelList, loadChannels, type Channel } from './channels';
 import type { GuideFeed } from './epg';
 import {
@@ -77,6 +86,7 @@ import {
   type UiState,
 } from './ui/view';
 import type { StreamCardMultiview, TileItem } from './multiview';
+import type { AppShell } from './app/app';
 
 const CONTROLS_HIDE_MS = 4000;
 /** How long the big channel number stays up after a change. */
@@ -208,6 +218,9 @@ export class StreamCard extends LitElement implements ControllerCard {
   private mvAllowed = false;
   /** With `qualities`: what the current channel offers, and which of it plays. */
   private quality?: { key: string; opts: QualityOption[]; index: number };
+  /** The Live TV app layout (`chrome: app` or `embed`), a lazy chunk loaded on first use. */
+  private app?: AppShell;
+  private appLoading?: Promise<void>;
 
   constructor() {
     super();
@@ -262,6 +275,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       if (this.isConnected) this.ensureChannels();
     }
     this.syncGuide();
+    this.syncApp();
     if (this.mvOn && !this.multiviewAvailable) this.exitMultiview();
     this.configureMultiview();
     if (this.request) {
@@ -383,6 +397,8 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.syncStatsTimer();
     this.addEventListener('keydown', this.onKeyDown);
     this.sleepChanged();
+    this.syncApp();
+    this.app?.connect();
     this.evaluate();
   }
 
@@ -406,17 +422,15 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.numbers.clear();
     clearTimeout(this.tickTimer);
     this.removeEventListener('keydown', this.onKeySeen);
+    this.app?.disconnect();
     super.disconnectedCallback();
     this.evaluate();
   }
 
-  protected override firstUpdated(): void {
-    const host = this.renderRoot.querySelector('.video-host');
-    host?.appendChild(this.video);
-    host?.appendChild(this.still);
-  }
-
   protected override updated(changed: PropertyValues): void {
+    // The layout (standard or app) owns .video-host; the one <video> follows it when it changes.
+    const host = this.renderRoot.querySelector('.video-host');
+    if (host && this.video.parentNode !== host) host.append(this.video, this.still);
     if (changed.has('preview') || changed.has('editMode')) {
       // A name or number that arrived during edit mode is looked up now.
       if (!this.isPreview && this.lookupPending && this.request) {
@@ -424,8 +438,28 @@ export class StreamCard extends LitElement implements ControllerCard {
       }
       this.ensureChannels();
       this.syncGuide();
+      this.syncApp();
       this.evaluate();
     }
+  }
+
+  // ---- app layout ----
+
+  /** Loads the app layout when `chrome` asks for it; edit mode keeps the standard card. */
+  private syncApp(): void {
+    const chrome = this.config?.chrome ?? 'standard';
+    if (chrome === 'standard') {
+      delete this.dataset.chrome;
+      return;
+    }
+    this.dataset.chrome = chrome;
+    if (this.isPreview || this.app || this.appLoading) return;
+    this.appLoading = import('./app/app').then(({ AppShell, appStyles, hostFor }) => {
+      adoptStyles(this.renderRoot as ShadowRoot, [...styles, appStyles]);
+      this.app = new AppShell(hostFor(this));
+      if (this.isConnected) this.app.connect();
+      this.refresh();
+    });
   }
 
   // ---- channel list ----
@@ -1067,6 +1101,11 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   private togglePicker = (e?: Event): void => {
     e?.stopPropagation();
+    if (this.app && !this.isPreview) {
+      this.ensureChannels();
+      this.app.showGuide();
+      return;
+    }
     // From the error layer, "Channels" only ever opens the guide.
     const open = this.uiState === 'error' || this.guidePlacement === undefined;
     if (this.guideOverlays) this.overlayOpen = open;
@@ -1267,6 +1306,10 @@ export class StreamCard extends LitElement implements ControllerCard {
           n.isContentEditable),
     );
     if (inField) return;
+    if (this.app?.key(e)) {
+      e.preventDefault();
+      return;
+    }
     const typing = !!this.numbers.digits;
     let handled = true;
     if (/^\d$/.test(e.key)) this.pressDigit(e.key);
@@ -1468,7 +1511,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     type FsEl = HTMLElement & { webkitRequestFullscreen?: () => void };
     const doc = document as FsDoc;
     // The stage holds the picture, ident and controls, so they all follow it into full screen.
-    const frame = this.renderRoot.querySelector('.stage') as FsEl | null;
+    const frame = this.renderRoot.querySelector('.stage, .app-stage') as FsEl | null;
     try {
       if (this.fullscreen) {
         if (doc.exitFullscreen) await doc.exitFullscreen();
@@ -1690,6 +1733,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     const placement = this.guidePlacement;
     const grid = this.mvOn && this.mv && !this.isPreview ? this.mv : undefined;
     this.scheduleTick(v);
+    if (this.app && !this.isPreview) return this.app.render(v, a);
     return html`
       <ha-card class=${v.ui === 'preview' ? 'editing' : ''}>
         <div

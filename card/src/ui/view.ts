@@ -13,6 +13,9 @@ export interface Programme {
   title: string;
   start?: number;
   end?: number;
+  desc?: string;
+  cats?: string[];
+  live?: boolean;
 }
 
 export interface NowNext {

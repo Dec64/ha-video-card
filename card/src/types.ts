@@ -28,6 +28,10 @@ export interface StreamCardConfig {
   epg?: boolean;
   epg_url?: string;
   guide?: GuideMode;
+  /** `standard` (default): picture with its control bar. `app`: the Live TV app (Lineup, Guide,
+   *  Channels, full-screen Theatre). `embed`: the Theatre's controls only, for pages like FPL Home
+   *  that pick the channel themselves. */
+  chrome?: ChromeMode;
   /** The settings button in the control bar (default on). */
   settings?: boolean;
   multiview?: boolean | MultiviewConfig;
@@ -67,6 +71,8 @@ export interface MultiviewConfig {
 /** The channel guide under the picture: shown, collapsed until Channels is pressed, or never. */
 export type GuideMode = 'open' | 'closed' | 'off';
 
+export type ChromeMode = 'standard' | 'app' | 'embed';
+
 export type SourceType = 'mpegts' | 'native';
 
 /**
@@ -105,6 +111,7 @@ export interface ResolvedConfig {
   epg: boolean;
   epgUrl?: string;
   guide: GuideMode;
+  chrome: ChromeMode;
   /** Show the settings button, whose choices override this config per device. */
   settings: boolean;
   multiview: ResolvedMultiview;

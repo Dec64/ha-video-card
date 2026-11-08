@@ -139,6 +139,14 @@ channel: BBC One HD
 
 ## 4. Using it
 
+**The Live TV app (`chrome: app`).** For a dashboard that is only this card. The dock along the bottom switches between:
+- **On now**: the picture with what's on (its sliders button opens the settings, with Quality and Audio; on a phone it opens them in Theatre, where there's room), your favourites with live progress (long-press any channel to add or remove one on this device), and rails for live and upcoming sport, tonight's films, news and recent channels.
+- **Guide**: the picture, the selected programme's details (Watch, Favourite, Multiview), jumps to now and later tonight, Sports/Movies/News/Kids filters, programme search and the full grid.
+- **Channels**: every channel with what's on now and next; tap one to watch it full screen.
+- **Theatre** (the full-screen button, F, or a channel from Channels): the ident and one control bar that hide while you watch; the channels panel, keypad, sleep timer and settings (the sliders button in the bar, or the chip under the clock, which names the quality playing) open from it. G opens the guide, Escape goes back.
+
+Channel numbers, arrows and the other keys work as below, also when nothing on the page has focus. `chrome: embed` is the Theatre's control bar alone (settings included), for pages like a sports dashboard that choose the channel themselves.
+
 **The guide.** Under the picture sits the channel guide (`guide: open`, the default). It opens on **Recent** (this device's last channels), then **★ Favourites** (your `favourites`, in the order you listed them), **All** and one chip per Dispatcharr group.
 - **Search** matches names and numbers across every channel; Enter plays the first match, and Escape clears the search.
 - **123** opens a number keypad: type a channel number and it tunes.
@@ -155,7 +163,7 @@ channel: BBC One HD
 | 🔈 and slider | Mute / unmute, and volume |
 | ☾ | Sleep timer: stop after 15, 30, 60 or 90 minutes |
 | ☰ | Show or hide the guide |
-| ⚙ (sliders) | Settings for this device: buffering, now and next, stats overlay (see below) |
+| ⚙ (sliders) | Settings for this device: buffering, quality and audio (with `qualities`), now and next, stats overlay (see below) |
 | ⛶ | Full screen (the ident and controls come along) |
 | ▦ | Multiview (only with `multiview` turned on) |
 
@@ -365,6 +373,7 @@ cards:
 | `switch_source` | none | An HA action, e.g. `rest_command.dispatcharr_next_stream`, called with `channel: <uuid>` to move the channel to its next source in Dispatcharr when reconnecting doesn't fix the picture (see section 1) |
 | `url_template` | `{base}/proxy/ts/stream/{channel}` | How channel URLs are built |
 | `settings` | `true` | The settings button in the control bar. Its choices are saved per device and override `buffer`, the quality and `debug`'s overlay there |
+| `chrome` | `standard` | `app`: the Live TV app for a dashboard that is just this card (best in a panel view): On now, Guide, Channels and a full-screen Theatre, with a dock; it fills the window. `embed`: the picture with the Theatre's controls only, for pages that choose the channel themselves. The editor always shows the standard card |
 | `debug` | `false` | Overlay with engine, codecs, buffer, frames, channel list state and the last error |
 | `multiview` | off | `true`, or `{ enabled: true, max_tiles: 2, output_profile: <id> }`: the multiview button (needs the channel list). Each tile is its own Dispatcharr connection |
 | `multiview.max_tiles` | `2` | Most tiles at once, 2 to 4. More than 2 adds the 2 × 2 layout |
