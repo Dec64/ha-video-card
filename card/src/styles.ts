@@ -712,6 +712,10 @@ const card = css`
   .settings-panel {
     width: 280px;
     max-width: calc(100cqw - 24px);
+    /* A long Quality list must not run off the top of the picture: scroll inside instead. */
+    max-height: max(200px, min(70vh, calc(100cqw * 9 / 16 - 90px)));
+    overflow-y: auto;
+    overscroll-behavior: contain;
     gap: 12px;
     z-index: 3;
   }
@@ -764,6 +768,13 @@ const card = css`
     border-radius: 9px;
     font-size: 13px;
     font-weight: 650;
+  }
+  .seg.wrap {
+    grid-template-columns: repeat(4, 1fr);
+  }
+  .seg.wrap .seg-option {
+    height: 30px;
+    font-size: 12px;
   }
   .seg-option[aria-checked='true'] {
     background: #fff;

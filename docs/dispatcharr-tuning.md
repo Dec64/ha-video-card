@@ -21,9 +21,50 @@ Dispatcharr's failover only works when a channel has more than one stream.
 | Buffering Speed [1.0]        | 1.0                               | Below this speed (measured from FFmpeg's progress), Dispatcharr counts the stream as buffering. Leave at 1.0.                                                                                                                                                                                                                                                                                          |
 | New Client Buffer [5 s]      | 5 s, or more for `buffer: stable` | A new viewer starts this far behind live, from data Dispatcharr already has. More gives the card an instant reserve when it joins a running channel (`buffer: stable` starts playing sooner), at the cost of running further behind live. It's receive time, not exact video time.                                                                                                                     |
 
-## 3. Output profile
+## 3. Quality profiles (for the card's `qualities`)
 
-The README's output profile (section 1) copies video and converts audio, which is light on Dispatcharr. If a tablet drops frames (the stats overlay shows _dropped_ climbing) rather than buffering, the tablet can't decode the channel fast enough: a second profile that scales to 720p for that tablet's card (`output_profile`) helps more than any buffer setting.
+The card's Quality menu and Auto quality need one Dispatcharr output profile per quality below Source. **Source** needs no profile: it's the channel exactly as Dispatcharr sends it. Make only the qualities you'll use; a sensible set for a mix of 4K TVs, phones and Fire tablets is Source, 1080p, 720p, 540p and 360p. The card hides any quality at or above a channel's own height once it has played that channel at Source, so a 1080p rung never shows on a 720p channel.
+
+Add each one under **Settings → Output Profiles → Add** (Command **FFmpeg**, Is Active ticked), then find its ID the same way as the README's audio profile (the M3U URL popover). Every profile below converts video to H.264 and audio to AAC stereo, so every quality below Source is also "safe" for any browser.
+
+Shared parameters (replace `<VF>`, `<RATE>`, `<BUF>` and `<LEVEL>` from the table):
+
+```
+-fflags +discardcorrupt+genpts -probesize 2M -analyzeduration 2M -i pipe:0 -map 0:v:0 -map 0:a:0? -sn -dn -vf "<VF>" -c:v libx264 -preset veryfast -tune zerolatency -profile:v high -level <LEVEL> -pix_fmt yuv420p -b:v <RATE> -maxrate <RATE> -bufsize <BUF> -g 50 -sc_threshold 0 -c:a aac -b:a 128k -ac 2 -ar 48000 -af aresample=async=1:min_hard_comp=0.03 -max_muxing_queue_size 4096 -flush_packets 1 -mpegts_flags +pat_pmt_at_frames+resend_headers+initial_discontinuity -f mpegts pipe:1
+```
+
+| Card `name` | `<VF>` (SDR channels) | `<RATE>` | `<BUF>` | `<LEVEL>` |
+|---|---|---|---|---|
+| 2160p | `yadif=mode=send_frame:deint=interlaced,scale=-2:'min(2160,ih)'` | 16M | 32M | 5.1 |
+| 1440p | `yadif=mode=send_frame:deint=interlaced,scale=-2:'min(1440,ih)'` | 9M | 18M | 5.1 |
+| 1080p | `yadif=mode=send_frame:deint=interlaced,scale=-2:'min(1080,ih)'` | 5M | 10M | 4.1 |
+| 720p | `yadif=mode=send_frame:deint=interlaced,scale=-2:'min(720,ih)'` | 3M | 6M | 4.0 |
+| 540p | `yadif=mode=send_frame:deint=interlaced,scale=-2:'min(540,ih)'` | 1800k | 3600k | 3.1 |
+| 480p | `yadif=mode=send_frame:deint=interlaced,scale=-2:'min(480,ih)'` | 1200k | 2400k | 3.1 |
+| 360p | `yadif=mode=send_frame:deint=interlaced,scale=-2:'min(360,ih)'` | 700k | 1400k | 3.0 |
+
+Then on the card (IDs are examples):
+
+```yaml
+output_profile: 3            # the README's audio profile: now only Source's safe-audio fallback
+qualities:
+  - { name: 1080p, output_profile: 6 }
+  - { name: 720p, output_profile: 7 }
+  - { name: 540p, output_profile: 8 }
+  - { name: 360p, output_profile: 9 }
+```
+
+**4K HDR channels.** Phones, Fire tablets and most browsers can't show HDR, and none of the profiles above changes the colours, so an HDR channel scaled with them looks grey and washed out. For HDR channels, put a tone-mapping step in front of the scale in `<VF>`:
+
+```
+zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p,scale=-2:'min(1080,ih)'
+```
+
+- This needs an ffmpeg built with zimg. Check with `docker exec dispatcharr ffmpeg -hide_banner -filters | grep zscale`.
+- Applied to an SDR channel, it dulls the picture, so keep separate HDR profiles. Because the card's qualities apply to every channel on that card, the simplest set-up is a card (or a pop-up) for your 4K HDR channels with HDR-profile `qualities`, and the normal profiles everywhere else.
+- I haven't been able to test this chain against your HDR channels. Try it on one with `ffprobe` (as in README section 1) and by eye before relying on it.
+
+**CPU.** Copying video (Source, and the audio profile) costs almost nothing. Each of these profiles decodes and re-encodes the video. Roughly, in software: 360p–540p about half a core, 720p about one core, 1080p two or three cores, and 4K HDR to 1080p four to six cores, per channel per quality in use. Dispatcharr runs one transcode per channel and profile, shared by everyone watching that combination, so two screens on the same channel at different qualities cost two transcodes. If the Dispatcharr host has an Intel or AMD GPU passed through, a VAAPI version (`-vaapi_device /dev/dri/renderD128 … -vf 'format=nv12,hwupload,scale_vaapi=w=-2:h=720' -c:v h264_vaapi`) cuts that to almost nothing, but it depends on the host, so it isn't covered here.
 
 ## 4. Reading the card's health log
 
@@ -33,3 +74,4 @@ Turn on **Stats overlay** in the card's settings panel on the device that has tr
 - `reconnect` on every channel on one device: that device's network (Wi-Fi sleep on Fire tablets: Fully Kiosk → Power settings, keep Wi-Fi on).
 - `buffering` (with `buffer: stable`): the reserve keeps running dry; raise New Client Buffer, or check the device's Wi-Fi.
 - `frozen` / `black` followed by `switch`: the backup stream took over; if `switch-failed`, check the `rest_command` and the API key in HA's log.
+- `quality` with `dropping frames`: the device can't decode the stream fast enough; Auto moved it to a lighter quality. With `running dry`: its link can't keep up even with a 12 s reserve. Many of these on one device: pin that device to a lower quality in its settings panel.

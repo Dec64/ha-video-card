@@ -14,6 +14,9 @@
 //   nocors    stream without Access-Control-Allow-Origin
 //   hevc / mpeg2 / ac3 / mp2   stream with that codec
 //
+// ?output_profile=<id> on a stream acts like a Dispatcharr profile that converts: plain H.264 + AAC,
+// whatever the channel's mode (same 320x180 picture).
+//
 // GET /__stats?channel=<id>  → { open, total, queries: [...] }   (all channels without ?channel)
 //
 // GET /output/m3u  → a Dispatcharr-style channel playlist. Query parameters:
@@ -304,7 +307,10 @@ export async function startFakeDispatcharr({ port = 0, appPort = 0, host = '127.
     let held = null;
     const begin = () => {
       if (closed) return;
-      ff = spawn('ffmpeg', ffmpegArgs(mode), { stdio: ['ignore', 'pipe', 'inherit'] });
+      const profiled = url.searchParams.has('output_profile');
+      ff = spawn('ffmpeg', profiled ? ffmpegArgs('ok') : ffmpegArgs(mode), {
+        stdio: ['ignore', 'pipe', 'inherit'],
+      });
       ff.stdout.on('data', (chunk) => {
         if (closed || paused) return;
         if (held) held.push(chunk);

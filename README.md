@@ -45,6 +45,9 @@ Browsers can't play the AC-3 or MP2 audio many channels carry. Add an output pro
 - What it does: video is copied untouched; only audio is converted (about 4% of one CPU core per channel, shared by every viewer of that channel); only the first audio track is kept; `aresample=async=1` keeps lip-sync after small audio drop-outs from the provider.
 - **MPEG-2 channels** (some SD channels) still show no picture, because the video is copied. They need a second profile that converts video, which costs much more CPU: replace `-c:v copy` with `-vf yadif=mode=send_frame:deint=interlaced -c:v libx264 -preset veryfast -tune zerolatency -profile:v high -pix_fmt yuv420p -crf 23 -maxrate 5M -bufsize 10M -g 50`.
 
+### Quality profiles (optional)
+For a YouTube-style Quality menu (Auto, Source, 1080p, 720p…), make one output profile per lower quality and list them in the card's `qualities`. The ffmpeg settings for 2160p down to 360p, including HDR channels, are in [docs/dispatcharr-tuning.md](docs/dispatcharr-tuning.md#3-quality-profiles-for-the-cards-qualities). How the card uses them: section 4, _How Auto quality works_.
+
 ### CORS
 Dispatcharr already allows every origin. Check that nothing in front of it (a reverse proxy, Cloudflare) strips the header:
 
@@ -136,6 +139,14 @@ channel: BBC One HD
 
 ## 4. Using it
 
+**The Live TV app (`chrome: app`).** For a dashboard that is only this card. The dock along the bottom switches between:
+- **On now**: the picture with what's on (its sliders button opens the settings, with Quality and Audio; on a phone it opens them in Theatre, where there's room), your favourites with live progress (long-press any channel to add or remove one on this device), and rails for live and upcoming sport, tonight's films, news and recent channels.
+- **Guide**: the picture, the selected programme's details (Watch, Favourite, Multiview), jumps to now and later tonight, Sports/Movies/News/Kids filters, programme search and the full grid.
+- **Channels**: every channel with what's on now and next; tap one to watch it full screen.
+- **Theatre** (the full-screen button, F, or a channel from Channels): the ident and one control bar that hide while you watch; the channels panel, keypad, sleep timer and settings (the sliders button in the bar, or the chip under the clock, which names the quality playing) open from it. G opens the guide, Escape goes back.
+
+Channel numbers, arrows and the other keys work as below, also when nothing on the page has focus. `chrome: embed` is the Theatre's control bar alone (settings included), for pages like a sports dashboard that choose the channel themselves.
+
 **The guide.** Under the picture sits the channel guide (`guide: open`, the default). It opens on **Recent** (this device's last channels), then **★ Favourites** (your `favourites`, in the order you listed them), **All** and one chip per Dispatcharr group.
 - **Search** matches names and numbers across every channel; Enter plays the first match, and Escape clears the search.
 - **123** opens a number keypad: type a channel number and it tunes.
@@ -152,7 +163,7 @@ channel: BBC One HD
 | 🔈 and slider | Mute / unmute, and volume |
 | ☾ | Sleep timer: stop after 15, 30, 60 or 90 minutes |
 | ☰ | Show or hide the guide |
-| ⚙ (sliders) | Settings for this device: buffering, now and next, stats overlay (see below) |
+| ⚙ (sliders) | Settings for this device: buffering, quality and audio (with `qualities`), now and next, stats overlay (see below) |
 | ⛶ | Full screen (the ident and controls come along) |
 | ▦ | Multiview (only with `multiview` turned on) |
 
@@ -197,6 +208,8 @@ Keys typed in the channel search box stay in the search box.
 
 **Settings.** The sliders button in the control bar opens a small panel for this device:
 - **Buffering**: Auto, Low delay or Stable (the same as the `buffer` option). Changing it while playing reconnects once: the old connection closes before the new one opens.
+- **Quality** (with `qualities`): Auto, Source or one of the card's qualities. Only qualities below the channel's own picture are offered once the card has seen it. A fixed choice stays on this device; a choice the channel doesn't offer plays Source. Changing it reconnects once, the same way.
+- **Audio** (with `qualities` and `output_profile`): **Original**, the channel's own sound, or **Safe**, which plays Source through `output_profile` (AAC stereo, picture untouched). Every quality below Source is already AAC stereo.
 - **Now and next**: hide or show the programme info in the ident, the control bar and the guide (only with guide data). The guide keeps downloading while it's hidden; `epg: false` stops that.
 - **Stats overlay**: the codecs, buffer, speed and dropped frames over the picture (the overlay part of `debug`), plus this device's **health log**: a count of the last 24 hours' trouble (reconnects, buffering, frozen or black picture, source switches, network returns) and the latest three events. The log is kept on the device per target (last 100 events).
 
@@ -208,6 +221,14 @@ Choices are saved on this device for this card's target and override the card's 
 - After 5 minutes without running dry, it steps back down.
 - Instead of jumping ahead or stopping, it plays a touch slower (0.95×) while the reserve is low and a touch faster (1.05×) when it's well ahead, which is hard to notice. Only when it's more than 15 s behind does it jump.
 - Each device remembers its level, so a Fire tablet that needed 8 s yesterday starts there today. The Stats overlay shows the level, target and rate, and the health log notes each change.
+
+**How Auto quality works** (with `qualities`). Each device starts at Source, the stream as Dispatcharr sends it.
+- When the device keeps dropping frames (more than a fifth over 10 s), or keeps running its reserve dry while data still arrives (3 times in 10 minutes, with Auto buffering already at 12 s), it moves one quality down. The old connection closes before the new one opens.
+- It stays there for 30 minutes, then 2 h, then 8 h if it happens again the same day. After that, the next fresh start (a channel change, the card coming back on screen, the screen waking) tries one step higher. It never switches up mid-programme.
+- A stall (no data at all) is the source's fault, not the device's, so it's a reconnect, not a step down.
+- If Source has audio this device can't play (AC-3, E-AC-3, MP2), the card switches to `output_profile` instead of showing an error. If it has video the device can't play (HEVC on a Fire tablet, MPEG-2), it uses the best quality below Source. It remembers this per channel, so the next start goes straight there.
+- Each device remembers its step, and each channel's height, so the menu and Auto skip qualities above the channel's own. The Stats overlay shows the quality playing and the health log notes each change.
+- A device pinned to a quality in the settings panel never changes by itself. Multiview tiles don't use qualities (they use `multiview.output_profile`).
 
 **When the picture goes wrong.** Every 2 seconds the card looks at a tiny copy of the picture.
 - **Frozen** (unchanged, or no new frames, for 12 s while the clock runs): it reconnects. The last frame stays on screen while it does, instead of a black flash.
@@ -327,7 +348,8 @@ cards:
 |---|---|---|
 | `target` | `default` | This screen's name. Buttons with the same `target` play here |
 | `dispatcharr_url` | — | Dispatcharr's address. Needed to play Dispatcharr channels |
-| `output_profile` | none | Output profile ID, sent as `?output_profile=<id>` |
+| `output_profile` | none | Output profile ID, sent as `?output_profile=<id>`. With `qualities`, used only for Safe audio (and when a device can't play Source's audio) |
+| `qualities` | none | Lower qualities, e.g. `[{ name: 1080p, output_profile: 6 }, { name: 720p, output_profile: 7 }]`. Each name gives its height (`720p`, `4K`), or set `height:`. Turns on the Quality and Audio settings and Auto quality; Source (no profile) is always at the top. See section 4 and [docs/dispatcharr-tuning.md](docs/dispatcharr-tuning.md) |
 | `channel` | none | Channel for the first visit (name, number or UUID). After that, the remembered channel wins |
 | `url` | none | A full stream URL instead of a channel (MPEG-TS, or MP4/HLS on browsers that play them natively) |
 | `title` | channel name | Title shown in the channel ident |
@@ -350,7 +372,8 @@ cards:
 | `picture_check` | `true` | Watch for a frozen or black picture and recover by reconnecting (see section 4) |
 | `switch_source` | none | An HA action, e.g. `rest_command.dispatcharr_next_stream`, called with `channel: <uuid>` to move the channel to its next source in Dispatcharr when reconnecting doesn't fix the picture (see section 1) |
 | `url_template` | `{base}/proxy/ts/stream/{channel}` | How channel URLs are built |
-| `settings` | `true` | The settings button in the control bar. Its choices are saved per device and override `buffer` and `debug`'s overlay there |
+| `settings` | `true` | The settings button in the control bar. Its choices are saved per device and override `buffer`, the quality and `debug`'s overlay there |
+| `chrome` | `standard` | `app`: the Live TV app for a dashboard that is just this card (best in a panel view): On now, Guide, Channels and a full-screen Theatre, with a dock; it fills the window. `embed`: the picture with the Theatre's controls only, for pages that choose the channel themselves. The editor always shows the standard card |
 | `debug` | `false` | Overlay with engine, codecs, buffer, frames, channel list state and the last error |
 | `multiview` | off | `true`, or `{ enabled: true, max_tiles: 2, output_profile: <id> }`: the multiview button (needs the channel list). Each tile is its own Dispatcharr connection |
 | `multiview.max_tiles` | `2` | Most tiles at once, 2 to 4. More than 2 adds the 2 × 2 layout |

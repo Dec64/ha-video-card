@@ -28,9 +28,35 @@ export interface StreamCardConfig {
   epg?: boolean;
   epg_url?: string;
   guide?: GuideMode;
+  /** `standard` (default): picture with its control bar. `app`: the Live TV app (Lineup, Guide,
+   *  Channels, full-screen Theatre). `embed`: the Theatre's controls only, for pages like FPL Home
+   *  that pick the channel themselves. */
+  chrome?: ChromeMode;
   /** The settings button in the control bar (default on). */
   settings?: boolean;
   multiview?: boolean | MultiviewConfig;
+  /**
+   * Lower qualities, each a Dispatcharr output profile, e.g. 2160p down to 360p. "Source" (the
+   * stream as Dispatcharr sends it, no profile) is always at the top. Setting this turns on the
+   * Quality menu and Auto quality; `output_profile` then only fixes formats a device can't play.
+   */
+  qualities?: QualityConfig[];
+}
+
+export interface QualityConfig {
+  /** Shown in the settings panel, e.g. "720p". The height is read from it unless `height` is set. */
+  name: string;
+  output_profile: number | string;
+  /** Picture height this profile outputs, e.g. 720. */
+  height?: number;
+}
+
+/** One rung of the quality ladder. Rung 0 is always "Source". */
+export interface QualityRung {
+  name: string;
+  outputProfile?: string;
+  /** Output height; rungs at or above a channel's own height aren't offered. Unset on Source. */
+  height?: number;
 }
 
 /** The card's `multiview:` block. `multiview: true` is short for `{ enabled: true }`. */
@@ -44,6 +70,8 @@ export interface MultiviewConfig {
 
 /** The channel guide under the picture: shown, collapsed until Channels is pressed, or never. */
 export type GuideMode = 'open' | 'closed' | 'off';
+
+export type ChromeMode = 'standard' | 'app' | 'embed';
 
 export type SourceType = 'mpegts' | 'native';
 
@@ -83,9 +111,17 @@ export interface ResolvedConfig {
   epg: boolean;
   epgUrl?: string;
   guide: GuideMode;
+  chrome: ChromeMode;
   /** Show the settings button, whose choices override this config per device. */
   settings: boolean;
   multiview: ResolvedMultiview;
+  /**
+   * Source first, then the `qualities` list (best first). Without `qualities`, just Source with
+   * the card's `output_profile`, as before there were qualities.
+   */
+  qualities: QualityRung[];
+  /** With `qualities`: the profile Source falls back to when this device can't play its audio. */
+  formatProfile?: string;
 }
 
 export interface ResolvedMultiview {

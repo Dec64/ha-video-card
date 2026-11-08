@@ -1,4 +1,13 @@
-import { css, html, LitElement, nothing, svg, type PropertyValues, type TemplateResult } from 'lit';
+import {
+  adoptStyles,
+  css,
+  html,
+  LitElement,
+  nothing,
+  svg,
+  type PropertyValues,
+  type TemplateResult,
+} from 'lit';
 import { ChannelList, loadChannels, type Channel } from './channels';
 import type { GuideFeed } from './epg';
 import {
@@ -26,7 +35,18 @@ import type { PickerState } from './picker';
 import { holdReason, LifecycleWatcher, type HoldReason } from './lifecycle';
 import { NumberEntry } from './number-entry';
 import { previousRecent, pushRecent, readRecents, type RecentEntry } from './recents';
-import { PlaybackSession, type SessionStatus } from './session';
+import {
+  channelOptions,
+  maybeStepUp,
+  pickOption,
+  readAutoQuality,
+  readChannelInfo,
+  stepDown,
+  writeAutoQuality,
+  writeChannelInfo,
+  type QualityOption,
+} from './quality';
+import { PlaybackSession, type SessionStatus, type StruggleReason } from './session';
 import {
   readBufferLevel,
   readSettings,
@@ -62,9 +82,11 @@ import {
   type NavView,
   type NowNext,
   type SettingsActions,
+  type SettingsView,
   type UiState,
 } from './ui/view';
 import type { StreamCardMultiview, TileItem } from './multiview';
+import type { AppShell } from './app/app';
 
 const CONTROLS_HIDE_MS = 4000;
 /** How long the big channel number stays up after a change. */
@@ -194,6 +216,11 @@ export class StreamCard extends LitElement implements ControllerCard {
   private mvOn = false;
   /** Whether the grid was last allowed to hold streams (for the idle timer). */
   private mvAllowed = false;
+  /** With `qualities`: what the current channel offers, and which of it plays. */
+  private quality?: { key: string; opts: QualityOption[]; index: number };
+  /** The Live TV app layout (`chrome: app` or `embed`), a lazy chunk loaded on first use. */
+  private app?: AppShell;
+  private appLoading?: Promise<void>;
 
   constructor() {
     super();
@@ -248,6 +275,7 @@ export class StreamCard extends LitElement implements ControllerCard {
       if (this.isConnected) this.ensureChannels();
     }
     this.syncGuide();
+    this.syncApp();
     if (this.mvOn && !this.multiviewAvailable) this.exitMultiview();
     this.configureMultiview();
     if (this.request) {
@@ -369,6 +397,8 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.syncStatsTimer();
     this.addEventListener('keydown', this.onKeyDown);
     this.sleepChanged();
+    this.syncApp();
+    this.app?.connect();
     this.evaluate();
   }
 
@@ -392,17 +422,15 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.numbers.clear();
     clearTimeout(this.tickTimer);
     this.removeEventListener('keydown', this.onKeySeen);
+    this.app?.disconnect();
     super.disconnectedCallback();
     this.evaluate();
   }
 
-  protected override firstUpdated(): void {
-    const host = this.renderRoot.querySelector('.video-host');
-    host?.appendChild(this.video);
-    host?.appendChild(this.still);
-  }
-
   protected override updated(changed: PropertyValues): void {
+    // The layout (standard or app) owns .video-host; the one <video> follows it when it changes.
+    const host = this.renderRoot.querySelector('.video-host');
+    if (host && this.video.parentNode !== host) host.append(this.video, this.still);
     if (changed.has('preview') || changed.has('editMode')) {
       // A name or number that arrived during edit mode is looked up now.
       if (!this.isPreview && this.lookupPending && this.request) {
@@ -410,8 +438,28 @@ export class StreamCard extends LitElement implements ControllerCard {
       }
       this.ensureChannels();
       this.syncGuide();
+      this.syncApp();
       this.evaluate();
     }
+  }
+
+  // ---- app layout ----
+
+  /** Loads the app layout when `chrome` asks for it; edit mode keeps the standard card. */
+  private syncApp(): void {
+    const chrome = this.config?.chrome ?? 'standard';
+    if (chrome === 'standard') {
+      delete this.dataset.chrome;
+      return;
+    }
+    this.dataset.chrome = chrome;
+    if (this.isPreview || this.app || this.appLoading) return;
+    this.appLoading = import('./app/app').then(({ AppShell, appStyles, hostFor }) => {
+      adoptStyles(this.renderRoot as ShadowRoot, [...styles, appStyles]);
+      this.app = new AppShell(hostFor(this));
+      if (this.isConnected) this.app.connect();
+      this.refresh();
+    });
   }
 
   // ---- channel list ----
@@ -677,7 +725,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.idleStopped = false;
     let src: StreamSource;
     try {
-      src = resolveSource(req, this.config);
+      src = this.resolveWithQuality(req);
     } catch (err) {
       this.stopSession('config');
       this.source = undefined;
@@ -761,6 +809,9 @@ export class StreamCard extends LitElement implements ControllerCard {
   private startSession(): void {
     if (!this.source || !this.config) return;
     this.error = undefined;
+    this.maybeRaiseQuality();
+    const q = this.quality;
+    const canStepDown = !!q && this.qualityAuto && q.index < q.opts.length - 1;
     const session = new PlaybackSession(this.video, this.source, {
       startTimeoutMs: this.config.startTimeoutMs,
       maxAttempts: this.config.maxReconnectAttempts,
@@ -778,6 +829,11 @@ export class StreamCard extends LitElement implements ControllerCard {
       onBeforeReconnect: () => {
         if (session === this.session) this.holdLastFrame();
       },
+      onStruggle: canStepDown
+        ? (reason) => {
+            if (session === this.session) this.lowerQuality(reason);
+          }
+        : undefined,
       onStatus: (s) => this.onStatus(session, s),
     });
     this.session = session;
@@ -796,6 +852,123 @@ export class StreamCard extends LitElement implements ControllerCard {
     this.watcher.disarmIdle();
     this.still.hidden = true;
     void s.destroy();
+  }
+
+  // ---- quality ----
+
+  /** The card has a `qualities` ladder (Source plus at least one lower quality). */
+  private get qualityOn(): boolean {
+    return (this.config?.qualities.length ?? 0) > 1;
+  }
+
+  /** Auto quality on this device (no quality pinned in the settings panel). */
+  private get qualityAuto(): boolean {
+    return this.qualityOn && !this.deviceSettings.quality;
+  }
+
+  /**
+   * Resolves a request with the quality this device should play: the channel's options (Source
+   * and the rungs below its own height), the pinned choice or Auto's step, Safe audio on Source.
+   * URLs from buttons have no profile to pick, so only channels get a quality.
+   */
+  private resolveWithQuality(req: StreamRequest): StreamSource {
+    const c = this.config!;
+    this.quality = undefined;
+    if (!this.qualityOn || req.url || !req.channel) return resolveSource(req, c);
+    const key = req.channel;
+    const info = readChannelInfo(key);
+    const opts = channelOptions(c.qualities, info, c.formatProfile);
+    if (this.deviceSettings.audio === 'safe' && c.formatProfile && opts[0].rung === 0) {
+      opts[0] = { ...opts[0], outputProfile: c.formatProfile };
+    }
+    const index = pickOption(opts, this.deviceSettings.quality, readAutoQuality(), info);
+    this.quality = { key, opts, index };
+    // Source is the stream as Dispatcharr sends it: no output profile at all.
+    return resolveSource(req, { ...c, outputProfile: opts[index].outputProfile });
+  }
+
+  /** Re-resolves the current request; true if the stream URL changed. */
+  private reresolve(): boolean {
+    const req = this.request;
+    if (!req || !this.source || this.lookupPending) return false;
+    let src: StreamSource;
+    try {
+      src = this.resolveWithQuality(req);
+    } catch {
+      return false;
+    }
+    const changed = src.url !== this.source.url;
+    this.source = { ...src, title: req.title ?? src.title };
+    return changed;
+  }
+
+  /** Restarts on the quality now chosen: the old connection closes before the new one opens. */
+  private restartForQuality(reason: string): void {
+    const playing = !!this.session;
+    if (!this.reresolve()) return;
+    if (playing) {
+      this.stopSession(reason);
+      this.evaluate();
+    }
+  }
+
+  /** Auto, at a fresh start: once a step-down's hold is over, try one step higher. */
+  private maybeRaiseQuality(): void {
+    if (!this.qualityAuto || !this.quality) return;
+    const q = readAutoQuality();
+    const up = maybeStepUp(q, Date.now());
+    if (up === q) return;
+    writeAutoQuality(up);
+    if (this.reresolve()) {
+      const o = this.quality;
+      this.logHealth('quality', `trying ${o?.opts[o.index].name ?? 'higher'}`);
+    }
+  }
+
+  /** Auto: the device can't keep up, so go one step lighter and remember it on this device. */
+  private lowerQuality(reason: StruggleReason): void {
+    const q = this.quality;
+    if (!q || !this.qualityAuto) return;
+    const next = stepDown(readAutoQuality(), q.index, q.opts.length - 1, Date.now());
+    writeAutoQuality(next);
+    this.logHealth('quality', `${q.opts[Math.min(next.step, q.opts.length - 1)].name} (${reason})`);
+    this.restartForQuality('quality');
+  }
+
+  /**
+   * While Source plays: note the channel's own height (so higher rungs aren't offered). On a
+   * format error at Source, remember the fix (the audio profile, or a lower rung) and use it.
+   * Returns true if it restarted the stream instead of letting the error show.
+   */
+  private qualityOnStatus(s: SessionStatus): boolean {
+    const q = this.quality;
+    if (!q || q.index !== 0) return false;
+    const info = readChannelInfo(q.key);
+    const h = s.mediaInfo?.height;
+    if (h && h !== info.h && s.state !== 'error') {
+      writeChannelInfo(q.key, { h });
+      // The pinned choice may be gone now (above this channel's height); the menu shows Source.
+      this.quality = {
+        ...q,
+        opts: channelOptions(this.config!.qualities, { ...info, h }, this.config!.formatProfile),
+      };
+      this.quality.index = Math.min(q.index, this.quality.opts.length - 1);
+    }
+    if (s.state !== 'error' || s.error?.kind !== 'codec') return false;
+    const c = this.config!;
+    // "audio ac-3 not supported", or mpegts.js's "Unsupported audio/mp4;codecs=ac-3".
+    const audio = /audio/i.test(s.error.detail) && !/video/i.test(s.error.detail);
+    if (audio && c.formatProfile && q.opts[0].outputProfile !== c.formatProfile && !info.fmt) {
+      writeChannelInfo(q.key, { fmt: true, ...(h ? { h } : {}) });
+      this.logHealth('quality', `Source with safe audio (${s.error.detail})`);
+    } else if (!info.noSource && q.opts.length > 1) {
+      writeChannelInfo(q.key, { noSource: true, ...(h ? { h } : {}) });
+      this.logHealth('quality', `Source can't play here (${s.error.detail})`);
+    } else return false;
+    this.stopSession('quality');
+    this.reresolve();
+    this.evaluate();
+    return true;
   }
 
   private logHealth(kind: HealthKind, detail?: string): void {
@@ -849,6 +1022,7 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   private onStatus(session: PlaybackSession, s: SessionStatus): void {
     if (session !== this.session) return;
+    if (this.qualityOnStatus(s)) return;
     this.status = s;
     if (s.state === 'error') {
       this.error = s.error;
@@ -927,6 +1101,11 @@ export class StreamCard extends LitElement implements ControllerCard {
 
   private togglePicker = (e?: Event): void => {
     e?.stopPropagation();
+    if (this.app && !this.isPreview) {
+      this.ensureChannels();
+      this.app.showGuide();
+      return;
+    }
     // From the error layer, "Channels" only ever opens the guide.
     const open = this.uiState === 'error' || this.guidePlacement === undefined;
     if (this.guideOverlays) this.overlayOpen = open;
@@ -1127,6 +1306,10 @@ export class StreamCard extends LitElement implements ControllerCard {
           n.isContentEditable),
     );
     if (inField) return;
+    if (this.app?.key(e)) {
+      e.preventDefault();
+      return;
+    }
     const typing = !!this.numbers.digits;
     let handled = true;
     if (/^\d$/.test(e.key)) this.pressDigit(e.key);
@@ -1195,6 +1378,19 @@ export class StreamCard extends LitElement implements ControllerCard {
     return this.deviceSettings.buffer ?? this.config?.buffer ?? 'auto';
   }
 
+  /** The settings panel's Quality row: Auto plus what this channel offers. */
+  private get qualityView(): SettingsView['quality'] {
+    if (!this.qualityOn || !this.config) return undefined;
+    const q = this.quality;
+    const names = q ? q.opts.map((o) => o.name) : this.config.qualities.map((r) => r.name);
+    const pinned = this.deviceSettings.quality;
+    return {
+      choice: pinned && names.includes(pinned) ? pinned : pinned ? names[0] : 'auto',
+      options: names,
+      playing: q ? q.opts[q.index].name : undefined,
+    };
+  }
+
   private get showNowNext(): boolean {
     return this.deviceSettings.nowNext ?? true;
   }
@@ -1219,6 +1415,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     if (next.buffer === c.buffer) next.buffer = undefined;
     if (next.nowNext === true) next.nowNext = undefined;
     if (next.stats === c.debug) next.stats = undefined;
+    if (next.quality === 'auto') next.quality = undefined;
     writeSettings(c.target, next);
     this.showControls();
   }
@@ -1228,6 +1425,8 @@ export class StreamCard extends LitElement implements ControllerCard {
     setBuffer: (buffer) => this.changeSettings({ buffer }),
     setNowNext: (nowNext) => this.changeSettings({ nowNext }),
     setStats: (stats) => this.changeSettings({ stats }),
+    setQuality: (quality) => this.changeSettings({ quality }),
+    setAudio: (audio) => this.changeSettings({ audio: audio === 'safe' ? 'safe' : undefined }),
     reset: () => this.config && writeSettings(this.config.target, {}),
   };
 
@@ -1242,7 +1441,11 @@ export class StreamCard extends LitElement implements ControllerCard {
     // the old one closes first (stopSession aborts its fetch), then evaluate() opens the next.
     if (this.bufferMode !== before && this.session?.source.type === 'mpegts') {
       this.stopSession('settings');
+      this.reresolve();
       this.evaluate();
+    } else if (this.qualityOn) {
+      // A new quality or audio choice is a new stream URL: restart on it (one connection at a time).
+      this.restartForQuality('settings');
     }
     this.refresh();
   };
@@ -1308,7 +1511,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     type FsEl = HTMLElement & { webkitRequestFullscreen?: () => void };
     const doc = document as FsDoc;
     // The stage holds the picture, ident and controls, so they all follow it into full screen.
-    const frame = this.renderRoot.querySelector('.stage') as FsEl | null;
+    const frame = this.renderRoot.querySelector('.stage, .app-stage') as FsEl | null;
     try {
       if (this.fullscreen) {
         if (doc.exitFullscreen) await doc.exitFullscreen();
@@ -1381,6 +1584,15 @@ export class StreamCard extends LitElement implements ControllerCard {
       buffering: this.status?.buffering ?? false,
       buffer: this.bufferMode,
       auto: this.session?.autoInfo,
+      quality: this.quality
+        ? {
+            choice: this.deviceSettings.quality ?? 'auto',
+            playing: this.quality.opts[this.quality.index].name,
+            profile: this.quality.opts[this.quality.index].outputProfile,
+            options: this.quality.opts.map((o) => o.name),
+            autoStep: readAutoQuality().step,
+          }
+        : undefined,
       error: this.error,
       lastError: this.status?.lastError,
       channels: { state: this.channelState, count: this.channels?.size ?? 0 },
@@ -1457,6 +1669,11 @@ export class StreamCard extends LitElement implements ControllerCard {
             buffer: this.bufferMode,
             nowNext: c.epg ? this.showNowNext : undefined,
             stats: this.showStats,
+            quality: this.qualityView,
+            audio:
+              this.qualityOn && c.formatProfile
+                ? (this.deviceSettings.audio ?? 'original')
+                : undefined,
             custom: Object.keys(this.deviceSettings).length > 0,
           }
         : undefined,
@@ -1516,6 +1733,7 @@ export class StreamCard extends LitElement implements ControllerCard {
     const placement = this.guidePlacement;
     const grid = this.mvOn && this.mv && !this.isPreview ? this.mv : undefined;
     this.scheduleTick(v);
+    if (this.app && !this.isPreview) return this.app.render(v, a);
     return html`
       <ha-card class=${v.ui === 'preview' ? 'editing' : ''}>
         <div
@@ -1579,6 +1797,9 @@ export class StreamCard extends LitElement implements ControllerCard {
       st
         ? `${st.engine} · buffer ${st.bufferSeconds.toFixed(1)} s · ${st.speedKBps?.toFixed(0) ?? '-'} KB/s`
         : 'engine -',
+      d.quality
+        ? `quality ${d.quality.playing}${d.quality.profile ? ` (profile ${d.quality.profile})` : ''} · ${d.quality.choice === 'auto' ? `auto, step ${d.quality.autoStep}` : 'pinned'}`
+        : '',
       d.auto
         ? `auto · target ${d.auto.target} s (level ${d.auto.level}) · rate ${d.auto.rate}`
         : `buffer mode ${d.buffer}`,

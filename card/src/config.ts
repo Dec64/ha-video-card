@@ -1,7 +1,9 @@
 import { DEFAULT_TARGET, DEFAULT_URL_TEMPLATE } from './const';
 import type {
   BufferMode,
+  ChromeMode,
   GuideMode,
+  QualityRung,
   ResolvedConfig,
   ResolvedMultiview,
   SourceType,
@@ -140,6 +142,50 @@ function normalizeMultiview(v: unknown, outputProfile: string | undefined): Reso
   };
 }
 
+export const SOURCE_QUALITY = 'Source';
+
+/** "720p" → 720, "4K" → 2160. */
+export function heightFromName(name: string): number | undefined {
+  const m = /(\d{3,4})\s*p\b/i.exec(name);
+  if (m) return Number(m[1]);
+  if (/\b(4k|uhd)\b/i.test(name)) return 2160;
+  if (/\b(2k|qhd)\b/i.test(name)) return 1440;
+  return undefined;
+}
+
+function normalizeQualities(v: unknown, outputProfile: string | undefined): QualityRung[] {
+  if (v === undefined || v === null || (Array.isArray(v) && !v.length)) {
+    return [{ name: SOURCE_QUALITY, outputProfile }];
+  }
+  if (!Array.isArray(v)) {
+    throw new ConfigError('"qualities" must be a list, e.g. [{ name: 720p, output_profile: 12 }]');
+  }
+  const rungs: QualityRung[] = [];
+  const seen = new Set([SOURCE_QUALITY.toLowerCase(), 'auto']);
+  for (const item of v) {
+    if (!isPlainObject(item)) {
+      throw new ConfigError('Each of "qualities" needs a name and an output_profile');
+    }
+    const name = optionalString(item, 'name');
+    const profile = profileId(item, 'output_profile', 'qualities.output_profile');
+    if (!name || !profile) {
+      throw new ConfigError('Each of "qualities" needs a name and an output_profile');
+    }
+    if (seen.has(name.toLowerCase())) {
+      throw new ConfigError(
+        `"qualities" can't use the name "${name}" twice (Source and Auto are taken)`,
+      );
+    }
+    seen.add(name.toLowerCase());
+    const height =
+      item.height === undefined ? heightFromName(name) : optionalNumber(item, 'height', 0, 1);
+    rungs.push({ name, outputProfile: profile, height });
+  }
+  // Best first, whatever order they were written in (rungs without a height keep their place last).
+  rungs.sort((x, y) => (y.height ?? 0) - (x.height ?? 0));
+  return [{ name: SOURCE_QUALITY }, ...rungs];
+}
+
 /** An HA action as `domain.service`, e.g. rest_command.dispatcharr_next_stream. */
 function switchSourceAction(v: string | undefined): string | undefined {
   if (v === undefined) return undefined;
@@ -184,6 +230,10 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     }
   }
 
+  const chrome = optionalString(raw, 'chrome') ?? 'standard';
+  if (chrome !== 'standard' && chrome !== 'app' && chrome !== 'embed') {
+    throw new ConfigError('"chrome" must be standard, app or embed');
+  }
   const guide = optionalString(raw, 'guide') ?? 'open';
   if (guide !== 'open' && guide !== 'closed' && guide !== 'off') {
     throw new ConfigError('"guide" must be open, closed or off');
@@ -225,9 +275,12 @@ export function normalizeConfig(input: unknown): ResolvedConfig {
     // days=1: Dispatcharr sends only the next 24 hours, not the whole guide.
     epgUrl: epgUrl ?? (base ? `${normalizeBaseUrl(base)}/output/epg?days=1` : undefined),
     guide: guide as GuideMode,
+    chrome: chrome as ChromeMode,
     settings: optionalBool(raw, 'settings', true),
     multiview: normalizeMultiview(raw.multiview, outputProfile),
+    qualities: normalizeQualities(raw.qualities, outputProfile),
   };
+  if (resolved.qualities.length > 1) resolved.formatProfile = outputProfile;
   // On by default whenever there's a channel list and a guide to read (dispatcharr_url set).
   resolved.epg = optionalBool(raw, 'epg', resolved.channelList && !!resolved.epgUrl);
   if (resolved.epg && !resolved.channelList) {
