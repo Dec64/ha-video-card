@@ -1,11 +1,11 @@
 import { a as e, i as t, n, o as r, r as i } from "./stream-card-video-lock-8Ql6vIdM.js";
-import { _ as a, a as o, c as s, d as c, f as l, g as u, h as d, i as f, l as p, m, n as h, o as ee, p as te, r as ne, s as re, t as g, u as ie, v as ae } from "./stream-card-view-CwLHw3Tw.js";
+import { C as a, S as o, T as s, _ as c, a as l, b as u, f as d, g as ee, h as f, i as p, l as m, m as te, n as ne, o as re, p as ie, r as ae, t as oe, v as h, w as g } from "./stream-card-view-D_HVsufI.js";
 //#region src/const.ts
-var oe = "stream-card", se = "Stream Card", _ = "2.1.0-beta.1", v = "__streamCard", y = "stream-card-power", b = "stream-card-network", x = class extends Error {
+var se = "stream-card", ce = "Stream Card", _ = "2.1.5-beta.1", v = "__streamCard", y = "stream-card-power", b = "stream-card-network", x = class extends Error {
 	constructor(...e) {
 		super(...e), this.name = "ConfigError";
 	}
-}, ce = 6e4;
+}, le = 6e4;
 function S(e) {
 	return typeof e == "object" && !!e && !Array.isArray(e);
 }
@@ -29,22 +29,22 @@ function T(e, t, n, r) {
 	if (typeof a != "number" || !Number.isFinite(a) || a < r) throw new x(`"${t}" must be a number of at least ${r}`);
 	return a;
 }
-function E(e, t) {
+function ue(e, t) {
 	let n = e[t];
 	return n == null || n === "" ? [] : (Array.isArray(n) ? n : [n]).map((e) => {
 		if (typeof e != "string" && typeof e != "number") throw new x(`"${t}" must be a list of text`);
 		return String(e).trim();
 	}).filter(Boolean);
 }
-var le = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-function D(e) {
-	return le.test(e.trim());
+var de = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function E(e) {
+	return de.test(e.trim());
 }
-function ue(e) {
+function fe(e) {
 	let t = e.trim();
-	return !D(t) && (/\s/.test(t) || /^\d+$/.test(t));
+	return !E(t) && (/\s/.test(t) || /^\d+$/.test(t));
 }
-function O(e) {
+function D(e) {
 	let t;
 	try {
 		t = new URL(e);
@@ -54,7 +54,7 @@ function O(e) {
 	if (t.protocol !== "http:" && t.protocol !== "https:") throw new x("\"dispatcharr_url\" must start with http:// or https://");
 	return e.replace(/\/+$/, "");
 }
-function de(e) {
+function pe(e) {
 	if (!e) return "16 / 9";
 	let t = /^\s*(\d+(?:\.\d+)?)\s*[:/x]\s*(\d+(?:\.\d+)?)\s*$/.exec(e);
 	if (t && Number(t[1]) > 0 && Number(t[2]) > 0) return `${t[1]} / ${t[2]}`;
@@ -62,16 +62,16 @@ function de(e) {
 	if (Number.isFinite(n) && n > 0) return String(n);
 	throw new x("\"aspect_ratio\" must look like \"16:9\"");
 }
-function fe(e) {
+function me(e) {
 	if (e === void 0 || e === "auto" || e === "low" || e === "stable") return e ?? "auto";
 	throw new x("\"buffer\" must be \"auto\", \"low\" or \"stable\"");
 }
-function pe(e, t, n) {
+function he(e, t, n) {
 	let r = C(e, t);
 	if (r !== void 0 && !/^\d+$/.test(r)) throw new x(`"${n}" must be the numeric ID of a Dispatcharr output profile`);
 	return r;
 }
-function me(e, t) {
+function ge(e, t) {
 	if (e == null || typeof e == "boolean") return {
 		enabled: e === !0,
 		maxTiles: 2,
@@ -83,18 +83,18 @@ function me(e, t) {
 	return {
 		enabled: w(e, "enabled", !1),
 		maxTiles: n,
-		outputProfile: pe(e, "output_profile", "multiview.output_profile") ?? t
+		outputProfile: he(e, "output_profile", "multiview.output_profile") ?? t
 	};
 }
-function he(e) {
+function _e(e) {
 	if (e !== void 0) {
 		if (!/^[a-z0-9_]+\.[a-z0-9_]+$/.test(e)) throw new x("\"switch_source\" must be an HA action such as rest_command.dispatcharr_next_stream");
 		return e;
 	}
 }
-function ge(e) {
+function ve(e) {
 	if (!S(e)) throw new x("Card config must be an object");
-	let t = e, n = C(t, "dispatcharr_url"), r = pe(t, "output_profile", "output_profile"), i = C(t, "url_template") ?? "{base}/proxy/ts/stream/{channel}";
+	let t = e, n = C(t, "dispatcharr_url"), r = he(t, "output_profile", "output_profile"), i = C(t, "url_template") ?? "{base}/proxy/ts/stream/{channel}";
 	if (!i.includes("{channel}")) throw new x("\"url_template\" must contain {channel}");
 	let a = t.reconnect;
 	if (a !== void 0 && !S(a)) throw new x("\"reconnect\" must be an object, e.g. { max_attempts: 5 }");
@@ -110,51 +110,54 @@ function ge(e) {
 	} catch {
 		throw new x("\"epg_url\" must be a full URL");
 	}
-	let c = C(t, "guide") ?? "open";
-	if (c !== "open" && c !== "closed" && c !== "off") throw new x("\"guide\" must be open, closed or off");
-	let l = C(t, "channel"), u = C(t, "url"), d = C(t, "title"), f = l || u ? {
-		channel: l,
-		url: u,
-		title: d
+	let c = C(t, "chrome") ?? "standard";
+	if (c !== "standard" && c !== "app" && c !== "embed") throw new x("\"chrome\" must be standard, app or embed");
+	let l = C(t, "guide") ?? "open";
+	if (l !== "open" && l !== "closed" && l !== "off") throw new x("\"guide\" must be open, closed or off");
+	let u = C(t, "channel"), d = C(t, "url"), ee = C(t, "title"), f = u || d ? {
+		channel: u,
+		url: d,
+		title: ee
 	} : void 0, p = {
 		target: C(t, "target") ?? "default",
-		dispatcharrUrl: n ? O(n) : void 0,
+		dispatcharrUrl: n ? D(n) : void 0,
 		outputProfile: r,
 		urlTemplate: i,
 		defaultRequest: f,
 		autoplay: w(t, "autoplay", !0),
 		muted: w(t, "muted", !1),
-		aspectRatio: de(C(t, "aspect_ratio")),
-		idleTimeoutMs: T(t, "idle_timeout", 0, 0) * ce,
+		aspectRatio: pe(C(t, "aspect_ratio")),
+		idleTimeoutMs: T(t, "idle_timeout", 0, 0) * le,
 		startTimeoutMs: T(t, "start_timeout", 20, 1) * 1e3,
 		maxReconnectAttempts: a ? T(a, "max_attempts", 5, 0) : 5,
 		keepTrying: a ? w(a, "keep_trying", !1) : !1,
 		pictureCheck: w(t, "picture_check", !0),
-		switchSource: he(C(t, "switch_source")),
+		switchSource: _e(C(t, "switch_source")),
 		debug: w(t, "debug", !1),
 		channelList: w(t, "channel_list", !!(n || o)),
-		m3uUrl: o ?? (n ? `${O(n)}/output/m3u` : void 0),
-		channelGroups: E(t, "channel_groups"),
-		favourites: E(t, "favourites"),
+		m3uUrl: o ?? (n ? `${D(n)}/output/m3u` : void 0),
+		channelGroups: ue(t, "channel_groups"),
+		favourites: ue(t, "favourites"),
 		rememberChannel: w(t, "remember_channel", !0),
-		buffer: fe(C(t, "buffer")),
+		buffer: me(C(t, "buffer")),
 		epg: !1,
-		epgUrl: s ?? (n ? `${O(n)}/output/epg?days=1` : void 0),
-		guide: c,
+		epgUrl: s ?? (n ? `${D(n)}/output/epg?days=1` : void 0),
+		guide: l,
+		chrome: c,
 		settings: w(t, "settings", !0),
-		multiview: me(t.multiview, r)
+		multiview: ge(t.multiview, r)
 	};
 	if (p.epg = w(t, "epg", p.channelList && !!p.epgUrl), p.epg && !p.channelList) throw new x("\"epg\" needs the channel list (\"channel_list\" can't be false)");
 	if (p.epg && !p.epgUrl) throw new x("\"epg\" needs \"dispatcharr_url\" or \"epg_url\"");
 	if (p.channelList && !p.m3uUrl) throw new x("\"channel_list\" needs \"dispatcharr_url\" or \"m3u_url\"");
 	let m = f?.channel;
-	return f && m && (!p.channelList || D(m)) && k(f, p), p;
+	return f && m && (!p.channelList || E(m)) && O(f, p), p;
 }
-function _e(e) {
+function ye(e) {
 	let t = e.split(/[?#]/)[0].toLowerCase();
 	return t.endsWith(".m3u8") || t.endsWith(".mp4") || t.endsWith(".webm") ? "native" : "mpegts";
 }
-function k(e, t) {
+function O(e, t) {
 	if (e.url) {
 		let t;
 		try {
@@ -164,7 +167,7 @@ function k(e, t) {
 		}
 		return {
 			url: t.href,
-			type: e.type ?? _e(t.href),
+			type: e.type ?? ye(t.href),
 			title: e.title
 		};
 	}
@@ -185,7 +188,7 @@ function k(e, t) {
 		channel: n
 	};
 }
-var ve = /* @__PURE__ */ new Set([
+var be = /* @__PURE__ */ new Set([
 	"play",
 	"stop",
 	"channel_up",
@@ -196,18 +199,18 @@ var ve = /* @__PURE__ */ new Set([
 	"mute",
 	"unmute"
 ]);
-function A(e) {
+function k(e) {
 	let t = typeof e == "string" && e.trim() ? Number(e) : e;
 	return typeof t == "number" && Number.isFinite(t) ? t : void 0;
 }
-function ye(e) {
+function xe(e) {
 	if (!S(e)) return;
 	let t = (t) => {
 		let n = e[t];
 		if (typeof n == "string" && n.trim()) return n.trim();
 		if (typeof n == "number") return String(n);
 	}, n = t("action");
-	if (n !== void 0 && !ve.has(n)) return;
+	if (n !== void 0 && !be.has(n)) return;
 	let r = t("type");
 	if (r !== void 0 && r !== "mpegts" && r !== "native") return;
 	let i = {
@@ -221,19 +224,19 @@ function ye(e) {
 	};
 	if (i.action !== "play" || i.channel || i.url) {
 		if (i.action === "sleep") {
-			let t = A(e.sleep);
+			let t = k(e.sleep);
 			if (t === void 0 || t < 0) return;
 			i.sleep = t;
 		}
 		if (i.action === "volume") {
-			let t = A(e.volume);
+			let t = k(e.volume);
 			if (t === void 0 || t < 0 || t > 100) return;
 			i.volume = t;
 		}
 		return i;
 	}
 }
-function be(e) {
+function Se(e) {
 	try {
 		let t = /\/proxy\/ts\/stream\/([^/?#]+)/.exec(new URL(e).pathname);
 		return t ? decodeURIComponent(t[1]) : void 0;
@@ -243,10 +246,10 @@ function be(e) {
 }
 //#endregion
 //#region src/memory.ts
-var j = "stream-card:last:";
-function M(e) {
+var A = "stream-card:last:";
+function j(e) {
 	try {
-		let t = localStorage.getItem(j + e);
+		let t = localStorage.getItem(A + e);
 		if (!t) return;
 		let n = JSON.parse(t);
 		return typeof n == "object" && n && (n.channel || n.url) ? n : void 0;
@@ -254,30 +257,30 @@ function M(e) {
 		return;
 	}
 }
-function N(e, t) {
+function M(e, t) {
 	try {
-		localStorage.setItem(j + e, JSON.stringify(t));
+		localStorage.setItem(A + e, JSON.stringify(t));
 	} catch {}
 }
-function xe(e) {
-	let t = M(e);
-	t?.playing && N(e, {
+function Ce(e) {
+	let t = j(e);
+	t?.playing && M(e, {
 		...t,
 		playing: !1
 	});
 }
 //#endregion
 //#region src/recents.ts
-var Se = "stream-card:recent:", P = (e) => e.channel ?? e.url;
+var N = "stream-card:recent:", P = (e) => e.channel ?? e.url;
 function F(e) {
 	try {
-		let t = localStorage.getItem(Se + e), n = t ? JSON.parse(t) : [];
+		let t = localStorage.getItem(N + e), n = t ? JSON.parse(t) : [];
 		return Array.isArray(n) ? n.filter((e) => typeof e == "object" && !!e && !!P(e)) : [];
 	} catch {
 		return [];
 	}
 }
-function Ce(e, t) {
+function I(e, t) {
 	let n = P(t), r = F(e);
 	if (!n || r[0] && P(r[0]) === n) return r;
 	let i = [{
@@ -286,26 +289,26 @@ function Ce(e, t) {
 		title: t.title
 	}, ...r.filter((e) => P(e) !== n)].slice(0, 8);
 	try {
-		localStorage.setItem(Se + e, JSON.stringify(i));
+		localStorage.setItem(N + e, JSON.stringify(i));
 	} catch {}
 	return i;
 }
-function we(e, t) {
+function L(e, t) {
 	return F(e).find((e) => P(e) !== t);
 }
 //#endregion
 //#region src/sleep-timer.ts
-var I = "stream-card:sleep:", Te = 6e4, Ee = 6e4, De = 2 ** 31 - 1, Oe = class {
+var R = "stream-card:sleep:", we = 6e4, Te = 6e4, Ee = 2 ** 31 - 1, De = class {
 	constructor(e, t, n = () => Date.now()) {
 		this.onExpire = e, this.onChange = t, this.now = n, this.timers = /* @__PURE__ */ new Map(), this.loaded = /* @__PURE__ */ new Set();
 	}
 	set(e, t) {
-		this.load(e), t > 0 ? this.arm(e, this.now() + t * Ee) : this.cancel(e);
+		this.load(e), t > 0 ? this.arm(e, this.now() + t * Te) : this.cancel(e);
 	}
 	extend(e, t) {
 		if (this.load(e), !(t > 0)) return;
 		let n = this.timers.get(e);
-		this.arm(e, Math.max(n?.endsAt ?? 0, this.now()) + t * Ee);
+		this.arm(e, Math.max(n?.endsAt ?? 0, this.now()) + t * Te);
 	}
 	cancel(e) {
 		this.load(e);
@@ -320,7 +323,7 @@ var I = "stream-card:sleep:", Te = 6e4, Ee = 6e4, De = 2 ** 31 - 1, Oe = class {
 		return {
 			endsAt: t.endsAt,
 			remainingMs: n,
-			warning: n <= Te
+			warning: n <= we
 		};
 	}
 	load(e) {
@@ -328,7 +331,7 @@ var I = "stream-card:sleep:", Te = 6e4, Ee = 6e4, De = 2 ** 31 - 1, Oe = class {
 		this.loaded.add(e);
 		let t;
 		try {
-			let n = localStorage.getItem(I + e);
+			let n = localStorage.getItem(R + e);
 			t = n === null ? void 0 : Number(n);
 		} catch {
 			t = void 0;
@@ -347,46 +350,46 @@ var I = "stream-card:sleep:", Te = 6e4, Ee = 6e4, De = 2 ** 31 - 1, Oe = class {
 			this.timers.delete(e), this.save(e, void 0), this.onExpire(e);
 			return;
 		}
-		let r = n > 6e4 ? n - Te : n;
+		let r = n > 6e4 ? n - we : n;
 		t.handle = setTimeout(() => {
 			this.timers.get(e) === t && (t.endsAt - this.now() > 0 && this.onChange(e), this.schedule(e, t));
-		}, Math.min(r, De));
+		}, Math.min(r, Ee));
 	}
 	save(e, t) {
 		try {
-			t === void 0 ? localStorage.removeItem(I + e) : localStorage.setItem(I + e, String(t));
+			t === void 0 ? localStorage.removeItem(R + e) : localStorage.setItem(R + e, String(t));
 		} catch {}
 	}
-}, ke = "stream-card:volume";
-function L(e) {
+}, Oe = "stream-card:volume";
+function z(e) {
 	return Number.isFinite(e) ? Math.min(1, Math.max(0, e)) : 1;
 }
-function Ae() {
+function ke() {
 	try {
-		let e = localStorage.getItem(ke);
+		let e = localStorage.getItem(Oe);
 		if (e === null) return;
 		let t = Number(e);
-		return Number.isFinite(t) ? L(t) : void 0;
+		return Number.isFinite(t) ? z(t) : void 0;
 	} catch {
 		return;
 	}
 }
-function je(e) {
+function Ae(e) {
 	try {
-		localStorage.setItem(ke, String(L(e)));
+		localStorage.setItem(Oe, String(z(e)));
 	} catch {}
 }
-var Me = class {
+var je = class {
 	constructor(e = window) {
 		this.win = e, this.version = _, this.power = {
 			screenOn: !0,
 			screensaver: !1
-		}, this.pending = /* @__PURE__ */ new Map(), this.stops = /* @__PURE__ */ new Map(), this.last = /* @__PURE__ */ new Map(), this.cards = /* @__PURE__ */ new Set(), this.installed = !1, this.sleep = new Oe((e) => this.stop(e), (e) => {
+		}, this.pending = /* @__PURE__ */ new Map(), this.stops = /* @__PURE__ */ new Map(), this.last = /* @__PURE__ */ new Map(), this.cards = /* @__PURE__ */ new Set(), this.installed = !1, this.sleep = new De((e) => this.stop(e), (e) => {
 			for (let t of this.cards) t.target === e && t.sleepChanged();
 		}), this.onLlCustom = (e) => {
 			let t = e.detail;
 			if (!t || !("stream_card" in t)) return;
-			let n = ye(t.stream_card);
+			let n = xe(t.stream_card);
 			n ? this.request(n) : console.warn("[stream-card] Ignoring a button with an invalid stream_card block:", t);
 		};
 	}
@@ -437,11 +440,11 @@ var Me = class {
 			this.setSleep(t, e.sleep ?? 0);
 			return;
 		}
-		e.action === "volume" && e.volume !== void 0 && je(e.volume / 100);
+		e.action === "volume" && e.volume !== void 0 && Ae(e.volume / 100);
 		let n = [...this.cards].filter((e) => e.target === t && e.isLive);
 		if (n.length) for (let t of n) t.command(e);
 		else if (e.action === "last_channel") {
-			let e = we(t, M(t)?.channel);
+			let e = L(t, j(t)?.channel);
 			e && this.request({
 				...e,
 				target: t,
@@ -472,7 +475,7 @@ var Me = class {
 		return this.stops.get(e) ?? 0;
 	}
 	stop(e) {
-		this.pending.delete(e), this.last.delete(e), this.stops.set(e, this.stopCount(e) + 1), xe(e), this.sleep.cancel(e);
+		this.pending.delete(e), this.last.delete(e), this.stops.set(e, this.stopCount(e) + 1), Ce(e), this.sleep.cancel(e);
 		for (let t of this.cards) t.target === e && t.stopFromController();
 	}
 	navigate(e) {
@@ -515,13 +518,13 @@ var Me = class {
 		}
 	}
 };
-function Ne(e = window) {
+function Me(e = window) {
 	let t = e, n = t[v];
-	return n || (n = new Me(e), t[v] = n), n.install(), n;
+	return n || (n = new je(e), t[v] = n), n.install(), n;
 }
 //#endregion
 //#region src/engines/native-engine.ts
-var Pe = class {
+var Ne = class {
 	constructor() {
 		this.kind = "native", this.emitter = new r(), this.destroyed = !1, this.gotData = !1, this.cleanup = [];
 	}
@@ -582,11 +585,11 @@ var Pe = class {
 			droppedFrames: n?.droppedVideoFrames
 		};
 	}
-}, Fe = async (e, { debug: t, buffer: n = "auto" }) => {
-	if (e === "native") return new Pe();
+}, Pe = async (e, { debug: t, buffer: n = "auto" }) => {
+	if (e === "native") return new Ne();
 	let { MpegtsEngine: r } = await import("./stream-card-mpegts-engine-BRiGUfiI.js");
 	return new r(t, n);
-}, Ie = {
+}, Fe = {
 	cors: "Dispatcharr blocked this page's request (CORS). Check that nothing in front of Dispatcharr removes its Access-Control-Allow-Origin header.",
 	network: "Can't reach Dispatcharr. Check dispatcharr_url and that this device can reach it.",
 	http404: "Dispatcharr doesn't know this channel (404). Check the channel ID.",
@@ -608,10 +611,10 @@ var Pe = class {
 	multiviewStruggling: "This device can't keep up with this many tiles. Use fewer tiles, or a lower-resolution output profile for multiview.",
 	noGroupMatch: "None of the channel_groups match a Dispatcharr group. Groups in Dispatcharr: {groups}."
 };
-function R(e, t = {}) {
-	return Ie[e].replace(/\{(\w+)\}/g, (e, n) => String(t[n] ?? `{${n}}`));
+function B(e, t = {}) {
+	return Fe[e].replace(/\{(\w+)\}/g, (e, n) => String(t[n] ?? `{${n}}`));
 }
-var Le = [
+var Ie = [
 	[/^avc1|^avc3/i, "H.264"],
 	[/^hvc1|^hev1/i, "HEVC (H.265)"],
 	[/^av01/i, "AV1"],
@@ -621,24 +624,24 @@ var Le = [
 	[/^ec-3/i, "E-AC-3 (Dolby Digital Plus)"],
 	[/^opus/i, "Opus"]
 ];
-function z(e) {
-	for (let [t, n] of Le) if (t.test(e)) return n;
+function V(e) {
+	for (let [t, n] of Ie) if (t.test(e)) return n;
 	return e;
 }
-function Re() {
+function Le() {
 	let e = globalThis, t = e.MediaSource ?? e.ManagedMediaSource;
 	return t ? (e) => t.isTypeSupported(e) : void 0;
 }
-function B(e, t = Re()) {
+function Re(e, t = Le()) {
 	if (t) {
 		if (e.videoCodec && !t(`video/mp4; codecs="${e.videoCodec}"`)) return {
 			kind: "codec",
-			message: R("codecVideo", { codec: z(e.videoCodec) }),
+			message: B("codecVideo", { codec: V(e.videoCodec) }),
 			detail: `video ${e.videoCodec} not supported`
 		};
 		if (e.audioCodec && !t(`audio/mp4; codecs="${e.audioCodec}"`)) return {
 			kind: "codec",
-			message: R("codecAudio", { codec: z(e.audioCodec) }),
+			message: B("codecAudio", { codec: V(e.audioCodec) }),
 			detail: `audio ${e.audioCodec} not supported`
 		};
 	}
@@ -653,7 +656,7 @@ function ze(e) {
 		default: return !1;
 	}
 }
-function V(e, t = {}) {
+function H(e, t = {}) {
 	let n = {
 		kind: e.kind,
 		detail: e.detail,
@@ -662,49 +665,49 @@ function V(e, t = {}) {
 	switch (e.kind) {
 		case "cors": return {
 			...n,
-			message: R("cors")
+			message: B("cors")
 		};
 		case "network": return {
 			...n,
-			message: R("network")
+			message: B("network")
 		};
 		case "http": return e.status === 404 ? {
 			...n,
-			message: R("http404")
+			message: B("http404")
 		} : e.status === 401 || e.status === 403 ? {
 			...n,
-			message: R("httpDenied", { status: e.status })
+			message: B("httpDenied", { status: e.status })
 		} : {
 			...n,
-			message: R("http", { status: e.status ?? "?" })
+			message: B("http", { status: e.status ?? "?" })
 		};
 		case "timeout": return {
 			...n,
-			message: R("timeout", { seconds: Math.round((t.startTimeoutMs ?? 0) / 1e3) })
+			message: B("timeout", { seconds: Math.round((t.startTimeoutMs ?? 0) / 1e3) })
 		};
 		case "codec": return e.codec && e.track ? {
 			...n,
-			message: R(e.track === "audio" ? "codecAudio" : "codecVideo", { codec: z(e.codec) })
+			message: B(e.track === "audio" ? "codecAudio" : "codecVideo", { codec: V(e.codec) })
 		} : {
 			...n,
-			message: R("codec")
+			message: B("codec")
 		};
 		case "unsupported-device": return {
 			...n,
-			message: R("unsupportedDevice")
+			message: B("unsupportedDevice")
 		};
 		case "config": return {
 			...n,
-			message: R("config", { detail: e.detail })
+			message: B("config", { detail: e.detail })
 		};
 		case "stall":
 		case "ended":
 		case "media": return t.attempts ? {
 			...n,
-			message: R("gaveUp", { attempts: t.attempts })
+			message: B("gaveUp", { attempts: t.attempts })
 		} : {
 			...n,
-			message: R("media")
+			message: B("media")
 		};
 	}
 }
@@ -722,7 +725,7 @@ async function Be(e, t = 5e3) {
 		clearTimeout(r), n.abort();
 	}
 }
-var Ve = 12e3, He = 15e3, H = 32, U = 18, Ue = .6, We = 16, Ge = 40;
+var Ve = 12e3, He = 15e3, U = 32, W = 18, Ue = .6, We = 16, Ge = 40;
 function Ke(e) {
 	try {
 		let t = e.getVideoPlaybackQuality?.();
@@ -740,11 +743,11 @@ var qe = class {
 		try {
 			if (this.ctx === void 0) {
 				let e = document.createElement("canvas");
-				e.width = H, e.height = U, this.ctx = e.getContext("2d", { willReadFrequently: !0 });
+				e.width = U, e.height = W, this.ctx = e.getContext("2d", { willReadFrequently: !0 });
 			}
 			if (!this.ctx) return this.unavailable = !0, null;
-			this.ctx.drawImage(e, 0, 0, H, U);
-			let t = this.ctx.getImageData(0, 0, H, U).data, n = /* @__PURE__ */ new Uint8Array(576), r = 0, i = 0;
+			this.ctx.drawImage(e, 0, 0, U, W);
+			let t = this.ctx.getImageData(0, 0, U, W).data, n = /* @__PURE__ */ new Uint8Array(576), r = 0, i = 0;
 			for (let e = 0; e < n.length; e++) {
 				let a = t[e * 4] * 77 + t[e * 4 + 1] * 150 + t[e * 4 + 2] * 29 >> 8;
 				n[e] = a, r += a, a > i && (i = a);
@@ -787,18 +790,18 @@ var Ye = class {
 	"media",
 	"http",
 	"timeout"
-]), et = .3, W = [
+]), et = .3, G = [
 	1.5,
 	3,
 	5,
 	8,
 	12
 ], tt = 1.05, nt = .95, rt = 15;
-function G(e) {
-	return Math.max(0, Math.min(W.length - 1, Math.round(e ?? 0) || 0));
+function K(e) {
+	return Math.max(0, Math.min(G.length - 1, Math.round(e ?? 0) || 0));
 }
 var it = 2e4;
-function K(e) {
+function q(e) {
 	let t = e.buffered, n = e.currentTime;
 	for (let e = 0; e < t.length; e++) {
 		if (t.end(e) <= n) continue;
@@ -825,7 +828,7 @@ function ot(e) {
 	let t = e.buffered;
 	return t.length ? t.end(t.length - 1) : 0;
 }
-var q = {
+var J = {
 	sessions: 0,
 	engines: 0
 }, st = class {
@@ -835,7 +838,7 @@ var q = {
 			failures: 0,
 			mutedByPolicy: !1,
 			needsGesture: !1
-		}, this.attemptId = 0, this.disposed = !1, this.gotData = !1, this.lastTime = -1, this.lastProgressAt = 0, this.playingSince = 0, this.holding = !1, this.holdIsStart = !1, this.holdStartedAt = 0, this.holdBufferedEnd = 0, this.sampler = new qe(), this.watch = new Ye(), this.lastSampleAt = 0, this.pictureEvents = [], this.lastSwitchAt = 0, this.switching = !1, this.levelSince = Date.now(), this.rate = 1, this.createEngine = n.createEngine ?? Fe, this.diagnose = n.diagnose ?? Be, this.level = G(n.autoLevel), q.sessions++;
+		}, this.attemptId = 0, this.disposed = !1, this.gotData = !1, this.lastTime = -1, this.lastProgressAt = 0, this.playingSince = 0, this.holding = !1, this.holdIsStart = !1, this.holdStartedAt = 0, this.holdBufferedEnd = 0, this.sampler = new qe(), this.watch = new Ye(), this.lastSampleAt = 0, this.pictureEvents = [], this.lastSwitchAt = 0, this.switching = !1, this.levelSince = Date.now(), this.rate = 1, this.createEngine = n.createEngine ?? Pe, this.diagnose = n.diagnose ?? Be, this.level = K(n.autoLevel), J.sessions++;
 	}
 	get buffer() {
 		return this.opts.buffer ?? "low";
@@ -877,7 +880,7 @@ var q = {
 			return;
 		}
 		if (!this.isCurrent(e)) await t.destroy();
-		else if (this.engine = t, q.engines++, t.on((t) => this.onEngineEvent(e, t)), this.startTimer = setTimeout(() => {
+		else if (this.engine = t, J.engines++, t.on((t) => this.onEngineEvent(e, t)), this.startTimer = setTimeout(() => {
 			this.isCurrent(e) && !this.gotData && this.fail(e, {
 				kind: "timeout",
 				detail: "no data before start timeout"
@@ -903,15 +906,15 @@ var q = {
 		return this.opts.buffer === "auto" && this.source.type === "mpegts";
 	}
 	get startTarget() {
-		return this.auto ? W[this.level] : 8;
+		return this.auto ? G[this.level] : 8;
 	}
 	get resumeTarget() {
-		return this.auto ? W[this.level] : 5;
+		return this.auto ? G[this.level] : 5;
 	}
 	get autoInfo() {
 		return this.auto ? {
 			level: this.level,
-			target: W[this.level],
+			target: G[this.level],
 			rate: this.rate
 		} : void 0;
 	}
@@ -924,14 +927,14 @@ var q = {
 		}
 	}
 	setLevel(e, t) {
-		let n = G(e);
-		this.levelSince = Date.now(), n !== this.level && (this.level = n, this.opts.onAutoLevel?.(n), this.opts.onHealth?.("buffer-level", `${W[n]} s (${t})`));
+		let n = K(e);
+		this.levelSince = Date.now(), n !== this.level && (this.level = n, this.opts.onAutoLevel?.(n), this.opts.onHealth?.("buffer-level", `${G[n]} s (${t})`));
 	}
 	commitRaise() {
-		this.raisedFrom !== void 0 && (this.raisedFrom = void 0, this.levelSince = Date.now(), this.opts.onAutoLevel?.(this.level), this.opts.onHealth?.("buffer-level", `${W[this.level]} s (ran dry)`));
+		this.raisedFrom !== void 0 && (this.raisedFrom = void 0, this.levelSince = Date.now(), this.opts.onAutoLevel?.(this.level), this.opts.onHealth?.("buffer-level", `${G[this.level]} s (ran dry)`));
 	}
 	steer(e) {
-		let t = this.video, n = W[this.level], r = K(t);
+		let t = this.video, n = G[this.level], r = q(t);
 		if (r > n + rt) {
 			t.currentTime = t.currentTime + r - n, this.lastTime = -1;
 			return;
@@ -941,7 +944,7 @@ var q = {
 	}
 	startHold(e) {
 		if (this.holding = !0, this.holdIsStart = e, this.holdStartedAt = Date.now(), this.holdBufferedEnd = ot(this.video), this.lastProgressAt = Date.now(), this.watch.reset(), !e && (this.video.pause(), this.setRate(1), this.opts.onHealth?.("buffering", "reserve ran dry"), this.auto && this.raisedFrom === void 0)) {
-			let e = G(this.level + 1);
+			let e = K(this.level + 1);
 			e !== this.level && (this.raisedFrom = this.level, this.level = e);
 		}
 		this.update({ buffering: !e || this.gotData });
@@ -958,7 +961,7 @@ var q = {
 			});
 			return;
 		}
-		let i = K(t), a = this.holdIsStart ? this.startTarget : this.resumeTarget, o = n - this.holdStartedAt > it;
+		let i = q(t), a = this.holdIsStart ? this.startTarget : this.resumeTarget, o = n - this.holdStartedAt > it;
 		o && i <= 1 && r - t.currentTime > this.resumeTarget ? t.currentTime = r - this.resumeTarget : (i >= a || i > 1 && o) && (at(t), this.holdIsStart || this.commitRaise(), this.holding = !1, this.lastTime = -1, this.lastProgressAt = n, this.update({ buffering: !1 }), this.play(e));
 	}
 	async play(e) {
@@ -995,7 +998,7 @@ var q = {
 			else if (t.type === "media-info") {
 				let e = { ...t };
 				delete e.type, this.update({ mediaInfo: e });
-				let n = B(e);
+				let n = Re(e);
 				if (n) {
 					this.terminal(n);
 					return;
@@ -1011,7 +1014,7 @@ var q = {
 		}
 		let t = this.video, n = Date.now();
 		if (this.source.type === "mpegts" && !t.paused && at(t)) return;
-		if (this.reserved && this.status.state === "playing" && !t.paused && K(t) < et) {
+		if (this.reserved && this.status.state === "playing" && !t.paused && q(t) < et) {
 			this.startHold(!1);
 			return;
 		}
@@ -1020,7 +1023,7 @@ var q = {
 		r === this.lastTime ? (this.watch.reset(), !t.paused && this.gotData && (this.lastProgressAt || (this.lastProgressAt = n), n - this.lastProgressAt > this.stallTimeoutMs && this.handleFailure(e, {
 			kind: "stall",
 			detail: `no progress for ${this.stallTimeoutMs} ms`
-		}))) : (this.lastTime >= 0 && r > this.lastTime && (this.lastProgressAt = n, this.status.state === "playing" ? !this.status.notice && this.source.type === "mpegts" && n - this.playingSince > 3e3 && this.video.videoWidth === 0 ? this.update({ notice: R("noVideo") }) : this.status.failures > 0 && n - this.playingSince > (this.opts.stableMs ?? 3e4) && this.update({ failures: 0 }) : (this.playingSince = n, this.update({ state: "playing" })), this.status.state === "playing" && this.pictureTick(e, n)), this.lastTime = r, this.lastProgressAt || (this.lastProgressAt = n));
+		}))) : (this.lastTime >= 0 && r > this.lastTime && (this.lastProgressAt = n, this.status.state === "playing" ? !this.status.notice && this.source.type === "mpegts" && n - this.playingSince > 3e3 && this.video.videoWidth === 0 ? this.update({ notice: B("noVideo") }) : this.status.failures > 0 && n - this.playingSince > (this.opts.stableMs ?? 3e4) && this.update({ failures: 0 }) : (this.playingSince = n, this.update({ state: "playing" })), this.status.state === "playing" && this.pictureTick(e, n)), this.lastTime = r, this.lastProgressAt || (this.lastProgressAt = n));
 	}
 	pictureTick(e, t) {
 		if (!this.opts.pictureCheck || this.switching || this.video.videoWidth === 0 || t - this.lastSampleAt < 2e3) return;
@@ -1032,7 +1035,7 @@ var q = {
 		let n = Date.now(), r = Math.round((t === "black" ? He : Ve) / 1e3);
 		this.pictureEvents = this.pictureEvents.filter((e) => n - e < Qe), this.pictureEvents.push(n);
 		let i = this.pictureEvents.length;
-		if (this.watch.reset(), this.opts.onHealth?.(t, `${r} s, step ${Math.min(i, 4)}`), i >= 4) this.watch.off.add(t), this.pictureEvents = [], this.opts.onHealth?.("check-paused", `${t} picture keeps coming back`), t === "black" && this.update({ notice: R("pictureBlack") });
+		if (this.watch.reset(), this.opts.onHealth?.(t, `${r} s, step ${Math.min(i, 4)}`), i >= 4) this.watch.off.add(t), this.pictureEvents = [], this.opts.onHealth?.("check-paused", `${t} picture keeps coming back`), t === "black" && this.update({ notice: B("pictureBlack") });
 		else {
 			if (i === 2 && this.opts.switchSource && n - this.lastSwitchAt > 12e4) {
 				this.lastSwitchAt = n, this.switching = !0;
@@ -1074,7 +1077,7 @@ var q = {
 				let n = await this.diagnose(this.source.url);
 				if (!this.isCurrent(e)) return;
 				if (n === "cors") {
-					this.terminal(V({
+					this.terminal(H({
 						kind: "cors",
 						detail: t.detail
 					}));
@@ -1082,7 +1085,7 @@ var q = {
 				}
 			}
 			if (t.kind === "media" && this.status.mediaInfo) {
-				let e = B(this.status.mediaInfo);
+				let e = Re(this.status.mediaInfo);
 				if (e) {
 					this.terminal(e);
 					return;
@@ -1097,7 +1100,7 @@ var q = {
 		this.status.state === "playing" && this.opts.onBeforeReconnect?.(), this.raisedFrom !== void 0 && (this.level = this.raisedFrom, this.raisedFrom = void 0), this.teardownEngine();
 		let i = !n || r > this.opts.maxAttempts, a = i && !!this.opts.keepTrying && $e.has(t.kind);
 		if (i && !a) {
-			this.opts.onHealth?.("gave-up", `${t.kind}: ${t.detail}`), this.terminal(n ? V(t, { attempts: r }) : V(t, { startTimeoutMs: this.opts.startTimeoutMs }));
+			this.opts.onHealth?.("gave-up", `${t.kind}: ${t.detail}`), this.terminal(n ? H(t, { attempts: r }) : H(t, { startTimeoutMs: this.opts.startTimeoutMs }));
 			return;
 		}
 		let o = this.opts.backoffMs ?? Xe, s = a ? Ze : o[Math.min(r - 1, o.length - 1)];
@@ -1123,13 +1126,13 @@ var q = {
 	teardownEngine() {
 		this.clearTimers();
 		let e = this.engine;
-		this.engine = void 0, e && (q.engines--, e.destroy());
+		this.engine = void 0, e && (J.engines--, e.destroy());
 	}
 	async destroy() {
 		this.disposed || (this.teardownEngine(), this.setRate(1), this.disposed = !0, this.attemptId++, this.status = {
 			...this.status,
 			state: "stopped"
-		}, q.sessions--);
+		}, J.sessions--);
 	}
 	getStats() {
 		return this.engine?.getStats(this.video);
@@ -1242,10 +1245,10 @@ var gt = [
 	restart() {
 		clearTimeout(this.timer), this.timer = setTimeout(() => this.commit(), this.delayMs);
 	}
-}, J = "stream-card:settings:", Y = "stream-card-settings";
-function X(e) {
+}, Y = "stream-card:settings:", X = "stream-card-settings";
+function bt(e) {
 	try {
-		let t = localStorage.getItem(J + e);
+		let t = localStorage.getItem(Y + e);
 		if (!t) return {};
 		let n = JSON.parse(t);
 		if (typeof n != "object" || !n) return {};
@@ -1255,33 +1258,33 @@ function X(e) {
 		return {};
 	}
 }
-function bt(e, t) {
+function xt(e, t) {
 	let n = Object.fromEntries(Object.entries(t).filter(([, e]) => e !== void 0));
 	try {
-		Object.keys(n).length ? localStorage.setItem(J + e, JSON.stringify(n)) : localStorage.removeItem(J + e);
+		Object.keys(n).length ? localStorage.setItem(Y + e, JSON.stringify(n)) : localStorage.removeItem(Y + e);
 	} catch {}
-	window.dispatchEvent(new CustomEvent(Y, { detail: {
+	window.dispatchEvent(new CustomEvent(X, { detail: {
 		target: e,
 		settings: n
 	} }));
 }
-var xt = "stream-card:buffer-level";
-function St() {
+var St = "stream-card:buffer-level";
+function Ct() {
 	try {
-		let e = localStorage.getItem(xt), t = e === null ? NaN : Number(e);
+		let e = localStorage.getItem(St), t = e === null ? NaN : Number(e);
 		return Number.isFinite(t) ? t : void 0;
 	} catch {
 		return;
 	}
 }
-function Ct(e) {
+function wt(e) {
 	try {
-		localStorage.setItem(xt, String(e));
+		localStorage.setItem(St, String(e));
 	} catch {}
 }
 //#endregion
 //#region src/styles.ts
-var wt = a`
+var Tt = g`
   :host {
     display: block;
   }
@@ -2367,387 +2370,46 @@ var wt = a`
       transition: none;
     }
   }
-`, Tt = [
-	s,
-	a`
-    ${ae(ie)}
+`, Et = [
+	d,
+	g`
+    ${s(te)}
   `,
-	wt
-], Et = [
-	0,
-	15,
-	30,
-	60,
-	90
-], Dt = (e) => e.target.hidden = !1, Ot = (e) => e.target.hidden = !0;
-function kt(e, t, n = "") {
-	let r = e?.name ?? t ?? "";
-	return d`<span class="logo ${n}" aria-hidden="true">
-    ${e?.logo ? d`<img src=${e.logo} alt="" decoding="async" @load=${Dt} @error=${Ot} />` : m}
-    <span class="ini">${o(r) || "▶"}</span>
-  </span>`;
-}
-function At(e, t = "") {
-	return e === void 0 ? m : d`<span class="bar ${t}"><span style="width:${e.toFixed(1)}%"></span></span>`;
-}
-function jt(e) {
-	let t = e.channel, n = e.title ?? t?.name;
-	if (!n && e.ui !== "playing" || e.ui === "preview" || e.ui === "empty") return m;
-	let r = e.nowNext?.now, i = e.nowNext?.next;
-	return d`<div class="ident ${e.chrome ? "" : "hidden"}">
-    ${kt(t, n, "ident-logo")}
-    <div class="ident-text">
-      <div class="ident-line">
-        ${t?.number ? d`<span class="ident-num mono">${t.number}</span>` : m}
-        <span class="title">${n ?? "Live"}</span>
-      </div>
-      ${r ? d`<div class="ident-now">${r.title}</div>` : m}
-      ${r?.start && r.end ? d`<div class="ident-times mono">
-              <span>${h(r.start)}</span>${At(re(r, e.now))}<span
-                >${h(r.end)}</span
-              >
-            </div>` : m}
-      ${i ? d`<div class="ident-next">
-              Next${i.start ? d` <span class="mono">${h(i.start)}</span>` : m}:
-              ${i.title}
-            </div>` : m}
-    </div>
-  </div>`;
-}
-function Mt(e) {
-	return e.ui !== "playing" && !e.sleep || e.numberEntry?.digits ? m : d`<div class="chips-top ${e.chrome ? "" : "hidden"}">
-    ${e.sleep && !e.sleep.warning ? d`<span class="glass chip-top sleep-chip">
-            ${p("sleep")} Stops in <span class="mono">${ee(e.sleep.remainingMs)}</span>
-          </span>` : m}
-    ${e.ui === "playing" ? d`<span class="glass chip-top live"
-            ><span class="live-dot" role="img" aria-label="Live"></span>LIVE</span
-          >` : m}
-  </div>`;
-}
-function Nt(e) {
-	let t = e.numberEntry;
-	if (t?.digits) {
-		let e = t.candidates.slice(0, 3).map((e) => g(e)).join(" · ");
-		return d`<div class="osd typing" role="status" aria-label="Channel ${t.digits}">
-      <span class="osd-number mono">${t.digits}<span class="cursor">_</span></span>
-      <span class="osd-hint">${e || "No channel with that number"}</span>
-    </div>`;
-	}
-	let n = e.channel;
-	return !e.osd || !n?.number || e.ui === "connecting" || e.ui === "error" ? m : d`<div class="osd" aria-hidden="true">
-    <span class="osd-number mono">${n.number}</span>
-    <span class="osd-text">
-      <span class="osd-label">Now on</span>
-      <span class="osd-name">${n.name}</span>
-    </span>
-  </div>`;
-}
-function Z(e, t) {
-	return d`<div class="layer ${t ? "dim" : ""}">
-    <button class="big-play" @click=${e.play} aria-label="Play">${p("play")}</button>
-    ${t ? d`<div class="message">${t}</div>` : m}
-  </div>`;
-}
-function Pt(e, t) {
-	if (e.sleep?.warning && (e.ui === "playing" || e.ui === "reconnecting")) return d`<div class="layer dim sleep-warning" role="alert">
-      <span class="state-icon">${p("sleep")}</span>
-      <div class="message big">
-        Stopping in <span class="mono">${ne(e.sleep.remainingMs)}</span>
-      </div>
-      <div class="actions">
-        ${t.setSleep ? d`<button class="pill light keep-watching" @click=${() => t.setSleep?.(0)}>
-                Keep watching
-              </button>` : m}
-        ${t.extendSleep ? d`<button class="pill extend-sleep" @click=${() => t.extendSleep?.(30)}>
-                +30 min
-              </button>` : m}
-      </div>
-    </div>`;
-	switch (e.ui) {
-		case "preview": {
-			let t = e.edit;
-			return d`<div class="layer edit">
-        <span class="state-icon muted">${p("tv")}</span>
-        <div class="message">Playback is off while editing</div>
-        ${t ? d`<div class="edit-tags">
-                <span class="tag mono">target: ${t.target}</span>
-                ${t.profile ? d`<span class="tag mono">profile ${t.profile}</span>` : m}
-                ${t.favourites ? d`<span class="tag mono"
-                        >${t.favourites} favourite${t.favourites === 1 ? "" : "s"}</span
-                      >` : m}
-              </div>` : m}
-      </div>`;
-		}
-		case "empty": return d`<div class="layer">
-        <span class="state-icon muted">${p("tv")}</span>
-        <div class="message">${e.hasGuide ? "Choose a channel below" : "Choose a channel"}</div>
-      </div>`;
-		case "error": {
-			let n = t.lastChannel && e.previousChannel ? e.previousChannel : void 0;
-			return d`<div class="layer solid" role="alert">
-        <span class="state-icon warn">${p("alert")}</span>
-        <div class="message">${e.errorMessage}</div>
-        ${e.errorDetail ? d`<div class="message detail">${e.errorDetail}</div>` : m}
-        <div class="actions">
-          ${n ? d`<button class="pill primary back-to" @click=${() => t.lastChannel?.()}>
-                  Back to <span class="mono">${n.number ?? n.name}</span>
-                </button>` : m}
-          ${e.canRetry ? d`<button class="pill ${n ? "" : "primary"} retry" @click=${t.play}>
-                  ${p("refresh")} Retry
-                </button>` : m}
-          ${e.hasGuide ? d`<button
-                  class="pill channels"
-                  @click=${t.toggleGuide}
-                  aria-expanded=${e.guideOpen ? "true" : "false"}
-                >
-                  ${p("guide")} Channels
-                </button>` : m}
-        </div>
-      </div>`;
-		}
-		case "connecting": {
-			if (e.needsGesture) return Z(t, "Tap to play");
-			let n = e.channel, r = e.title ?? n?.name;
-			return d`<div class="layer tuning">
-        ${r ? kt(n, r, "tuning-logo") : m}
-        ${r ? d`<div class="tuning-name">
-                ${n?.number ? d`<span class="mono">${n.number}</span>` : m} ${r}
-              </div>` : m}
-        <div class="tuning-status">
-          <span
-            class="spinner small"
-            role="progressbar"
-            aria-label=${e.buffering ? "Buffering" : "Tuning"}
-          ></span>
-          <span class="message">${e.buffering ? "Buffering…" : "Tuning"}</span>
-        </div>
-      </div>`;
-		}
-		case "reconnecting": {
-			if (e.needsGesture) return Z(t, "Tap to play");
-			let n = e.retryAt ? Math.max(0, Math.ceil((e.retryAt - e.now) / 1e3)) : 0;
-			return d`<div class="layer dim">
-        <span class="spinner" role="progressbar" aria-label="Reconnecting"></span>
-        <div class="message big">Picture dropped. Reconnecting…</div>
-        <div class="message sub mono">
-          try ${e.failures} of ${e.maxAttempts}${n > 0 ? ` · next in ${n} s` : ""}
-        </div>
-      </div>`;
-		}
-		case "playing": return e.needsGesture ? Z(t, "Tap to play") : e.mutedByPolicy ? d`<div class="layer">
-          <button class="pill glass unmute" @click=${t.unmute} aria-label="Unmute">
-            ${p("volumeOff")} Tap for sound
-          </button>
-        </div>` : e.buffering ? d`<div class="layer">
-          <span class="spinner" role="progressbar" aria-label="Buffering"></span>
-          <div class="message">Buffering…</div>
-        </div>` : m;
-		case "ready": return Z(t, e.stoppedReason);
-	}
-}
-function Ft(e, t) {
-	if (!e.sleepMenuOpen || !t.setSleep) return m;
-	let n = e.sleep ? Math.ceil(e.sleep.remainingMs / 6e4) : 0;
-	return d`<div class="glass sleep-menu" role="group" aria-label="Stop playing after">
-    <span class="menu-label">Stop playing after</span>
-    <div class="sleep-options">
-      ${Et.map((r) => {
-		let i = r === 0 ? !e.sleep : Et.includes(n) && n === r;
-		return d`<button
-          class="sleep-option"
-          aria-pressed=${i ? "true" : "false"}
-          @click=${(e) => {
-			e.stopPropagation(), t.setSleep?.(r), t.toggleSleepMenu();
-		}}
-        >
-          ${r === 0 ? "Off" : `${r}m`}
-        </button>`;
-	})}
-    </div>
-  </div>`;
-}
-var It = {
-	auto: "Adjusts to this device: more reserve after a stutter, less once smooth",
-	low: "Starts fast, stays close to live",
-	stable: "Smoother on slow devices, a few seconds behind"
-};
-function Lt(e, t) {
-	let n = e.settings, r = t.settings;
-	if (!n?.open || !r) return m;
-	let i = (e, t) => d`<button
-      class="seg-option buffer-${e}"
-      role="radio"
-      aria-checked=${n.buffer === e ? "true" : "false"}
-      @click=${() => r.setBuffer(e)}
-    >
-      ${t}
-    </button>`, a = (e, t, n, r) => d`<button
-      class="setting toggle ${e}"
-      role="switch"
-      aria-checked=${n ? "true" : "false"}
-      @click=${() => r(!n)}
-    >
-      <span class="setting-name">${t}</span>
-      <span class="switch" aria-hidden="true"></span>
-    </button>`;
-	return d`<div class="glass menu settings-panel" role="group" aria-label="Settings">
-    <div class="menu-head">
-      <span class="menu-label">On this device</span>
-      ${n.custom ? d`<button
-              class="reset-settings"
-              @click=${() => r.reset()}
-              title="Use the dashboard's settings"
-            >
-              Reset
-            </button>` : m}
-    </div>
-    <div class="setting">
-      <span class="setting-name">Buffering</span>
-      <div class="seg" role="radiogroup" aria-label="Buffering">
-        ${i("auto", "Auto")} ${i("low", "Low delay")} ${i("stable", "Stable")}
-      </div>
-      <span class="setting-hint">${It[n.buffer]}</span>
-    </div>
-    ${n.nowNext === void 0 ? m : a("set-nownext", "Now and next", n.nowNext, r.setNowNext)}
-    ${a("set-stats", "Stats overlay", n.stats, r.setStats)}
-  </div>`;
-}
-function Rt(e, t) {
-	if (e.ui === "preview" || e.ui === "empty" || e.ui === "error" || e.layout === "tv") return m;
-	let n = e.ui === "playing" || e.ui === "connecting" || e.ui === "reconnecting", r = e.previousChannel, i = e.nowNext?.next, a = Math.round((e.muted ? 0 : e.volume ?? 1) * 100);
-	return d`<div class="controls ${e.chrome ? "" : "hidden"}" @click=${zt}>
-    <div class="group transport">
-      ${n ? d`<button class="ctl ctl-stop" @click=${t.stop} aria-label="Stop">
-              ${p("stop")}
-            </button>` : m}
-      ${t.lastChannel && r ? d`<button
-              class="ctl ctl-last"
-              @click=${() => t.lastChannel?.()}
-              aria-label="Last channel: ${g(r)}"
-              title="Last channel: ${g(r)}"
-            >
-              ${p("last")}
-            </button>` : m}
-      ${e.canStep ? d`<span class="sep" aria-hidden="true"></span>
-              <button class="ctl ctl-down" @click=${t.channelDown} aria-label="Previous channel">
-                ${p("chevronDown")}
-              </button>
-              <button class="ctl ctl-up" @click=${t.channelUp} aria-label="Next channel">
-                ${p("chevronUp")}
-              </button>` : m}
-      <span class="row-break" aria-hidden="true"></span>
-    </div>
-    <div class="group upnext ${i ? "" : "empty"}">
-      ${i ? d`<span class="upnext-label">Next</span>
-              ${i.start ? d`<span class="mono upnext-time">${h(i.start)}</span>` : m}
-              <span class="upnext-title">${i.title}</span>` : m}
-    </div>
-    <div class="group sound">
-      <button class="ctl ctl-mute" @click=${t.toggleMute} aria-label=${e.muted ? "Unmute" : "Mute"}>
-        ${p(e.muted ? "volumeOff" : a < 50 ? "volumeLow" : "volumeHigh")}
-      </button>
-      ${t.setVolume ? d`<input
-              class="vol-slider"
-              type="range"
-              min="0"
-              max="100"
-              step="1"
-              aria-label="Volume"
-              .value=${String(a)}
-              style="--vol:${a}%"
-              @input=${(e) => t.setVolume?.(Number(e.target.value) / 100)}
-            />` : m}
-      <span class="sep" aria-hidden="true"></span>
-      ${t.setSleep ? d`<button
-              class="ctl ctl-sleep ${e.sleep || e.sleepMenuOpen ? "on" : ""}"
-              @click=${t.toggleSleepMenu}
-              aria-label=${e.sleep ? `Sleep timer, ${ee(e.sleep.remainingMs)} left` : "Sleep timer"}
-              aria-expanded=${e.sleepMenuOpen ? "true" : "false"}
-            >
-              ${p("sleep")}
-            </button>` : m}
-      ${e.hasGuide ? d`<button
-              class="ctl ctl-channels ${e.guideOpen ? "on" : ""}"
-              @click=${t.toggleGuide}
-              aria-label=${e.guideOpen ? "Hide channels" : "Channels"}
-              aria-expanded=${e.guideOpen ? "true" : "false"}
-            >
-              ${p("guide")}
-            </button>` : m}
-      ${t.multiview ? d`<button
-              class="ctl ctl-multiview"
-              @click=${() => t.multiview?.()}
-              aria-label="Multiview"
-            >
-              ${p("grid")}
-            </button>` : m}
-      ${e.settings && t.settings ? d`<button
-              class="ctl ctl-settings ${e.settings.open ? "on" : ""}"
-              @click=${t.settings.toggle}
-              aria-label="Settings"
-              aria-expanded=${e.settings.open ? "true" : "false"}
-            >
-              ${p("settings")}
-            </button>` : m}
-      <button
-        class="ctl ctl-fullscreen"
-        @click=${t.toggleFullscreen}
-        aria-label=${e.fullscreen ? "Exit full screen" : "Full screen"}
-      >
-        ${p(e.fullscreen ? "fullscreenExit" : "fullscreen")}
-      </button>
-      ${Ft(e, t)} ${Lt(e, t)}
-    </div>
-  </div>`;
-}
-function zt(e) {
-	e.stopPropagation();
-}
-function Bt(e, t) {
-	return e.layout !== "tv" || !e.chrome || e.ui === "preview" ? m : d`<div class="tv-hints" aria-hidden="true">
-    ${t ? d`<span><span class="key">▲</span><span class="key">▼</span>Channel</span>
-            <span><span class="key mono">0–9</span>Number</span>
-            <span><span class="key">OK</span>Guide</span>
-            <span><span class="key">BACK</span>Last channel</span>` : m}
-    <span class="tv-clock mono">${h(e.now)}</span>
-  </div>`;
-}
-//#endregion
-//#region src/stream-card.ts
-var Q, Vt = 4e3, Ht = 2600, Ut = 1e4, Wt = /* @__PURE__ */ new Set([
+	Tt
+], Z, Dt = 4e3, Ot = 2600, kt = 1e4, At = /* @__PURE__ */ new Set([
 	"HUI-CARD-PREVIEW",
 	"HUI-CARD-PICKER",
 	"HUI-DIALOG-EDIT-CARD",
 	"HUI-CARD-ELEMENT-EDITOR"
-]), Gt;
-function Kt() {
-	Gt ?? (Gt = import("./stream-card-picker-BNWjV-p-.js").then(({ PICKER_TAG: e, StreamCardPicker: t }) => {
+]), jt;
+function Mt() {
+	jt ?? (jt = import("./stream-card-picker-BZhwTmth.js").then(({ PICKER_TAG: e, StreamCardPicker: t }) => {
 		customElements.get(e) || customElements.define(e, t);
 	}));
 }
-function qt(e) {
+function Nt(e) {
 	let t = e;
 	for (let e = 0; t && e < 60; e++) {
-		if (t instanceof Element && Wt.has(t.tagName)) return !0;
+		if (t instanceof Element && At.has(t.tagName)) return !0;
 		t = t.parentNode ?? (t instanceof ShadowRoot ? t.host : null);
 	}
 	return !1;
 }
-var Jt = class extends te {
+var Pt = class extends c {
 	constructor() {
-		super(), this.health = [], this.wantPlaying = !1, this.hold = "disconnected", this.idleStopped = !1, this.controlsVisible = !0, this.inEditor = !1, this.fullscreen = !1, this.channelState = "idle", this.guideOpen = !1, this.overlayOpen = !1, this.sleepMenuOpen = !1, this.settingsOpen = !1, this.deviceSettings = {}, this.osdUntil = 0, this.osdPending = !1, this.keysSeen = !1, this.layout = f(), this.requestSeq = 0, this.lookupPending = !1, this.lookupPlay = !1, this.numbers = new yt((e) => this.tuneNumber(e), () => this.refresh(), (e) => this.channels?.numberIsComplete(e) ?? !1), this.mvOn = !1, this.mvAllowed = !1, this.enterMultiview = async (e) => {
+		super(), this.health = [], this.wantPlaying = !1, this.hold = "disconnected", this.idleStopped = !1, this.controlsVisible = !0, this.inEditor = !1, this.fullscreen = !1, this.channelState = "idle", this.guideOpen = !1, this.overlayOpen = !1, this.sleepMenuOpen = !1, this.settingsOpen = !1, this.deviceSettings = {}, this.osdUntil = 0, this.osdPending = !1, this.keysSeen = !1, this.layout = m(), this.requestSeq = 0, this.lookupPending = !1, this.lookupPlay = !1, this.numbers = new yt((e) => this.tuneNumber(e), () => this.refresh(), (e) => this.channels?.numberIsComplete(e) ?? !1), this.mvOn = !1, this.mvAllowed = !1, this.enterMultiview = async (e) => {
 			if (e?.stopPropagation(), !this.multiviewAvailable || this.isPreview || this.mvOn) return;
 			if (!this.mv) {
 				let { defineMultiview: e, MULTIVIEW_TAG: t } = await import("./stream-card-multiview-iC1Ew4We.js");
 				if (e({
-					LitElement: te,
-					html: d,
-					css: a,
-					nothing: m,
-					svg: u,
+					LitElement: c,
+					html: u,
+					css: g,
+					nothing: h,
+					svg: o,
 					PlaybackSession: st,
-					icon: p,
-					format: R
+					icon: ie,
+					format: B
 				}), !this.multiviewAvailable || this.isPreview || this.mvOn || this.mv) return;
 				let n = document.createElement(t);
 				n.resolve = (e) => this.tileItem(this.requestFor(e), e), n.addEventListener("multiview-exit", (e) => {
@@ -2769,12 +2431,12 @@ var Jt = class extends te {
 			}
 			this.overlayOpen = !1, this.ensureChannels(), this.mv.open(t, this.effectiveMuted), this.mvOn = !0, this.mvAllowed = !1, this.evaluate();
 		}, this.switchSource = async () => {
-			let e = this.config?.switchSource, t = this.source ? be(this.source.url) : void 0, n = this.hassRef;
+			let e = this.config?.switchSource, t = this.source ? Se(this.source.url) : void 0, n = this.hassRef;
 			if (!e || !t || typeof n?.callService != "function" || this.isPreview) return !1;
 			let [r, i] = e.split("."), a;
 			try {
 				return await Promise.race([n.callService(r, i, { channel: t }), new Promise((e, t) => {
-					a = setTimeout(() => t(/* @__PURE__ */ Error("timed out")), Ut);
+					a = setTimeout(() => t(/* @__PURE__ */ Error("timed out")), kt);
 				})]), !0;
 			} catch (e) {
 				return console.warn("[stream-card] switch_source failed", e), !1;
@@ -2790,7 +2452,10 @@ var Jt = class extends te {
 			let t = e.detail, n = this.guidePlacement, r = n === "overlay" || n === "below" && !this.guideOpen, i = r && this.pickerHasFocus();
 			r && (this.overlayOpen = !1), this.playChannel(t), i && this.restoreFocus();
 		}, this.togglePicker = (e) => {
-			e?.stopPropagation();
+			if (e?.stopPropagation(), this.app && !this.isPreview) {
+				this.ensureChannels(), this.app.showGuide();
+				return;
+			}
 			let t = this.uiState === "error" || this.guidePlacement === void 0;
 			this.guideOverlays ? this.overlayOpen = t : this.guideOpen = t, t && (this.ensureChannels(), this.guideOverlays || this.updateComplete.then(() => this.renderRoot.querySelector("stream-card-picker")?.scrollIntoView({
 				block: "nearest",
@@ -2819,8 +2484,8 @@ var Jt = class extends te {
 		}, this.pressDigit = (e) => {
 			this.channels && !this.isPreview && (this.numbers.press(e), this.showControls());
 		}, this.clearDigits = () => this.numbers.clear(), this.commitDigits = () => this.numbers.commit(), this.deleteDigit = () => this.numbers.delete(), this.setVolume = (e) => {
-			let t = L(e);
-			this.video.volume = t, je(t), t > 0 && this.effectiveMuted && !this.status?.mutedByPolicy ? this.toggleMute() : this.refresh();
+			let t = z(e);
+			this.video.volume = t, Ae(t), t > 0 && this.effectiveMuted && !this.status?.mutedByPolicy ? this.toggleMute() : this.refresh();
 		}, this.setSleep = (e) => {
 			this.controller.setSleep(this.target, e);
 		}, this.extendSleep = (e) => {
@@ -2829,6 +2494,10 @@ var Jt = class extends te {
 			if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || this.isPreview) return;
 			let t = e.composedPath();
 			if (t.some((e) => e instanceof HTMLElement && (e.tagName === "INPUT" || e.tagName === "TEXTAREA" || e.tagName === "SELECT" || e.tagName === "STREAM-CARD-PICKER" || e.isContentEditable))) return;
+			if (this.app?.key(e)) {
+				e.preventDefault();
+				return;
+			}
 			let n = !!this.numbers.digits, r = !0;
 			/^\d$/.test(e.key) ? this.pressDigit(e.key) : e.key === "Enter" && n ? this.commitDigits() : e.key === "Enter" && !t.some((e) => e instanceof HTMLButtonElement) ? this.togglePicker() : e.key === "Escape" && n ? this.clearDigits() : e.key === "Escape" && (this.settingsOpen || this.sleepMenuOpen) ? (this.settingsOpen = this.sleepMenuOpen = !1, this.showControls()) : e.key === "Backspace" ? n ? this.deleteDigit() : this.lastChannel() : e.key === "ArrowUp" || e.key === "PageUp" || e.key === "ChannelUp" ? this.channelUp() : e.key === "ArrowDown" || e.key === "PageDown" || e.key === "ChannelDown" ? this.channelDown() : e.key === "m" || e.key === "M" || e.key === "AudioVolumeMute" ? this.toggleMute() : e.key === "f" || e.key === "F" ? this.toggleFullscreen() : r = !1, r && e.preventDefault();
 		}, this.stop = (e) => {
@@ -2848,7 +2517,7 @@ var Jt = class extends te {
 			setBuffer: (e) => this.changeSettings({ buffer: e }),
 			setNowNext: (e) => this.changeSettings({ nowNext: e }),
 			setStats: (e) => this.changeSettings({ stats: e }),
-			reset: () => this.config && bt(this.config.target, {})
+			reset: () => this.config && xt(this.config.target, {})
 		}, this.onSettingsEvent = (e) => {
 			let t = e.detail;
 			if (!this.config || t.target !== this.config.target) return;
@@ -2860,7 +2529,7 @@ var Jt = class extends te {
 			this.sleepMenuOpen || this.settingsOpen ? (this.sleepMenuOpen = !1, this.settingsOpen = !1, this.showControls()) : this.status?.mutedByPolicy ? this.unmute() : this.controlsVisible && this.status?.state === "playing" ? (this.controlsVisible = !1, clearTimeout(this.controlsTimer), this.refresh()) : this.showControls();
 		}, this.toggleFullscreen = async (e) => {
 			e?.stopPropagation();
-			let t = document, n = this.renderRoot.querySelector(".stage");
+			let t = document, n = this.renderRoot.querySelector(".stage, .app-stage");
 			try {
 				if (this.fullscreen) {
 					t.exitFullscreen ? await t.exitFullscreen() : t.webkitExitFullscreen?.();
@@ -2873,13 +2542,13 @@ var Jt = class extends te {
 		}, this.onFullscreenChange = () => {
 			let e = this.renderRoot, t = document, n = this.fullscreen;
 			this.fullscreen = !!e.fullscreenElement || (t.webkitFullscreenElement ?? null) === this, this.fullscreen !== n && (this.overlayOpen = !1), this.refresh();
-		}, this.nowNextFn = (e) => this.nowNext(e), this.preview = !1, this.editMode = !1, this._ui = 0, this.controller = Ne(), this.video = document.createElement("video"), this.video.playsInline = !0, this.video.setAttribute("playsinline", ""), this.video.setAttribute("webkit-playsinline", ""), this.video.preload = "none", this.video.controls = !1, this.video.muted = !0, this.video.volume = Ae() ?? 1, this.video.disableRemotePlayback = !0, this.still = document.createElement("canvas"), this.still.className = "still", this.still.hidden = !0, this.watcher = new _t(this, this.controller.power, () => this.evaluate(), () => this.onIdle());
+		}, this.nowNextFn = (e) => this.nowNext(e), this.preview = !1, this.editMode = !1, this._ui = 0, this.controller = Me(), this.video = document.createElement("video"), this.video.playsInline = !0, this.video.setAttribute("playsinline", ""), this.video.setAttribute("webkit-playsinline", ""), this.video.preload = "none", this.video.controls = !1, this.video.muted = !0, this.video.volume = ke() ?? 1, this.video.disableRemotePlayback = !0, this.still = document.createElement("canvas"), this.still.className = "still", this.still.hidden = !0, this.watcher = new _t(this, this.controller.power, () => this.evaluate(), () => this.onIdle());
 	}
 	setConfig(e) {
 		let t = this.config?.target;
-		this.config = ge(e), this.deviceSettings = X(this.config.target), this.health = ut(this.config.target), this.config.settings || (this.settingsOpen = !1), this.syncStatsTimer(), this.config.guide !== this.guideMode && (this.guideMode = this.config.guide, this.guideOpen = this.config.guide === "open"), t && t !== this.config.target && this.isConnected && (this.controller.unregister(this), this.controller.register(this));
+		this.config = ve(e), this.deviceSettings = bt(this.config.target), this.health = ut(this.config.target), this.config.settings || (this.settingsOpen = !1), this.syncStatsTimer(), this.config.guide !== this.guideMode && (this.guideMode = this.config.guide, this.guideOpen = this.config.guide === "open"), t && t !== this.config.target && this.isConnected && (this.controller.unregister(this), this.controller.register(this));
 		let n = this.channelListKey();
-		n !== this.channelsKey && (this.channels = void 0, this.channelsPromise = void 0, this.channelState = "idle", this.channelsKey = n, this.isConnected && this.ensureChannels()), this.syncGuide(), this.mvOn && !this.multiviewAvailable && this.exitMultiview(), this.configureMultiview(), this.request ? this.applyRequest(this.request, this.lookupPending ? this.lookupPlay : this.wantPlaying) : this.isConnected && this.pickInitialRequest(), this.refresh();
+		n !== this.channelsKey && (this.channels = void 0, this.channelsPromise = void 0, this.channelState = "idle", this.channelsKey = n, this.isConnected && this.ensureChannels()), this.syncGuide(), this.syncApp(), this.mvOn && !this.multiviewAvailable && this.exitMultiview(), this.configureMultiview(), this.request ? this.applyRequest(this.request, this.lookupPending ? this.lookupPlay : this.wantPlaying) : this.isConnected && this.pickInitialRequest(), this.refresh();
 	}
 	static async getConfigForm() {
 		return (await import("./stream-card-editor-form-DnjJoJK1.js")).configForm;
@@ -2943,17 +2612,20 @@ var Jt = class extends te {
 		return this.preview || this.editMode || this.inEditor;
 	}
 	connectedCallback() {
-		super.connectedCallback(), this.inEditor = qt(this), this.controller.register(this), this.watcher.attach(), this.addEventListener("keydown", this.onKeySeen), document.addEventListener("fullscreenchange", this.onFullscreenChange), document.addEventListener("webkitfullscreenchange", this.onFullscreenChange), this.pickInitialRequest(), this.stopGen !== void 0 && this.stopGen !== this.controller.stopCount(this.target) && this.stopFromController(), this.ensureChannels(), this.syncGuide(), window.addEventListener(Y, this.onSettingsEvent), window.addEventListener("online", this.onNetworkBack), window.addEventListener(b, this.onNetworkBack), this.config && (this.deviceSettings = X(this.config.target)), this.syncStatsTimer(), this.addEventListener("keydown", this.onKeyDown), this.sleepChanged(), this.evaluate();
+		super.connectedCallback(), this.inEditor = Nt(this), this.controller.register(this), this.watcher.attach(), this.addEventListener("keydown", this.onKeySeen), document.addEventListener("fullscreenchange", this.onFullscreenChange), document.addEventListener("webkitfullscreenchange", this.onFullscreenChange), this.pickInitialRequest(), this.stopGen !== void 0 && this.stopGen !== this.controller.stopCount(this.target) && this.stopFromController(), this.ensureChannels(), this.syncGuide(), window.addEventListener(X, this.onSettingsEvent), window.addEventListener("online", this.onNetworkBack), window.addEventListener(b, this.onNetworkBack), this.config && (this.deviceSettings = bt(this.config.target)), this.syncStatsTimer(), this.addEventListener("keydown", this.onKeyDown), this.sleepChanged(), this.syncApp(), this.app?.connect(), this.evaluate();
 	}
 	disconnectedCallback() {
-		this.watcher.detach(), this.controller.unregister(this), document.removeEventListener("fullscreenchange", this.onFullscreenChange), document.removeEventListener("webkitfullscreenchange", this.onFullscreenChange), window.removeEventListener(Y, this.onSettingsEvent), window.removeEventListener("online", this.onNetworkBack), window.removeEventListener(b, this.onNetworkBack), clearInterval(this.debugTimer), this.debugTimer = void 0, clearTimeout(this.controlsTimer), clearTimeout(this.zapTimer), this.zapTimer = void 0, this.syncGuide(), clearInterval(this.sleepTicker), this.sleepTicker = void 0, this.removeEventListener("keydown", this.onKeyDown), this.numbers.clear(), clearTimeout(this.tickTimer), this.removeEventListener("keydown", this.onKeySeen), super.disconnectedCallback(), this.evaluate();
-	}
-	firstUpdated() {
-		let e = this.renderRoot.querySelector(".video-host");
-		e?.appendChild(this.video), e?.appendChild(this.still);
+		this.watcher.detach(), this.controller.unregister(this), document.removeEventListener("fullscreenchange", this.onFullscreenChange), document.removeEventListener("webkitfullscreenchange", this.onFullscreenChange), window.removeEventListener(X, this.onSettingsEvent), window.removeEventListener("online", this.onNetworkBack), window.removeEventListener(b, this.onNetworkBack), clearInterval(this.debugTimer), this.debugTimer = void 0, clearTimeout(this.controlsTimer), clearTimeout(this.zapTimer), this.zapTimer = void 0, this.syncGuide(), clearInterval(this.sleepTicker), this.sleepTicker = void 0, this.removeEventListener("keydown", this.onKeyDown), this.numbers.clear(), clearTimeout(this.tickTimer), this.removeEventListener("keydown", this.onKeySeen), this.app?.disconnect(), super.disconnectedCallback(), this.evaluate();
 	}
 	updated(e) {
-		(e.has("preview") || e.has("editMode")) && (!this.isPreview && this.lookupPending && this.request && this.applyRequest(this.request, this.lookupPlay), this.ensureChannels(), this.syncGuide(), this.evaluate());
+		let t = this.renderRoot.querySelector(".video-host");
+		t && this.video.parentNode !== t && t.append(this.video, this.still), (e.has("preview") || e.has("editMode")) && (!this.isPreview && this.lookupPending && this.request && this.applyRequest(this.request, this.lookupPlay), this.ensureChannels(), this.syncGuide(), this.syncApp(), this.evaluate());
+	}
+	syncApp() {
+		let e = this.config?.chrome ?? "standard";
+		e === "standard" ? delete this.dataset.chrome : (this.dataset.chrome = e, !(this.isPreview || this.app || this.appLoading) && (this.appLoading = import("./stream-card-app-Bf_RdN5D.js").then(({ AppShell: e, appStyles: t, hostFor: n }) => {
+			a(this.renderRoot, [...Et, t]), this.app = new e(n(this)), this.isConnected && this.app.connect(), this.refresh();
+		})));
 	}
 	channelListKey() {
 		let e = this.config;
@@ -2966,21 +2638,21 @@ var Jt = class extends te {
 	ensureChannels(e = !1) {
 		let t = this.config;
 		if (!t?.channelList || !t.m3uUrl || this.isPreview) return Promise.resolve(void 0);
-		if (Kt(), this.channelsPromise && !e) return this.channelsPromise;
+		if (Mt(), this.channelsPromise && !e) return this.channelsPromise;
 		this.channelState = "loading", this.channelMessage = void 0, this.refresh();
 		let n = this.channelListKey();
-		return this.channelsPromise = l(t.m3uUrl, { force: e }).then((e) => {
-			if (n === this.channelListKey()) return this.channels = new c(e, {
+		return this.channelsPromise = ee(t.m3uUrl, { force: e }).then((e) => {
+			if (n === this.channelListKey()) return this.channels = new f(e, {
 				groups: t.channelGroups,
 				favourites: t.favourites
-			}), this.channelState = "ready", this.channelMessage = this.channels.size ? void 0 : this.channels.total ? R("noGroupMatch", { groups: this.channels.allGroups.join(", ") }) : R("noChannels"), this.refresh(), this.channels;
+			}), this.channelState = "ready", this.channelMessage = this.channels.size ? void 0 : this.channels.total ? B("noGroupMatch", { groups: this.channels.allGroups.join(", ") }) : B("noChannels"), this.refresh(), this.channels;
 		}, (e) => {
-			n === this.channelListKey() && (this.channelState = "error", this.channelMessage = R("channelsFailed", { detail: e instanceof Error ? e.message : String(e) }), this.channelsPromise = void 0, this.refresh());
+			n === this.channelListKey() && (this.channelState = "error", this.channelMessage = B("channelsFailed", { detail: e instanceof Error ? e.message : String(e) }), this.channelsPromise = void 0, this.refresh());
 		}), this.channelsPromise;
 	}
 	syncGuide() {
 		let e = this.config, t = this.isConnected && !this.isPreview && e?.epg ? e.epgUrl : void 0;
-		this.guideUrl !== t && (this.guideUnsub?.(), this.guideUnsub = void 0, this.guide = void 0, this.guideUrl = t, t && import("./stream-card-epg-Bj6O2OjW.js").then(({ guideFeed: e }) => {
+		this.guideUrl !== t && (this.guideUnsub?.(), this.guideUnsub = void 0, this.guide = void 0, this.guideUrl = t, t && import("./stream-card-epg-BZbbO0oy.js").then(({ guideFeed: e }) => {
 			this.guideUrl === t && (this.guide = e(t), this.guideUnsub = this.guide.subscribe(() => this.refresh()));
 		}));
 	}
@@ -3015,7 +2687,7 @@ var Jt = class extends te {
 			this.applyRequest(t, e.autoplay);
 			return;
 		}
-		let n = e.rememberChannel ? M(this.target) : void 0;
+		let n = e.rememberChannel ? j(this.target) : void 0;
 		if (n) {
 			let t = {
 				channel: n.channel,
@@ -3046,7 +2718,7 @@ var Jt = class extends te {
 			url: e.url,
 			type: e.type,
 			title: e.title
-		}, i = k(r, n);
+		}, i = O(r, n);
 		return {
 			request: r,
 			source: {
@@ -3076,13 +2748,13 @@ var Jt = class extends te {
 		let n = ++this.requestSeq;
 		this.stopGen = this.controller.stopCount(this.target);
 		let r = e.channel;
-		if (this.lookupPending = !1, r && !e.url && !D(r) && this.config.channelList) {
+		if (this.lookupPending = !1, r && !e.url && !E(r) && this.config.channelList) {
 			if (this.request = e, this.idleStopped = !1, this.lookupPending = !0, this.lookupPlay = t, this.refresh(), this.isPreview) return;
 			this.ensureChannels().then((t) => {
 				if (n !== this.requestSeq) return;
 				this.lookupPending = !1;
 				let i = this.lookupPlay, a = t?.find(r);
-				a ? this.applyResolved(this.requestFor(a, e), i) : t ? this.showRequestError(R("channelNotFound", { name: r })) : ue(r) ? this.showRequestError(this.channelMessage ?? R("channelNotFound", { name: r })) : this.applyResolved(e, i);
+				a ? this.applyResolved(this.requestFor(a, e), i) : t ? this.showRequestError(B("channelNotFound", { name: r })) : fe(r) ? this.showRequestError(this.channelMessage ?? B("channelNotFound", { name: r })) : this.applyResolved(e, i);
 			});
 		} else this.applyResolved(e, t);
 	}
@@ -3098,7 +2770,7 @@ var Jt = class extends te {
 		this.request = e, this.idleStopped = !1;
 		let n;
 		try {
-			n = k(e, this.config);
+			n = O(e, this.config);
 		} catch (e) {
 			this.stopSession("config"), this.source = void 0, this.error = {
 				kind: "config",
@@ -3110,7 +2782,7 @@ var Jt = class extends te {
 		this.session && this.session.source.url !== n.url ? this.stopSession("switch") : this.session && this.session.buffer !== this.bufferMode && this.stopSession("config"), this.source?.url !== n.url && (this.osdPending = !0), this.source = {
 			...n,
 			title: e.title ?? n.title
-		}, this.error = void 0, t && (this.wantPlaying = !0), !this.isPreview && !this.zapTimer && Ce(this.target, this.recentEntry(e) ?? {}), this.remember(), this.evaluate();
+		}, this.error = void 0, t && (this.wantPlaying = !0), !this.isPreview && !this.zapTimer && I(this.target, this.recentEntry(e) ?? {}), this.remember(), this.evaluate();
 	}
 	recentEntry(e) {
 		if (e && this.source) return this.source.channel ? {
@@ -3123,7 +2795,7 @@ var Jt = class extends te {
 	}
 	remember() {
 		let e = this.request;
-		this.config?.rememberChannel && this.source && e && !this.isPreview && N(this.target, {
+		this.config?.rememberChannel && this.source && e && !this.isPreview && M(this.target, {
 			channel: e.channel,
 			url: e.url,
 			title: e.title,
@@ -3159,8 +2831,8 @@ var Jt = class extends te {
 			pictureCheck: this.config.pictureCheck,
 			switchSource: this.config.switchSource ? this.switchSource : void 0,
 			keepTrying: this.config.keepTrying,
-			autoLevel: St(),
-			onAutoLevel: Ct,
+			autoLevel: Ct(),
+			onAutoLevel: wt,
 			onHealth: (t, n) => {
 				e === this.session && this.logHealth(t, n);
 			},
@@ -3195,7 +2867,7 @@ var Jt = class extends te {
 		}
 	}
 	onStatus(e, t) {
-		e === this.session && (this.status = t, t.state === "error" ? (this.error = t.error, this.wantPlaying = !1, this.stopSession("error"), this.evaluate()) : (t.state === "playing" && (this.still.hidden = !0, this.scheduleHideControls(), this.osdPending && (this.osdPending = !1, this.osdUntil = Date.now() + Ht)), this.refresh()));
+		e === this.session && (this.status = t, t.state === "error" ? (this.error = t.error, this.wantPlaying = !1, this.stopSession("error"), this.evaluate()) : (t.state === "playing" && (this.still.hidden = !0, this.scheduleHideControls(), this.osdPending && (this.osdPending = !1, this.osdUntil = Date.now() + Ot)), this.refresh()));
 	}
 	onIdle() {
 		this.controller.stop(this.target), this.idleStopped = !0, this.lastRelease = "idle", this.refresh();
@@ -3218,7 +2890,7 @@ var Jt = class extends te {
 		}
 		let t = this.channels.neighbour(this.currentChannel?.id, e);
 		t && (clearTimeout(this.zapTimer), this.zapTimer = setTimeout(() => {
-			this.zapTimer = void 0, !this.isPreview && this.source && Ce(this.target, this.recentEntry(this.request) ?? {}), this.evaluate();
+			this.zapTimer = void 0, !this.isPreview && this.source && I(this.target, this.recentEntry(this.request) ?? {}), this.evaluate();
 		}, 800), this.playChannel(t)), this.showControls();
 	}
 	get currentKey() {
@@ -3229,7 +2901,7 @@ var Jt = class extends te {
 		return !e || this.isPreview ? [] : F(this.target).map((t) => e.find(t.channel ?? t.url)).filter((e) => !!e);
 	}
 	get previousEntry() {
-		return this.isPreview ? void 0 : we(this.target, this.currentKey);
+		return this.isPreview ? void 0 : L(this.target, this.currentKey);
 	}
 	get previousChannel() {
 		let e = this.previousEntry;
@@ -3293,7 +2965,7 @@ var Jt = class extends te {
 			...this.deviceSettings,
 			...e
 		};
-		n.buffer === t.buffer && (n.buffer = void 0), n.nowNext === !0 && (n.nowNext = void 0), n.stats === t.debug && (n.stats = void 0), bt(t.target, n), this.showControls();
+		n.buffer === t.buffer && (n.buffer = void 0), n.nowNext === !0 && (n.nowNext = void 0), n.stats === t.debug && (n.stats = void 0), xt(t.target, n), this.showControls();
 	}
 	syncStatsTimer() {
 		let e = this.showStats && this.isConnected;
@@ -3305,7 +2977,7 @@ var Jt = class extends te {
 	scheduleHideControls() {
 		clearTimeout(this.controlsTimer), this.controlsTimer = setTimeout(() => {
 			this.status?.state === "playing" && !this.sleepMenuOpen && !this.settingsOpen && (this.controlsVisible = !1, this.refresh());
-		}, Vt);
+		}, Dt);
 	}
 	multiviewAction() {
 		return this.multiviewAvailable && !this.isPreview ? this.enterMultiview : void 0;
@@ -3424,7 +3096,7 @@ var Jt = class extends te {
 		};
 	}
 	renderPicker(e, t, n) {
-		return d`<stream-card-picker
+		return u`<stream-card-picker
       class=${n ? "overlay" : "panel"}
       .list=${this.channels}
       .state=${this.channelState === "idle" ? "loading" : this.channelState}
@@ -3446,7 +3118,7 @@ var Jt = class extends te {
 	}
 	render() {
 		let e = this.config?.aspectRatio ?? "16 / 9", t = this.buildView(), n = this.buildActions(), r = this.guidePlacement, i = this.mvOn && this.mv && !this.isPreview ? this.mv : void 0;
-		return this.scheduleTick(t), d`
+		return this.scheduleTick(t), this.app && !this.isPreview ? this.app.render(t, n) : u`
       <ha-card class=${t.ui === "preview" ? "editing" : ""}>
         <div
           class="stage ${t.layout === "tv" ? "tv" : ""} ${t.fullscreen ? "fs" : ""}"
@@ -3463,17 +3135,17 @@ var Jt = class extends te {
             @click=${this.onFrameClick}
           >
             <div class="video-host"></div>
-            ${t.ui !== "preview" && t.ui !== "empty" ? d`<div class="sheen ${t.chrome ? "" : "hidden"}"></div>` : m}
-            ${Mt(t)} ${Nt(t)} ${Pt(t, n)}
-            ${t.notice ? d`<div class="notice" role="status">${t.notice}</div>` : m}
-            ${t.debugText ? d`<div class="debug">${t.debugText}</div>` : m}
-            ${Bt(t, this.keysSeen)}
-            ${r === "overlay" ? this.renderPicker(t, n, !0) : m}
+            ${t.ui !== "preview" && t.ui !== "empty" ? u`<div class="sheen ${t.chrome ? "" : "hidden"}"></div>` : h}
+            ${ne(t)} ${l(t)} ${oe(t, n)}
+            ${t.notice ? u`<div class="notice" role="status">${t.notice}</div>` : h}
+            ${t.debugText ? u`<div class="debug">${t.debugText}</div>` : h}
+            ${re(t, this.keysSeen)}
+            ${r === "overlay" ? this.renderPicker(t, n, !0) : h}
           </div>
-          ${jt(t)} ${Rt(t, n)}
+          ${p(t)} ${ae(t, n)}
         </div>
-        ${r === "below" && !i ? this.renderPicker(t, n, !1) : m}
-        ${i ?? m}
+        ${r === "below" && !i ? this.renderPicker(t, n, !1) : h}
+        ${i ?? h}
       </ha-card>
     `;
 	}
@@ -3500,19 +3172,19 @@ var Jt = class extends te {
 		].filter(Boolean).join("\n");
 	}
 };
-Q = Jt, Q.styles = Tt, Q.properties = {
+Z = Pt, Z.styles = Et, Z.properties = {
 	preview: { type: Boolean },
 	editMode: { type: Boolean },
 	_ui: { state: !0 }
 };
 //#endregion
 //#region src/index.ts
-var Yt = Ne();
-Yt.counters ?? (Yt.counters = q), customElements.get("stream-card") || customElements.define(oe, Jt);
+var Q = Me();
+Q.counters ?? (Q.counters = J), customElements.get("stream-card") || customElements.define(se, Pt);
 var $ = window;
 $.customCards = $.customCards ?? [], $.customCards.some((e) => e.type === "stream-card") || $.customCards.push({
-	type: oe,
-	name: se,
+	type: se,
+	name: ce,
 	description: "Plays Dispatcharr IPTV channels and releases the stream when it is hidden.",
 	preview: !1,
 	documentationURL: "https://github.com/Dec64/ha-video-card"

@@ -1,6 +1,6 @@
-import { _ as e, a as t, c as n, h as r, l as i, m as a, p as o, s, t as c, u as l, v as u } from "./stream-card-view-CwLHw3Tw.js";
+import { T as e, _ as t, b as n, c as r, d as i, f as a, m as o, p as s, u as c, v as l, w as u } from "./stream-card-view-D_HVsufI.js";
 //#region src/picker.ts
-var d, f = "stream-card-picker", p = 300, m = "\0recent", h = class extends o {
+var d, f = "stream-card-picker", p = 300, m = "\0recent", h = class extends t {
 	constructor() {
 		super(), this.failedLogos = /* @__PURE__ */ new Set(), this.onLogoError = (e) => {
 			let t = e.target.getAttribute("src");
@@ -38,10 +38,10 @@ var d, f = "stream-card-picker", p = 300, m = "\0recent", h = class extends o {
 		}));
 	}
 	render() {
-		return r`
+		return n`
       <div class="head">
         <label class="search">
-          ${i("search")}
+          ${s("search")}
           <input
             type="search"
             placeholder=${this.list?.size ? `Search ${this.list.size} channels` : "Search channels"}
@@ -51,7 +51,7 @@ var d, f = "stream-card-picker", p = 300, m = "\0recent", h = class extends o {
             @keydown=${this.onSearchKey}
           />
         </label>
-        ${this.pressDigit ? r`<button
+        ${this.pressDigit ? n`<button
                 class="keypad-toggle"
                 aria-pressed=${this._keypad ? "true" : "false"}
                 aria-label="Number keypad"
@@ -59,26 +59,26 @@ var d, f = "stream-card-picker", p = 300, m = "\0recent", h = class extends o {
 			this._keypad = !this._keypad, this._keypad || this.clearDigits?.();
 		}}
               >
-                ${i("keypad")}<span class="kp-label mono">123</span>
-              </button>` : a}
-        ${this.closable ? r`<button
+                ${s("keypad")}<span class="kp-label mono">123</span>
+              </button>` : l}
+        ${this.closable ? n`<button
                 class="close"
                 aria-label="Close channel list"
                 @click=${() => this.fire("picker-close")}
               >
-                ${i("close")}
-              </button>` : a}
+                ${s("close")}
+              </button>` : l}
       </div>
-      ${this._keypad && this.pressDigit ? this.renderKeypad() : a} ${this.renderBody()}
+      ${this._keypad && this.pressDigit ? this.renderKeypad() : l} ${this.renderBody()}
     `;
 	}
 	renderKeypad() {
-		let e = this.numberEntry, t = e?.digits ?? "", n = t ? e?.candidates.length ? e.candidates.slice(0, 3).map((e) => c(e)).join(" · ") : "No channel with that number" : "Type a number and it tunes.";
-		return r`<div class="keypad">
+		let e = this.numberEntry, t = e?.digits ?? "", i = t ? e?.candidates.length ? e.candidates.slice(0, 3).map((e) => r(e)).join(" · ") : "No channel with that number" : "Type a number and it tunes.";
+		return n`<div class="keypad">
       <div class="keypad-read">
         <span class="label">Type a channel number</span>
         <span class="typed mono" aria-live="polite">${t || "_"}</span>
-        <span class="typed-hint">${n}</span>
+        <span class="typed-hint">${i}</span>
       </div>
       <div class="keys" role="group" aria-label="Number keypad">
         ${[
@@ -92,7 +92,7 @@ var d, f = "stream-card-picker", p = 300, m = "\0recent", h = class extends o {
 			"8",
 			"9",
 			"0"
-		].map((e) => r`<button
+		].map((e) => n`<button
               class="key mono"
               aria-label="Digit ${e}"
               @click=${() => this.pressDigit?.(e)}
@@ -105,71 +105,71 @@ var d, f = "stream-card-picker", p = 300, m = "\0recent", h = class extends o {
           ?disabled=${!t}
           @click=${() => this.clearDigits?.()}
         >
-          ${i("backspace")}
+          ${s("backspace")}
         </button>
       </div>
     </div>`;
 	}
-	renderTile(e, n) {
-		let o = this.nowNext?.(e)?.now, c = s(o, this.now), l = e.id === this.currentId;
-		return r`<button
+	renderTile(e, t) {
+		let r = this.nowNext?.(e)?.now, a = i(r, this.now), o = e.id === this.currentId;
+		return n`<button
       class="tile"
-      aria-current=${l ? "true" : a}
+      aria-current=${o ? "true" : l}
       aria-label=${e.number ? `${e.number} ${e.name}` : e.name}
       @click=${() => this.pick(e)}
     >
       <span class="tile-head">
         <span class="plate" aria-hidden="true">
-          ${e.logo ? r`<img
+          ${e.logo ? n`<img
                   class=${this.failedLogos.has(e.logo) ? "logo missing" : "logo"}
                   src=${e.logo}
                   alt=""
                   loading="lazy"
                   decoding="async"
                   @error=${this.onLogoError}
-                />` : a}
-          <span class="initials">${t(e.name)}</span>
+                />` : l}
+          <span class="initials">${c(e.name)}</span>
         </span>
         <span class="tile-text">
-          ${e.number ? r`<span class="num mono">${e.number}</span>` : a}
+          ${e.number ? n`<span class="num mono">${e.number}</span>` : l}
           <span class="name">${e.name}</span>
         </span>
-        ${n.has(e.id) ? r`<span class="fav" title="Favourite">${i("star")}</span>` : a}
+        ${t.has(e.id) ? n`<span class="fav" title="Favourite">${s("star")}</span>` : l}
       </span>
-      ${o ? r`<span class="prog">
-              <span class="prog-title">${l ? `Watching · ${o.title}` : o.title}</span>
-              ${c === void 0 ? a : r`<span class="bar"><span style="width:${c.toFixed(1)}%"></span></span>`}
-            </span>` : a}
+      ${r ? n`<span class="prog">
+              <span class="prog-title">${o ? `Watching · ${r.title}` : r.title}</span>
+              ${a === void 0 ? l : n`<span class="bar"><span style="width:${a.toFixed(1)}%"></span></span>`}
+            </span>` : l}
     </button>`;
 	}
 	renderBody() {
-		if (this.state === "loading") return r`<div class="status" role="status">Loading channels…</div>`;
-		if (this.state === "error") return r`<div class="status" role="alert">
+		if (this.state === "loading") return n`<div class="status" role="status">Loading channels…</div>`;
+		if (this.state === "error") return n`<div class="status" role="alert">
         ${this.message}<br />
         <button class="retry" @click=${() => this.fire("picker-retry")}>Try again</button>
       </div>`;
 		let e = this.list;
-		if (!e || !e.size) return r`<div class="status">${this.message}</div>`;
+		if (!e || !e.size) return n`<div class="status">${this.message}</div>`;
 		let t = [];
 		this.recents.length && t.push([m, "Recent"]), e.favourites.length && t.push(["★", "★ Favourites"]), t.push(["", "All"]);
 		for (let n of e.groups) t.push([n, n]);
-		let n = this.group, i = this.results(), o = i.slice(0, p), s = new Set(e.favourites.map((e) => e.id));
-		return r`
-      ${t.length > 2 || e.favourites.length || this.recents.length ? r`<div class="chips" role="group" aria-label="Channel groups">
-              ${t.map(([e, t]) => r`<button
+		let r = this.group, i = this.results(), a = i.slice(0, p), o = new Set(e.favourites.map((e) => e.id));
+		return n`
+      ${t.length > 2 || e.favourites.length || this.recents.length ? n`<div class="chips" role="group" aria-label="Channel groups">
+              ${t.map(([e, t]) => n`<button
                     class="chip"
-                    aria-pressed=${(!this._query || e !== m) && n === e ? "true" : "false"}
+                    aria-pressed=${(!this._query || e !== m) && r === e ? "true" : "false"}
                     @click=${() => this._group = e}
                   >
                     ${t}
                   </button>`)}
-            </div>` : a}
-      ${o.length ? r`<div class="grid" role="group" aria-label="Channels">
-              ${o.map((e) => this.renderTile(e, s))}
-            </div>` : r`<div class="status">No channels match “${this._query}”.</div>`}
-      ${i.length > o.length ? r`<div class="status">
-              Showing ${o.length} of ${i.length}. Search to narrow the list.
-            </div>` : a}
+            </div>` : l}
+      ${a.length ? n`<div class="grid" role="group" aria-label="Channels">
+              ${a.map((e) => this.renderTile(e, o))}
+            </div>` : n`<div class="status">No channels match “${this._query}”.</div>`}
+      ${i.length > a.length ? n`<div class="status">
+              Showing ${a.length} of ${i.length}. Search to narrow the list.
+            </div>` : l}
     `;
 	}
 };
@@ -196,11 +196,11 @@ d = h, d.properties = {
 	_group: { state: !0 },
 	_keypad: { state: !0 }
 }, d.styles = [
-	n,
-	e`
-      ${u(l)}
+	a,
+	u`
+      ${e(o)}
     `,
-	e`
+	u`
       :host {
         display: flex;
         flex-direction: column;
@@ -596,4 +596,4 @@ d = h, d.properties = {
 //#endregion
 export { f as PICKER_TAG, h as StreamCardPicker };
 
-//# sourceMappingURL=stream-card-picker-BNWjV-p-.js.map
+//# sourceMappingURL=stream-card-picker-BZhwTmth.js.map

@@ -20,7 +20,27 @@ function o(e) {
 		return a[t.toLowerCase()] ?? e;
 	});
 }
-var s = /([\w-]+)\s*=\s*"([^"]*)"/g, c = /<title\b[^>]*>([\s\S]*?)<\/title>/, l = "<programme", u = "</programme>", d = class {
+var s = /([\w-]+)\s*=\s*"([^"]*)"/g, c = /<title\b[^>]*>([\s\S]*?)<\/title>/, l = /<desc\b[^>]*>([\s\S]*?)<\/desc>/, u = /<category\b[^>]*>([\s\S]*?)<\/category>/g, d = 180, f = (e) => o(e.replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, "$1")).trim();
+function p(e) {
+	let t = e, n = !1;
+	for (;;) {
+		let e = /^(live|new|signed)\s*:\s*/i.exec(t) ?? /^(Live|LIVE)\s+(?=[A-Z])/.exec(t);
+		if (!e) break;
+		e[1].toLowerCase() === "live" && (n = !0), t = t.slice(e[0].length);
+	}
+	return {
+		title: t || e,
+		live: n
+	};
+}
+function m(e) {
+	let t = e.replace(/^\(?\d+\/\d+\)?\.?\s*/, "").replace(/\s+/g, " ").trim();
+	if (!t) return;
+	if (t.length <= d) return t;
+	let n = t.slice(0, d), r = Math.max(n.lastIndexOf(". "), n.lastIndexOf("! "), n.lastIndexOf("? "));
+	return r > 60 ? n.slice(0, r + 1) : n.slice(0, n.lastIndexOf(" ")) + "…";
+}
+var h = "<programme", g = "</programme>", _ = class {
 	constructor(e = Date.now()) {
 		this.from = e, this.buf = "", this.byChannel = /* @__PURE__ */ new Map();
 	}
@@ -28,12 +48,12 @@ var s = /([\w-]+)\s*=\s*"([^"]*)"/g, c = /<title\b[^>]*>([\s\S]*?)<\/title>/, l 
 		this.buf += e;
 		let t = 0;
 		for (;;) {
-			let e = this.buf.indexOf(l, t);
+			let e = this.buf.indexOf(h, t);
 			if (e < 0) {
 				t = Math.max(t, this.buf.length - 10);
 				break;
 			}
-			let n = this.buf.indexOf(u, e);
+			let n = this.buf.indexOf(g, e);
 			if (n < 0) {
 				t = e;
 				break;
@@ -47,16 +67,22 @@ var s = /([\w-]+)\s*=\s*"([^"]*)"/g, c = /<title\b[^>]*>([\s\S]*?)<\/title>/, l 
 		if (t < 0) return;
 		let n = {};
 		for (let r of e.slice(10, t).matchAll(s)) n[r[1]] = r[2];
-		let r = n.channel === void 0 ? void 0 : o(n.channel), a = i(n.start), l = i(n.stop);
-		if (!r || a === void 0 || l !== void 0 && l <= this.from || a >= this.from + 432e5) return;
-		let u = o((c.exec(e.slice(t + 1))?.[1] ?? "").replace(/^<!\[CDATA\[([\s\S]*)\]\]>$/, "$1")).trim();
-		if (!u) return;
-		let d = this.byChannel.get(r);
-		d || this.byChannel.set(r, d = []), d.push({
-			title: u,
+		let r = n.channel === void 0 ? void 0 : o(n.channel), a = i(n.start), d = i(n.stop);
+		if (!r || a === void 0 || d !== void 0 && d <= this.from || a >= this.from + 504e5) return;
+		let h = e.slice(t + 1), g = f(c.exec(h)?.[1] ?? "");
+		if (!g) return;
+		let { title: _, live: v } = p(g), y = {
+			title: _,
 			start: a,
-			end: l
-		});
+			end: d
+		};
+		v && (y.live = !0);
+		let b = l.exec(h)?.[1];
+		b && (y.desc = m(f(b)));
+		let x = [...h.matchAll(u)].slice(0, 2).map((e) => f(e[1])).filter(Boolean);
+		x.length && (y.cats = x);
+		let S = this.byChannel.get(r);
+		S || this.byChannel.set(r, S = []), S.push(y);
 	}
 	finish() {
 		this.buf = "";
@@ -65,12 +91,12 @@ var s = /([\w-]+)\s*=\s*"([^"]*)"/g, c = /<title\b[^>]*>([\s\S]*?)<\/title>/, l 
 			n.sort((e, t) => e.start - t.start);
 			for (let t = 0; t < n.length; t++) (e = n[t]).end ?? (e.end = n[t + 1]?.start);
 			let r = n.filter((e) => e.end === void 0 || e.end > this.from);
-			this.byChannel.set(t, r.slice(0, 8));
+			this.byChannel.set(t, r.slice(0, 48));
 		}
 		return this.byChannel;
 	}
 };
-function f(e, t) {
+function v(e, t) {
 	if (!e?.length) return;
 	let n = e.findIndex((e) => e.end === void 0 || e.end > t);
 	if (n < 0) return;
@@ -80,21 +106,21 @@ function f(e, t) {
 		next: e[n + 1]
 	};
 }
-function p(e) {
+function y(e) {
 	return e.tvgId ?? e.number;
 }
-var m = class extends Error {
+var b = class extends Error {
 	constructor(...e) {
 		super(...e), this.name = "GuideError";
 	}
 };
-async function h(e, t) {
+async function x(e, t) {
 	let n = await fetch(e, {
 		cache: "no-store",
 		signal: t
 	});
-	if (!n.ok) throw new m(`HTTP ${n.status}`);
-	let r = new d();
+	if (!n.ok) throw new b(`HTTP ${n.status}`);
+	let r = new _();
 	if (!n.body) return r.push(await n.text()), r.finish();
 	let i = n.body.getReader(), a = new TextDecoder();
 	for (;;) {
@@ -104,7 +130,7 @@ async function h(e, t) {
 	}
 	return r.push(a.decode()), r.finish();
 }
-var g = class {
+var S = class {
 	constructor(n) {
 		this.url = n, this.loadedAt = 0, this.failedAt = 0, this.listeners = /* @__PURE__ */ new Set(), this.onVisible = () => {
 			document.visibilityState === "visible" && this.tick();
@@ -121,9 +147,13 @@ var g = class {
 	get loaded() {
 		return !!this.data;
 	}
+	programmes(e) {
+		let t = y(e);
+		return t === void 0 ? void 0 : this.data?.get(t);
+	}
 	nowNext(e, t = Date.now()) {
-		let n = p(e);
-		return n === void 0 ? void 0 : f(this.data?.get(n), t);
+		let n = y(e);
+		return n === void 0 ? void 0 : v(this.data?.get(n), t);
 	}
 	subscribe(e) {
 		return this.listeners.add(e), this.listeners.size === 1 && document.addEventListener("visibilitychange", this.onVisible), this.tick(), () => {
@@ -136,7 +166,7 @@ var g = class {
 	nextBoundary(e) {
 		let t;
 		for (let n of this.data?.values() ?? []) {
-			let { now: r, next: i } = f(n, e) ?? {};
+			let { now: r, next: i } = v(n, e) ?? {};
 			for (let n of [r?.end, i?.start]) n !== void 0 && n > e && (t === void 0 || n < t) && (t = n);
 		}
 		return t;
@@ -146,23 +176,23 @@ var g = class {
 		this.abort = e;
 		let t = setTimeout(() => e.abort(), n);
 		try {
-			let t = await h(this.url, e.signal);
+			let t = await x(this.url, e.signal);
 			if (this.abort !== e) return;
 			this.data = t, this.loadedAt = Date.now(), this.failedAt = 0, this.lastError = void 0;
 		} catch (t) {
 			if (this.abort !== e) return;
-			this.failedAt = Date.now(), this.lastError = t instanceof m ? t.message : e.signal.aborted ? `no answer in ${n / 1e3} s` : `network error: ${t instanceof Error ? t.message : t}`;
+			this.failedAt = Date.now(), this.lastError = t instanceof b ? t.message : e.signal.aborted ? `no answer in ${n / 1e3} s` : `network error: ${t instanceof Error ? t.message : t}`;
 		} finally {
 			clearTimeout(t), this.abort === e && (this.abort = void 0);
 		}
 		this.notify(), this.tick();
 	}
-}, _ = /* @__PURE__ */ new Map();
-function v(e) {
-	let t = _.get(e);
-	return t || _.set(e, t = new g(e)), t;
+}, C = /* @__PURE__ */ new Map();
+function w(e) {
+	let t = C.get(e);
+	return t || C.set(e, t = new S(e)), t;
 }
 //#endregion
-export { v as guideFeed };
+export { w as guideFeed };
 
-//# sourceMappingURL=stream-card-epg-Bj6O2OjW.js.map
+//# sourceMappingURL=stream-card-epg-BZbbO0oy.js.map
