@@ -81,13 +81,15 @@ const PLUS = svg`<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path 
 const stop = (e: Event) => e.stopPropagation();
 const mono = (s: string | undefined) => html`<span class="mono">${s}</span>`;
 
-/** The household dash's app dock element (`household-app-dock`), as far as this card uses it. */
-type HouseholdDock = HTMLElement & {
-  folded?: boolean;
-  sw?: boolean;
-  render?: () => void;
-  update?: () => void;
+/** The household dash's shared dock (`window.HouseholdDock`), as far as this card uses it. */
+type HouseholdDock = {
+  set(app: string, state: Record<string, unknown>): void;
+  current?: () => string;
+  open?: () => void;
 };
+type DockTab = { id: AppView | 'mv'; l: string; i: string };
+/** Our app id in the household dock's registry. */
+const DOCK_APP = 'tv';
 
 export class AppShell {
   view: AppView = 'now';
@@ -115,7 +117,9 @@ export class AppShell {
   private deepLinked = false;
   private resizeObs?: ResizeObserver;
   private dockTimer?: ReturnType<typeof setInterval>;
-  private hidDock = false;
+  private dockSig = '';
+  private shownView: AppView = 'now';
+  private lastActions?: CardActions;
 
   constructor(private readonly host: AppHost) {}
 
@@ -136,10 +140,10 @@ export class AppShell {
     this.resizeObs.observe(document.documentElement);
     this.resizeObs.observe(this.host.el);
     this.ambTimer = setInterval(this.sampleFrame, 2500);
-    // The household app dock folds into a handle at the bottom; the app's own dock carries its
-    // orb instead, so the handle hides while it's folded.
+    // On the household dash the page's tabs live in its shared dock, and this card's own dock hides.
     this.dockTimer = setInterval(this.syncHouseholdDock, 600);
-    this.host.el.addEventListener('pointerdown', this.foldHouseholdDock, true);
+    window.addEventListener('hd-dock-tab', this.onDockTab);
+    window.addEventListener('location-changed', this.onNav);
   }
 
   disconnect(): void {
@@ -148,8 +152,10 @@ export class AppShell {
     this.resizeObs?.disconnect();
     clearInterval(this.ambTimer);
     clearInterval(this.dockTimer);
-    this.host.el.removeEventListener('pointerdown', this.foldHouseholdDock, true);
-    this.releaseHouseholdDock();
+    window.removeEventListener('hd-dock-tab', this.onDockTab);
+    window.removeEventListener('location-changed', this.onNav);
+    this.host.el.shadowRoot?.querySelector('ha-card')?.removeAttribute('data-hd-docked');
+    this.dockSig = '';
   }
 
   /**
@@ -162,59 +168,60 @@ export class AppShell {
     el.style.setProperty('--sc-app-h', `${Math.round(Math.max(420, window.innerHeight - top))}px`);
   };
 
-  private householdDock(): HouseholdDock | null {
-    return document.querySelector('household-app-dock');
+  private householdDock(): HouseholdDock | undefined {
+    return (window as unknown as { HouseholdDock?: HouseholdDock }).HouseholdDock;
   }
 
   /**
-   * The household app dock (another card's element, on every page) folds into a handle at the
-   * bottom. On this page the app's own dock carries its orb, so the handle hides while folded;
-   * opened from the orb, the household dock takes the app dock's place until it folds again,
-   * and a tap anywhere on the card folds it. Only while the card is on screen: leaving the page
-   * hands the dock back to its own logic.
+   * The household dash (household-dash.js) puts one shared dock on every app page. This card hands
+   * it the page's tabs (On now, Guide, Channels, Multiview) and which one is on, hides its own dock
+   * while that one is showing, and hides the shared dock in full screen. Tab taps come back as a
+   * window `hd-dock-tab` event. Without the household dash none of this runs and the card keeps
+   * its own dock.
    */
   private syncHouseholdDock = (): void => {
-    const d = this.householdDock();
+    const H = this.householdDock();
     const card = this.host.el;
-    const shown = card.isConnected && card.getClientRects().length > 0;
-    if (!d || !shown) return this.releaseHouseholdDock();
-    const open = d.folded === false;
-    if (!open) {
-      d.style.display = 'none';
-      this.hidDock = true;
-    } else if (this.hidDock) {
-      d.style.display = '';
+    if (!H || !card.isConnected || this.embed) return;
+    const on =
+      document.documentElement.classList.contains('hd-appdock') && H.current?.() === DOCK_APP;
+    card.shadowRoot?.querySelector('ha-card')?.toggleAttribute('data-hd-docked', on);
+    let state: Record<string, unknown>;
+    if (this.shownView === 'full') state = { hide: true };
+    else {
+      const tabs: DockTab[] = [
+        { id: 'now', l: 'On now', i: 'play' },
+        { id: 'guide', l: 'Guide', i: 'list' },
+        { id: 'channels', l: 'Channels', i: 'star' },
+      ];
+      if (this.lastActions?.multiview) tabs.push({ id: 'mv', l: 'Multiview', i: 'grid' });
+      state = { tabs, on: this.shownView, hide: false };
     }
-    card.shadowRoot?.querySelector('ha-card')?.toggleAttribute('data-hd-open', open);
+    const sig = JSON.stringify(state);
+    if (sig === this.dockSig) return;
+    this.dockSig = sig;
+    H.set(DOCK_APP, state);
   };
 
-  private releaseHouseholdDock(): void {
-    this.host.el.shadowRoot?.querySelector('ha-card')?.removeAttribute('data-hd-open');
-    if (!this.hidDock) return;
-    this.hidDock = false;
-    const d = this.householdDock();
-    if (!d) return;
-    d.style.display = '';
-    d.update?.(); // shows or hides itself for the page we're on now
-  }
+  private onDockTab = (e: Event): void => {
+    const d = (e as CustomEvent<{ app?: string; id?: string }>).detail || {};
+    if (d.app !== DOCK_APP || !d.id || !this.host.el.isConnected) return;
+    if (d.id === 'mv') this.lastActions?.multiview?.();
+    else if (d.id === 'now' || d.id === 'guide' || d.id === 'channels') this.go(d.id);
+  };
 
+  /** The shared dock picks its app after HA navigates; check again once it has. */
+  private onNav = (): void => {
+    setTimeout(() => {
+      this.dockSig = '';
+      this.syncHouseholdDock();
+    }, 50);
+  };
+
+  /** The orb on the card's own dock (shown when the shared dock isn't) opens the household switcher. */
   private openHouseholdDock = (e: Event): void => {
     e.stopPropagation();
-    const d = this.householdDock();
-    if (!d) return;
-    d.folded = false;
-    d.sw = false;
-    d.render?.();
-    this.syncHouseholdDock();
-  };
-
-  /** A tap on the card while the household dock is open folds it back into the app dock's orb. */
-  private foldHouseholdDock = (): void => {
-    const d = this.householdDock();
-    if (!d || d.folded !== false || d.sw) return;
-    d.folded = true;
-    d.render?.();
-    this.syncHouseholdDock();
+    this.householdDock()?.open?.();
   };
 
   /** Keys typed with nothing focused (the usual case on a desktop) go to the card. */
@@ -436,6 +443,9 @@ export class AppShell {
     if (!this.deepLinked && this.host.list) this.deepLink();
     const mv = this.host.multiview;
     const view: AppView = this.embed ? 'full' : mv ? 'full' : this.view;
+    this.shownView = view;
+    this.lastActions = a;
+    if (!this.embed) queueMicrotask(this.syncHouseholdDock);
     const t = cur ? this.tint(cur) : undefined;
     const ar = this.host.config.aspectRatio;
     return html`<ha-card
